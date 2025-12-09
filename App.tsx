@@ -3,11 +3,13 @@ import {
   FileJson, Type, Link, Clock, Shield, Fingerprint, 
   Hash, Sparkles, LayoutGrid, Search, Menu, X, 
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft, 
-  QrCode, Monitor, Terminal, KeyRound, Globe, Code
+  QrCode, Monitor, Terminal, KeyRound, Globe, Code,
+  FileCode, Database, FileSpreadsheet, FileText, Scissors,
+  Send, Calculator
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
-import { JwtTool, UuidTool, HashTool, PasswordGenTool } from './components/tools/SecurityTools';
+import { JwtTool, UuidTool, HashTool, PasswordGenTool, HmacTool } from './components/tools/SecurityTools';
 import { TimeTool } from './components/tools/TimeTool';
 import { AiAssistant } from './components/tools/AiAssistant';
 import { CaseConverterTool, TextStatsTool, RegexTool } from './components/tools/TextTools';
@@ -16,41 +18,60 @@ import { ChmodTool } from './components/tools/DevOpsTools';
 import { StringEscaper } from './components/tools/StringEscaper';
 import { UrlParser } from './components/tools/UrlParser';
 import { DiffViewer } from './components/tools/DiffViewer';
+import { XmlTool, YamlTool, CsvTool, MarkdownTool } from './components/tools/FormatTools';
+import { StringManipulatorTool, SlugTool, RandomStringTool } from './components/tools/StringTools';
+import { TimestampTool, DateDiffTool } from './components/tools/TimeTools';
+import { HttpBuilderTool, UserAgentTool, IpInfoTool } from './components/tools/NetworkTools';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
-  // Format
-  { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.FORMAT, component: JsonTool },
-  { id: 'base64', name: 'Base64 转换', description: '编码与解码', icon: Type, category: Category.FORMAT, component: Base64Tool },
-  { id: 'url', name: 'URL 编码', description: 'URL 参数转义', icon: Link, category: Category.FORMAT, component: UrlTool },
-  { id: 'escape', name: '文本转义', description: 'HTML / Unicode', icon: Code, category: Category.FORMAT, component: StringEscaper },
-  
-  // Text
+  // --- Category 1: Encoding / Text Processing (TEXT) ---
+  { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.TEXT, component: JsonTool },
+  { id: 'xml', name: 'XML 工具', description: '格式化 / JSON 转换', icon: FileCode, category: Category.TEXT, component: XmlTool },
+  { id: 'yaml', name: 'YAML ↔ JSON', description: 'YAML / JSON 互转', icon: Database, category: Category.TEXT, component: YamlTool },
+  { id: 'csv', name: 'CSV ↔ JSON', description: 'CSV / JSON 互转', icon: FileSpreadsheet, category: Category.TEXT, component: CsvTool },
+  { id: 'base64', name: 'Base64 转换', description: '编码与解码', icon: Type, category: Category.TEXT, component: Base64Tool },
+  { id: 'url', name: 'URL 编码', description: 'URL 参数转义', icon: Link, category: Category.TEXT, component: UrlTool },
+  { id: 'escape', name: 'HTML/Uni 转义', description: 'HTML / Unicode', icon: Code, category: Category.TEXT, component: StringEscaper },
+  { id: 'markdown', name: 'Markdown 预览', description: 'Markdown 转 HTML', icon: FileText, category: Category.TEXT, component: MarkdownTool },
   { id: 'case', name: '大小写转换', description: '驼峰/下划线/大写', icon: CaseUpper, category: Category.TEXT, component: CaseConverterTool },
+  { id: 'text-manip', name: '文本处理', description: '去重/排序/全半角', icon: Scissors, category: Category.TEXT, component: StringManipulatorTool },
+  { id: 'slug', name: 'Slug 生成', description: '标题转 URL Slug', icon: Link, category: Category.TEXT, component: SlugTool },
   { id: 'stats', name: '文本统计', description: '字数/行数统计', icon: AlignLeft, category: Category.TEXT, component: TextStatsTool },
   { id: 'regex', name: '正则测试', description: 'JS 正则表达式测试', icon: Regex, category: Category.TEXT, component: RegexTool },
   { id: 'diff', name: '文本对比', description: '简易行对比', icon: ArrowRightLeft, category: Category.TEXT, component: DiffViewer },
 
-  // Frontend / Network
+  // --- Category 2: Time / Date (TIME) ---
+  { id: 'timestamp', name: '时间戳转换', description: 'Unix 时间戳互转', icon: Clock, category: Category.TIME, component: TimestampTool },
+  { id: 'datediff', name: '日期计算', description: '日期差值计算', icon: Calculator, category: Category.TIME, component: DateDiffTool },
+  // { id: 'time', name: 'Old Time', description: 'Deprecated', icon: Clock, category: Category.TIME, component: TimeTool }, // Keeping new ones preferred
+
+  // --- Category 3: Network / Web (NETWORK) ---
+  { id: 'http', name: 'HTTP 请求', description: '简易 HTTP Client', icon: Send, category: Category.NETWORK, component: HttpBuilderTool },
+  { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, category: Category.NETWORK, component: UrlParser },
+  { id: 'useragent', name: 'User Agent', description: 'UA 解析', icon: Monitor, category: Category.NETWORK, component: UserAgentTool },
+  { id: 'ip', name: 'IP 信息', description: '本机 IP 查询', icon: Globe, category: Category.NETWORK, component: IpInfoTool },
+  { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, category: Category.NETWORK, component: DeviceInfoTool },
+
+  // --- Category 4: Security (SECURITY) ---
+  { id: 'jwt', name: 'JWT 解析', description: '查看 Token 载荷', icon: Shield, category: Category.SECURITY, component: JwtTool },
+  { id: 'hash', name: 'Hash 生成', description: 'SHA1, SHA256, SHA512', icon: Hash, category: Category.SECURITY, component: HashTool },
+  { id: 'hmac', name: 'HMAC 计算', description: 'HMAC-SHA256 计算', icon: Shield, category: Category.SECURITY, component: HmacTool },
+  { id: 'password', name: '密码生成', description: '高强度随机密码', icon: KeyRound, category: Category.SECURITY, component: PasswordGenTool },
+
+  // --- Category 7: Frontend (FRONTEND) ---
   { id: 'pxrem', name: 'PX/REM 转换', description: 'CSS 单位计算', icon: ArrowRightLeft, category: Category.FRONTEND, component: PxRemTool },
   { id: 'color', name: '颜色转换', description: 'Hex / RGB 互转', icon: Palette, category: Category.FRONTEND, component: ColorConverterTool },
   { id: 'qrcode', name: '二维码生成', description: '文本转二维码图片', icon: QrCode, category: Category.FRONTEND, component: QrCodeTool },
-  { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, category: Category.NETWORK, component: UrlParser },
-  { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, category: Category.NETWORK, component: DeviceInfoTool },
 
-  // Convert
-  { id: 'time', name: '时间/日期', description: '时间戳、日期计算', icon: Clock, category: Category.CONVERT, component: TimeTool },
-
-  // Security
-  { id: 'jwt', name: 'JWT 解析', description: '查看 Token 载荷', icon: Shield, category: Category.SECURITY, component: JwtTool },
-  { id: 'hash', name: 'Hash 生成', description: 'SHA1, SHA256', icon: Hash, category: Category.SECURITY, component: HashTool },
-  { id: 'password', name: '密码生成', description: '高强度随机密码', icon: KeyRound, category: Category.SECURITY, component: PasswordGenTool },
-
-  // Generators / DevOps
-  { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, category: Category.GENERATORS, component: UuidTool },
+  // --- Category 8: DevOps (DEVOPS) ---
   { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, category: Category.DEVOPS, component: ChmodTool },
 
-  // AI
+  // --- Category 9: Generators (GENERATORS) ---
+  { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, category: Category.GENERATORS, component: UuidTool },
+  { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, category: Category.GENERATORS, component: RandomStringTool },
+
+  // --- Extra: AI ---
   { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.AI, component: AiAssistant },
 ];
 
@@ -59,6 +80,7 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
+  // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
   
   // Group tools by category
@@ -67,7 +89,10 @@ export default function App() {
     t.description.toLowerCase().includes(search.toLowerCase())
   );
 
-  const groupedTools = Object.values(Category).reduce((acc, cat) => {
+  // Ensure order of categories based on Enum definition or custom order
+  const categoryOrder = Object.values(Category);
+
+  const groupedTools = categoryOrder.reduce((acc, cat) => {
     const tools = filteredTools.filter(t => t.category === cat);
     if (tools.length > 0) acc[cat] = tools;
     return acc;
