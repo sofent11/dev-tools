@@ -3,6 +3,17 @@ import { RefreshCcw, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
+// --- Shared Helper: Copy to Clipboard ---
+const useCopyToClipboard = () => {
+  const [copied, setCopied] = useState(false);
+  const copy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return { copied, copy };
+};
+
 // --- JWT Tool ---
 export const JwtTool: React.FC = () => {
   const [token, setToken] = useState('');
@@ -200,6 +211,83 @@ export const HashTool: React.FC = () => {
     </Card>
   );
 };
+
+// --- HMAC Tool ---
+export const HmacTool: React.FC = () => {
+  const [input, setInput] = useState('');
+  const [secret, setSecret] = useState('');
+  const [hmac, setHmac] = useState('');
+  const { copied, copy } = useCopyToClipboard();
+
+  useEffect(() => {
+    const generateHmac = async () => {
+        if (!input || !secret) {
+            setHmac('');
+            return;
+        }
+        try {
+            const encoder = new TextEncoder();
+            const keyData = encoder.encode(secret);
+            const key = await crypto.subtle.importKey(
+                "raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+            );
+            const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(input));
+            const hashArray = Array.from(new Uint8Array(signature));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            setHmac(hashHex);
+        } catch (e) {
+            console.error(e);
+            setHmac('Error calculating HMAC');
+        }
+    };
+    generateHmac();
+  }, [input, secret]);
+
+  return (
+     <Card className="h-full flex flex-col">
+         <CardHeader title="HMAC Calculator" description="Calculate HMAC-SHA256" />
+         <CardContent className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Secret Key</label>
+                <input
+                    className="w-full p-2 border rounded"
+                    value={secret}
+                    onChange={e => setSecret(e.target.value)}
+                    placeholder="Secret key..."
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+                <textarea
+                    className="w-full h-24 p-2 border rounded resize-none"
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    placeholder="Message to sign..."
+                />
+            </div>
+            <div>
+                 <label className="block text-sm font-medium text-slate-700 mb-1">HMAC-SHA256</label>
+                 <div className="relative">
+                     <textarea
+                        readOnly
+                        className="w-full h-24 p-2 bg-slate-100 border rounded resize-none text-slate-700 font-mono"
+                        value={hmac}
+                     />
+                     <Button
+                        size="sm"
+                        variant="ghost"
+                        className="absolute top-2 right-2"
+                        onClick={() => copy(hmac)}
+                        disabled={!hmac}
+                    >
+                        {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                 </div>
+            </div>
+         </CardContent>
+     </Card>
+  );
+}
 
 // --- Password Generator Tool ---
 export const PasswordGenTool: React.FC = () => {
