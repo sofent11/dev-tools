@@ -88,7 +88,7 @@ export const Base64Tool: React.FC = () => {
   const handleEncode = () => {
     try {
       setOutput(btoa(unescape(encodeURIComponent(input))));
-    } catch (e) {
+    } catch {
       setOutput("Error: Unable to encode. Ensure valid text.");
     }
   };
@@ -96,7 +96,7 @@ export const Base64Tool: React.FC = () => {
   const handleDecode = () => {
     try {
       setOutput(decodeURIComponent(escape(atob(input))));
-    } catch (e) {
+    } catch {
       setOutput("Error: Invalid Base64 string.");
     }
   };
