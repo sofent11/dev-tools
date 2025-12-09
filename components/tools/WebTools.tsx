@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, Smartphone, QrCode, Monitor, ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, QrCode } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import { Button } from '../ui/Button';
 
 // --- PX to REM Tool ---
 export const PxRemTool: React.FC = () => {
@@ -204,20 +203,37 @@ export const QrCodeTool: React.FC = () => {
 
 // --- Device Info Tool ---
 export const DeviceInfoTool: React.FC = () => {
-    const [info, setInfo] = useState<Record<string, string>>({});
+    // Lazily initialize state to avoid setting it in effect
+    const [info, setInfo] = useState<Record<string, string>>(() => {
+        // Check if window is defined (for safety, though we are client-side)
+        if (typeof window !== 'undefined') {
+            return {
+                "User Agent": navigator.userAgent,
+                "Platform": navigator.platform,
+                "Language": navigator.language,
+                "Screen Resolution": `${window.screen.width} x ${window.screen.height}`,
+                "Window Size": `${window.innerWidth} x ${window.innerHeight}`,
+                "Color Depth": `${window.screen.colorDepth}-bit`,
+                "Pixel Ratio": `${window.devicePixelRatio}x`,
+                "Cookies Enabled": navigator.cookieEnabled ? 'Yes' : 'No',
+                "Browser Online": navigator.onLine ? 'Yes' : 'No',
+            };
+        }
+        return {};
+    });
 
     useEffect(() => {
-        setInfo({
-            "User Agent": navigator.userAgent,
-            "Platform": navigator.platform,
-            "Language": navigator.language,
-            "Screen Resolution": `${window.screen.width} x ${window.screen.height}`,
-            "Window Size": `${window.innerWidth} x ${window.innerHeight}`,
-            "Color Depth": `${window.screen.colorDepth}-bit`,
-            "Pixel Ratio": `${window.devicePixelRatio}x`,
-            "Cookies Enabled": navigator.cookieEnabled ? 'Yes' : 'No',
-            "Browser Online": navigator.onLine ? 'Yes' : 'No',
-        });
+        // Optional: Update on resize if we want "Window Size" to track,
+        // but initial requirement is static info.
+        // If we want dynamic updates:
+        const handleResize = () => {
+             setInfo(prev => ({
+                 ...prev,
+                 "Window Size": `${window.innerWidth} x ${window.innerHeight}`
+             }));
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     return (
