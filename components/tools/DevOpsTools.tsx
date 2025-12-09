@@ -1,36 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Terminal, Lock } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-
-interface PermissionGroupProps {
-    label: string;
-    role: 'owner' | 'group' | 'public';
-    permissions: {
-        owner: { read: boolean; write: boolean; execute: boolean; };
-        group: { read: boolean; write: boolean; execute: boolean; };
-        public: { read: boolean; write: boolean; execute: boolean; };
-    };
-    toggle: (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => void;
-}
-
-const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => (
-    <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
-        <span className="font-semibold text-slate-700">{label}</span>
-        <div className="flex gap-4">
-            <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={permissions[role].read} onChange={() => toggle(role, 'read')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Read (4)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={permissions[role].write} onChange={() => toggle(role, 'write')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Write (2)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={permissions[role].execute} onChange={() => toggle(role, 'execute')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Execute (1)</span>
-            </label>
-        </div>
-    </div>
-);
 
 export const ChmodTool: React.FC = () => {
   const [permissions, setPermissions] = useState({
@@ -58,7 +28,6 @@ export const ChmodTool: React.FC = () => {
 
   useEffect(() => {
     calculate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissions]);
 
   const toggle = (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => {
@@ -67,6 +36,26 @@ export const ChmodTool: React.FC = () => {
           [role]: { ...prev[role], [perm]: !prev[role][perm] }
       }));
   }
+
+  const PermissionGroup = ({ label, role }: { label: string, role: 'owner' | 'group' | 'public' }) => (
+      <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <span className="font-semibold text-slate-700">{label}</span>
+          <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={permissions[role].read} onChange={() => toggle(role, 'read')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
+                  <span className="text-sm">Read (4)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={permissions[role].write} onChange={() => toggle(role, 'write')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
+                  <span className="text-sm">Write (2)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={permissions[role].execute} onChange={() => toggle(role, 'execute')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
+                  <span className="text-sm">Execute (1)</span>
+              </label>
+          </div>
+      </div>
+  );
 
   return (
     <Card className="h-full flex flex-col">
@@ -85,9 +74,9 @@ export const ChmodTool: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-            <PermissionGroup label="Owner" role="owner" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="Group" role="group" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="Public" role="public" permissions={permissions} toggle={toggle} />
+            <PermissionGroup label="Owner" role="owner" />
+            <PermissionGroup label="Group" role="group" />
+            <PermissionGroup label="Public" role="public" />
         </div>
       </CardContent>
     </Card>
