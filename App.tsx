@@ -3,7 +3,7 @@ import {
   FileJson, Type, Link, Clock, Shield, Fingerprint, 
   Hash, Sparkles, LayoutGrid, Search, Menu, X, 
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft, 
-  QrCode, Monitor, Terminal, KeyRound, Globe, Code
+  QrCode, Monitor, Terminal, KeyRound
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -13,9 +13,6 @@ import { AiAssistant } from './components/tools/AiAssistant';
 import { CaseConverterTool, TextStatsTool, RegexTool } from './components/tools/TextTools';
 import { PxRemTool, ColorConverterTool, QrCodeTool, DeviceInfoTool } from './components/tools/WebTools';
 import { ChmodTool } from './components/tools/DevOpsTools';
-import { StringEscaper } from './components/tools/StringEscaper';
-import { UrlParser } from './components/tools/UrlParser';
-import { DiffViewer } from './components/tools/DiffViewer';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
@@ -23,23 +20,20 @@ const TOOLS: ToolDef[] = [
   { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.FORMAT, component: JsonTool },
   { id: 'base64', name: 'Base64 转换', description: '编码与解码', icon: Type, category: Category.FORMAT, component: Base64Tool },
   { id: 'url', name: 'URL 编码', description: 'URL 参数转义', icon: Link, category: Category.FORMAT, component: UrlTool },
-  { id: 'escape', name: '文本转义', description: 'HTML / Unicode', icon: Code, category: Category.FORMAT, component: StringEscaper },
   
   // Text
   { id: 'case', name: '大小写转换', description: '驼峰/下划线/大写', icon: CaseUpper, category: Category.TEXT, component: CaseConverterTool },
   { id: 'stats', name: '文本统计', description: '字数/行数统计', icon: AlignLeft, category: Category.TEXT, component: TextStatsTool },
   { id: 'regex', name: '正则测试', description: 'JS 正则表达式测试', icon: Regex, category: Category.TEXT, component: RegexTool },
-  { id: 'diff', name: '文本对比', description: '简易行对比', icon: ArrowRightLeft, category: Category.TEXT, component: DiffViewer },
 
   // Frontend / Network
   { id: 'pxrem', name: 'PX/REM 转换', description: 'CSS 单位计算', icon: ArrowRightLeft, category: Category.FRONTEND, component: PxRemTool },
   { id: 'color', name: '颜色转换', description: 'Hex / RGB 互转', icon: Palette, category: Category.FRONTEND, component: ColorConverterTool },
   { id: 'qrcode', name: '二维码生成', description: '文本转二维码图片', icon: QrCode, category: Category.FRONTEND, component: QrCodeTool },
-  { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, category: Category.NETWORK, component: UrlParser },
   { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, category: Category.NETWORK, component: DeviceInfoTool },
 
   // Convert
-  { id: 'time', name: '时间/日期', description: '时间戳、日期计算', icon: Clock, category: Category.CONVERT, component: TimeTool },
+  { id: 'time', name: '时间戳转换', description: 'Unix & ISO 时间', icon: Clock, category: Category.CONVERT, component: TimeTool },
 
   // Security
   { id: 'jwt', name: 'JWT 解析', description: '查看 Token 载荷', icon: Shield, category: Category.SECURITY, component: JwtTool },
@@ -93,7 +87,7 @@ export default function App() {
       `}>
           <div className="h-16 flex-none flex items-center px-6 border-b border-slate-100">
               <div className="flex items-center gap-2 text-primary-600 font-bold text-xl tracking-tight">
-                  <LayoutGrid className="w-6 h-6" /> 程序员百宝箱
+                  <LayoutGrid className="w-6 h-6" /> DevToolbox
               </div>
               <button 
                 className="ml-auto md:hidden p-1 text-slate-400 hover:text-slate-600"
@@ -160,7 +154,7 @@ export default function App() {
             </div>
             
             <div className="mt-4 text-center text-xs text-slate-400">
-                程序员百宝箱 &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
+                DevToolbox Pro &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
             </div>
         </div>
       </main>

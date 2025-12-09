@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { Copy, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Type, AlignLeft, Regex, Copy, Check, CaseUpper } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
@@ -119,17 +119,24 @@ export const RegexTool: React.FC = () => {
   const [regexStr, setRegexStr] = useState('');
   const [flags, setFlags] = useState('gm');
   const [testString, setTestString] = useState('');
+  const [matches, setMatches] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Use useMemo for derived state instead of useEffect + setState
-  const { matches, error } = useMemo(() => {
-      if (!regexStr) return { matches: [], error: null };
-      try {
-          const regex = new RegExp(regexStr, flags);
-          const found = testString.match(regex);
-          return { matches: found ? Array.from(found) : [], error: null };
-      } catch {
-          return { matches: [], error: "Invalid Regular Expression" };
-      }
+  useEffect(() => {
+    if (!regexStr) {
+        setMatches([]);
+        setError(null);
+        return;
+    }
+    try {
+        const regex = new RegExp(regexStr, flags);
+        const found = testString.match(regex);
+        setMatches(found ? Array.from(found) : []);
+        setError(null);
+    } catch (e) {
+        setError("Invalid Regular Expression");
+        setMatches([]);
+    }
   }, [regexStr, flags, testString]);
 
   return (
@@ -174,11 +181,11 @@ export const RegexTool: React.FC = () => {
                 </label>
                 <div className="flex-1 w-full p-3 bg-slate-900 text-green-400 font-mono text-sm rounded-lg overflow-y-auto border border-slate-700">
                     {matches.length === 0 ? (
-                        <span className="text-slate-600 italic">{'// No matches found'}</span>
+                        <span className="text-slate-600 italic">// No matches found</span>
                     ) : (
                         <ul className="list-decimal list-inside">
                             {matches.map((m, i) => (
-                                <li key={i} className="mb-1 break-all">&quot;{m}&quot;</li>
+                                <li key={i} className="mb-1 break-all">"{m}"</li>
                             ))}
                         </ul>
                     )}
