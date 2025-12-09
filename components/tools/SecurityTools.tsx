@@ -1,26 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Fingerprint, RefreshCcw, Copy, Check, KeyRound } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { RefreshCcw, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
 // --- JWT Tool ---
 export const JwtTool: React.FC = () => {
   const [token, setToken] = useState('');
-  const [header, setHeader] = useState('');
-  const [payload, setPayload] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  // Derived state during render
+  let header = '';
+  let payload = '';
+  let error: string | null = null;
 
-  useEffect(() => {
-    if (!token) {
-      setHeader('');
-      setPayload('');
-      setError(null);
-      return;
-    }
-
+  if (token) {
     try {
       const parts = token.split('.');
-      if (parts.length !== 3) throw new Error("Invalid JWT format (must have 3 parts)");
+      if (parts.length !== 3) throw new Error("Invalid JWT format");
 
       const decode = (str: string) => {
         const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
@@ -30,15 +24,12 @@ export const JwtTool: React.FC = () => {
         return JSON.stringify(JSON.parse(json), null, 2);
       };
 
-      setHeader(decode(parts[0]));
-      setPayload(decode(parts[1]));
-      setError(null);
-    } catch (e) {
-      setError("Invalid JWT Token");
-      setHeader('');
-      setPayload('');
+      header = decode(parts[0]);
+      payload = decode(parts[1]);
+    } catch {
+      error = "Invalid JWT Token";
     }
-  }, [token]);
+  }
 
   return (
     <Card className="h-full flex flex-col">
@@ -76,19 +67,15 @@ export const JwtTool: React.FC = () => {
 
 // --- UUID Tool ---
 export const UuidTool: React.FC = () => {
-  const [uuids, setUuids] = useState<string[]>([]);
+  // Lazy init to avoid useEffect
   const [count, setCount] = useState(5);
+  const [uuids, setUuids] = useState<string[]>(() => Array.from({ length: 5 }, () => crypto.randomUUID()));
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const generate = () => {
     const newUuids = Array.from({ length: count }, () => crypto.randomUUID());
     setUuids(newUuids);
   };
-
-  useEffect(() => {
-    generate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
 
   const copyToClipboard = (text: string, index: number) => {
     navigator.clipboard.writeText(text);
@@ -223,10 +210,9 @@ export const PasswordGenTool: React.FC = () => {
         numbers: true,
         symbols: true,
     });
-    const [password, setPassword] = useState('');
-    const [copied, setCopied] = useState(false);
 
-    const generate = () => {
+    // Pure function for generation
+    const generatePassword = useCallback((len: number, opts: typeof options) => {
         const chars = {
             uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
             lowercase: 'abcdefghijklmnopqrstuvwxyz',
@@ -235,26 +221,49 @@ export const PasswordGenTool: React.FC = () => {
         };
         
         let charSet = '';
-        if (options.uppercase) charSet += chars.uppercase;
-        if (options.lowercase) charSet += chars.lowercase;
-        if (options.numbers) charSet += chars.numbers;
-        if (options.symbols) charSet += chars.symbols;
+        if (opts.uppercase) charSet += chars.uppercase;
+        if (opts.lowercase) charSet += chars.lowercase;
+        if (opts.numbers) charSet += chars.numbers;
+        if (opts.symbols) charSet += chars.symbols;
 
-        if (charSet === '') {
-            setPassword('');
-            return;
-        }
+        if (charSet === '') return '';
 
         let res = '';
-        const array = new Uint32Array(length);
+        const array = new Uint32Array(len);
         crypto.getRandomValues(array);
-        for (let i = 0; i < length; i++) {
+        for (let i = 0; i < len; i++) {
             res += charSet[array[i] % charSet.length];
         }
-        setPassword(res);
-    };
+        return res;
+    }, []);
 
-    useEffect(() => { generate(); }, [length, options]);
+    const [password, setPassword] = useState(() => {
+        // Init logic duplicated or we can define function outside component
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
+        let res = '';
+        const array = new Uint32Array(16);
+        crypto.getRandomValues(array);
+        for (let i = 0; i < 16; i++) {
+            res += chars[array[i] % chars.length];
+        }
+        return res;
+    });
+    const [copied, setCopied] = useState(false);
+
+    const generate = useCallback(() => {
+        setPassword(generatePassword(length, options));
+    }, [length, options, generatePassword]);
+
+    const handleLengthChange = (v: number) => {
+        setLength(v);
+        setPassword(generatePassword(v, options));
+    }
+
+    const handleOptionChange = (key: keyof typeof options) => {
+        const newOpts = {...options, [key]: !options[key]};
+        setOptions(newOpts);
+        setPassword(generatePassword(length, newOpts));
+    }
 
     const copyPass = () => {
         navigator.clipboard.writeText(password);
@@ -294,7 +303,7 @@ export const PasswordGenTool: React.FC = () => {
                             min="6" 
                             max="64" 
                             value={length} 
-                            onChange={e => setLength(Number(e.target.value))}
+                            onChange={e => handleLengthChange(Number(e.target.value))}
                             className="w-full accent-primary-600"
                         />
                     </div>
@@ -305,7 +314,7 @@ export const PasswordGenTool: React.FC = () => {
                                 <input 
                                     type="checkbox" 
                                     checked={options[key as keyof typeof options]}
-                                    onChange={() => setOptions(prev => ({...prev, [key]: !prev[key as keyof typeof options]}))}
+                                    onChange={() => handleOptionChange(key as keyof typeof options)}
                                     className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
                                 />
                                 <span className="capitalize text-slate-700">{key}</span>
