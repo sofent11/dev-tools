@@ -5,7 +5,7 @@ import {
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft, 
   QrCode, Monitor, Terminal, KeyRound, Globe, Code,
   FileCode, Database, FileSpreadsheet, FileText, Scissors,
-  Send, Calculator
+  Send, Calculator, Image, Files
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -22,11 +22,15 @@ import { XmlTool, YamlTool, CsvTool, MarkdownTool } from './components/tools/For
 import { StringManipulatorTool, SlugTool, RandomStringTool } from './components/tools/StringTools';
 import { TimestampTool, DateDiffTool } from './components/tools/TimeTools';
 import { HttpBuilderTool, UserAgentTool, IpInfoTool } from './components/tools/NetworkTools';
+import { JsonToTsTool } from './components/tools/JsonToTsTool';
+import { ImageTools } from './components/tools/ImageTools';
+import { PdfTools } from './components/tools/PdfTools';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
   // --- Category 1: Encoding / Text Processing (TEXT) ---
   { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.TEXT, component: JsonTool },
+  { id: 'json2ts', name: 'JSON 转代码', description: '转 TS/Go/Java', icon: Code, category: Category.TEXT, component: JsonToTsTool },
   { id: 'xml', name: 'XML 工具', description: '格式化 / JSON 转换', icon: FileCode, category: Category.TEXT, component: XmlTool },
   { id: 'yaml', name: 'YAML ↔ JSON', description: 'YAML / JSON 互转', icon: Database, category: Category.TEXT, component: YamlTool },
   { id: 'csv', name: 'CSV ↔ JSON', description: 'CSV / JSON 互转', icon: FileSpreadsheet, category: Category.TEXT, component: CsvTool },
@@ -63,6 +67,8 @@ const TOOLS: ToolDef[] = [
   { id: 'pxrem', name: 'PX/REM 转换', description: 'CSS 单位计算', icon: ArrowRightLeft, category: Category.FRONTEND, component: PxRemTool },
   { id: 'color', name: '颜色转换', description: 'Hex / RGB 互转', icon: Palette, category: Category.FRONTEND, component: ColorConverterTool },
   { id: 'qrcode', name: '二维码生成', description: '文本转二维码图片', icon: QrCode, category: Category.FRONTEND, component: QrCodeTool },
+  { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, category: Category.FRONTEND, component: ImageTools },
+  { id: 'pdf', name: 'PDF 工具箱', description: '合并 / 转图片', icon: Files, category: Category.FRONTEND, component: PdfTools },
 
   // --- Category 8: DevOps (DEVOPS) ---
   { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, category: Category.DEVOPS, component: ChmodTool },
