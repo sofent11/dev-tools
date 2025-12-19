@@ -82,7 +82,7 @@ export const ImageTools: React.FC = () => {
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
 
         {/* Upload Area */}
-        <div className="flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
+        <div className="relative flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
             <div className="p-4 bg-white rounded-full shadow-sm">
                 <Upload className="w-8 h-8 text-primary-500" />
             </div>
