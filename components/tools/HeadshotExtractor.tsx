@@ -6,6 +6,12 @@ import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
+type DetectResult = {
+  box: faceapi.Box;
+  inputWidth: number;
+  inputHeight: number;
+};
+
 export const HeadshotExtractor: React.FC = () => {
   const [imgSrc, setImgSrc] = useState('');
   const [crop, setCrop] = useState<Crop>();
@@ -14,21 +20,94 @@ export const HeadshotExtractor: React.FC = () => {
   const [status, setStatus] = useState('Waiting for image...');
   const imgRef = useRef<HTMLImageElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const loadPromiseRef = useRef<Promise<void> | null>(null);
+  const ssdLoadedRef = useRef(false);
 
   useEffect(() => {
     loadModels();
   }, []);
 
   const loadModels = async () => {
+    if (loadPromiseRef.current) {
+      return loadPromiseRef.current;
+    }
+
+    loadPromiseRef.current = (async () => {
+      try {
+        setStatus('Loading models...');
+        // TinyFaceDetector: 快、轻量，适合前端交互。
+        await faceapi.nets.tinyFaceDetector.loadFromUri('/models');
+        setStatus('Models loaded. Ready.');
+      } catch (e) {
+        console.error(e);
+        setStatus('Error loading models.');
+      }
+    })();
+
+    return loadPromiseRef.current;
+  };
+
+  const loadSsdModelIfNeeded = async () => {
+    if (ssdLoadedRef.current) {
+      return;
+    }
     try {
-      setStatus('Loading models...');
-      // Load from public/models
-      await faceapi.nets.mtcnn.loadFromUri('/models');
-      setStatus('Models loaded. Ready.');
+      setStatus('Loading fallback model...');
+      await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+      ssdLoadedRef.current = true;
     } catch (e) {
       console.error(e);
-      setStatus('Error loading models.');
     }
+  };
+
+  const runWhenIdle = (fn: () => void) => {
+    if ('requestIdleCallback' in window) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).requestIdleCallback(fn, { timeout: 800 });
+    } else {
+      window.setTimeout(fn, 0);
+    }
+  };
+
+  const detectFaceFast = async (img: HTMLImageElement): Promise<DetectResult | null> => {
+    // 关键优化：先缩放再检测，避免大图直接推理导致卡顿。
+    const maxDim = 640;
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+
+    if (!naturalWidth || !naturalHeight) {
+      return null;
+    }
+
+    const scale = Math.min(1, maxDim / Math.max(naturalWidth, naturalHeight));
+    const inputWidth = Math.max(1, Math.round(naturalWidth * scale));
+    const inputHeight = Math.max(1, Math.round(naturalHeight * scale));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = inputWidth;
+    canvas.height = inputHeight;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) {
+      return null;
+    }
+
+    ctx.drawImage(img, 0, 0, inputWidth, inputHeight);
+
+    const detection = await faceapi.detectSingleFace(
+      canvas,
+      new faceapi.TinyFaceDetectorOptions({
+        // inputSize 越大越准越慢；416 在大多数机器上是不错的平衡。
+        inputSize: 416,
+        // 白底证件照/磨皮可能让置信度偏低，适当降低阈值提高召回。
+        scoreThreshold: 0.2,
+      }),
+    );
+
+    if (!detection) {
+      return null;
+    }
+
+    return { box: detection.box, inputWidth, inputHeight };
   };
 
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,86 +122,139 @@ export const HeadshotExtractor: React.FC = () => {
   };
 
   const onImageLoad = async (e: React.SyntheticEvent<HTMLImageElement>) => {
-    const { width, height } = e.currentTarget;
     const img = e.currentTarget;
+    const displayWidth = img.width;
+    const displayHeight = img.height;
 
-    // Auto-detect face
     setIsLoading(true);
     setStatus('Detecting face...');
+
+    // 让“加载中”状态先渲染出来，避免看起来“卡住”。
+    await new Promise<void>((r) => window.setTimeout(r, 0));
+
     try {
-        const detections = await faceapi.detectAllFaces(img, new faceapi.MtcnnOptions());
+      await loadModels();
 
-        if (detections.length > 0) {
-            // Pick the largest face
-            const face = detections.reduce((prev, current) => (prev.box.area > current.box.area) ? prev : current);
-            const box = face.box;
+      const fast = await detectFaceFast(img);
+      if (fast) {
+        const { box, inputWidth, inputHeight } = fast;
+        // 将检测坐标（缩放输入）映射到显示坐标（ReactCrop 以显示尺寸为基准）
+        const sx = displayWidth / inputWidth;
+        const sy = displayHeight / inputHeight;
 
-            // 优化大头照构图算法：
-            // 1. 增加顶部比例以包含头发 (脸部高度的 80%)
-            // 2. 减少底部比例以实现“肩部以上” (总高度设为脸部的 2.2 倍)
-            // 3. 改进居中逻辑：使用平移而非简单的边界裁剪
+        const mappedBox = new faceapi.Box(
+          box.x * sx,
+          box.y * sy,
+          box.width * sx,
+          box.height * sy,
+        );
 
-            let newW = box.width * 2.0;
-            let newH = box.height * 2.2;
-            
-            // 计算理想的起始坐标，使脸部水平居中，垂直偏上
-            let newX = box.x + (box.width / 2) - (newW / 2);
-            let newY = box.y - (box.height * 0.8);
+        let newW = mappedBox.width * 2.0;
+        let newH = mappedBox.height * 2.2;
 
-            // 边界平移调整：如果框超出了图像边界，尝试平移它以保持大小和居中
-            if (newX < 0) newX = 0;
-            if (newY < 0) newY = 0;
-            if (newX + newW > width) newX = Math.max(0, width - newW);
-            if (newY + newH > height) newY = Math.max(0, height - newH);
+        let newX = mappedBox.x + mappedBox.width / 2 - newW / 2;
+        let newY = mappedBox.y - mappedBox.height * 0.8;
 
-            // 最终约束：如果图像本身比目标框还小，则进行裁剪
-            if (newX + newW > width) newW = width - newX;
-            if (newY + newH > height) newH = height - newY;
+        if (newX < 0) newX = 0;
+        if (newY < 0) newY = 0;
+        if (newX + newW > displayWidth) newX = Math.max(0, displayWidth - newW);
+        if (newY + newH > displayHeight) newY = Math.max(0, displayHeight - newH);
 
-            // Create crop object (percentage or pixels). react-image-crop uses pixels or percent.
-            // We'll use pixels here but convert to structure ReactCrop expects.
+        if (newX + newW > displayWidth) newW = displayWidth - newX;
+        if (newY + newH > displayHeight) newH = displayHeight - newY;
 
-            const newCrop: Crop = {
-                unit: 'px',
-                x: newX,
-                y: newY,
-                width: newW,
-                height: newH,
-            };
-            setCrop(newCrop);
-            setCompletedCrop({
-                unit: 'px',
-                x: newX,
-                y: newY,
-                width: newW,
-                height: newH,
-            });
-            setStatus('Face detected and auto-cropped.');
-        } else {
+        const newCrop: Crop = {
+          unit: 'px',
+          x: newX,
+          y: newY,
+          width: newW,
+          height: newH,
+        };
+        setCrop(newCrop);
+        setCompletedCrop({
+          unit: 'px',
+          x: newX,
+          y: newY,
+          width: newW,
+          height: newH,
+        });
+        setStatus('Face detected and auto-cropped.');
+        return;
+      }
+
+      // 快速模型没识别到：先给用户一个可用的默认裁剪框，再在空闲时尝试更强模型兜底。
+      setStatus('No face detected. Using default crop; trying fallback...');
+      const defaultCrop = centerCrop(
+        makeAspectCrop(
+          {
+            unit: '%',
+            width: 50,
+          },
+          1,
+          displayWidth,
+          displayHeight,
+        ),
+        displayWidth,
+        displayHeight,
+      );
+      setCrop(defaultCrop);
+      setCompletedCrop(defaultCrop);
+
+      runWhenIdle(async () => {
+        try {
+          await loadSsdModelIfNeeded();
+          if (!ssdLoadedRef.current) {
+            setStatus('Fallback model unavailable. Please crop manually.');
+            return;
+          }
+
+          const detection = await faceapi.detectSingleFace(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.35 }));
+          if (!detection) {
             setStatus('No face detected. Please select manually.');
-            // Default center crop
-            const newCrop = centerCrop(
-                makeAspectCrop(
-                    {
-                        unit: '%',
-                        width: 50,
-                    },
-                    1, // aspect
-                    width,
-                    height
-                ),
-                width,
-                height
-            );
-            setCrop(newCrop);
-            setCompletedCrop(newCrop);
-        }
+            return;
+          }
 
+          const box = detection.box;
+          let newW = box.width * 2.0;
+          let newH = box.height * 2.2;
+
+          let newX = box.x + box.width / 2 - newW / 2;
+          let newY = box.y - box.height * 0.8;
+
+          if (newX < 0) newX = 0;
+          if (newY < 0) newY = 0;
+          if (newX + newW > displayWidth) newX = Math.max(0, displayWidth - newW);
+          if (newY + newH > displayHeight) newY = Math.max(0, displayHeight - newH);
+
+          if (newX + newW > displayWidth) newW = displayWidth - newX;
+          if (newY + newH > displayHeight) newH = displayHeight - newY;
+
+          const newCrop: Crop = {
+            unit: 'px',
+            x: newX,
+            y: newY,
+            width: newW,
+            height: newH,
+          };
+          setCrop(newCrop);
+          setCompletedCrop({
+            unit: 'px',
+            x: newX,
+            y: newY,
+            width: newW,
+            height: newH,
+          });
+          setStatus('Face detected (fallback) and auto-cropped.');
+        } catch (err) {
+          console.error(err);
+          setStatus('Detection failed. Please select manually.');
+        }
+      });
     } catch (err) {
-        console.error(err);
-        setStatus('Detection failed. Please select manually.');
+      console.error(err);
+      setStatus('Detection failed. Please select manually.');
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -174,6 +306,8 @@ export const HeadshotExtractor: React.FC = () => {
       canvas.width = Math.floor(crop.width * scaleX * pixelRatio);
       canvas.height = Math.floor(crop.height * scaleY * pixelRatio);
 
+      // 重要：避免多次 effect 调用导致 scale 叠加
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(pixelRatio, pixelRatio);
       ctx.imageSmoothingQuality = 'high';
 
@@ -236,7 +370,7 @@ export const HeadshotExtractor: React.FC = () => {
                 <div className="flex-1 flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 p-4 overflow-hidden relative">
                     <ReactCrop
                         crop={crop}
-                        onChange={(_, percentCrop) => setCrop(percentCrop)}
+                      onChange={(c) => setCrop(c)}
                         onComplete={(c) => setCompletedCrop(c)}
                         className="max-h-full"
                     >
