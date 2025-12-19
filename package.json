@@ -16,6 +16,7 @@
     "@types/marked": "^5.0.2",
     "@types/papaparse": "^5.5.1",
     "browser-image-compression": "^2.0.2",
+    "face-api.js": "^0.22.2",
     "fast-xml-parser": "^5.3.2",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.556.0",
@@ -26,7 +27,8 @@
     "pdfjs-dist": "^5.4.449",
     "quicktype-core": "^23.2.6",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "react-image-crop": "^11.0.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

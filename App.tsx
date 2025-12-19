@@ -24,6 +24,7 @@ import { TimestampTool, DateDiffTool } from './components/tools/TimeTools';
 import { HttpBuilderTool, UserAgentTool, IpInfoTool } from './components/tools/NetworkTools';
 import { JsonToTsTool } from './components/tools/JsonToTsTool';
 import { ImageTools } from './components/tools/ImageTools';
+import { HeadshotExtractor } from './components/tools/HeadshotExtractor';
 import { PdfTools } from './components/tools/PdfTools';
 
 // Tool Registry
@@ -68,6 +69,7 @@ const TOOLS: ToolDef[] = [
   { id: 'color', name: '颜色转换', description: 'Hex / RGB 互转', icon: Palette, category: Category.FRONTEND, component: ColorConverterTool },
   { id: 'qrcode', name: '二维码生成', description: '文本转二维码图片', icon: QrCode, category: Category.FRONTEND, component: QrCodeTool },
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, category: Category.FRONTEND, component: ImageTools },
+  { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, category: Category.FRONTEND, component: HeadshotExtractor },
   { id: 'pdf', name: 'PDF 工具箱', description: '合并 / 转图片', icon: Files, category: Category.FRONTEND, component: PdfTools },
 
   // --- Category 8: DevOps (DEVOPS) ---
