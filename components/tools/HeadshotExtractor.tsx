@@ -23,7 +23,7 @@ export const HeadshotExtractor: React.FC = () => {
     try {
       setStatus('Loading models...');
       // Load from public/models
-      await faceapi.nets.ssdMobilenetv1.loadFromUri('/models');
+      await faceapi.nets.mtcnn.loadFromUri('/models');
       setStatus('Models loaded. Ready.');
     } catch (e) {
       console.error(e);
@@ -50,7 +50,7 @@ export const HeadshotExtractor: React.FC = () => {
     setIsLoading(true);
     setStatus('Detecting face...');
     try {
-        const detections = await faceapi.detectAllFaces(img, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }));
+        const detections = await faceapi.detectAllFaces(img, new faceapi.MtcnnOptions());
 
         if (detections.length > 0) {
             // Pick the largest face
