@@ -57,24 +57,25 @@ export const HeadshotExtractor: React.FC = () => {
             const face = detections.reduce((prev, current) => (prev.box.area > current.box.area) ? prev : current);
             const box = face.box;
 
-            // Heuristic for Head to Shoulder
-            // Face box covers usually the face from forehead to chin.
-            // Head top is slightly above (hair).
-            // Shoulders are below chin.
+            // 优化大头照构图算法：
+            // 1. 增加顶部比例以包含头发 (脸部高度的 80%)
+            // 2. 减少底部比例以实现“肩部以上” (总高度设为脸部的 2.2 倍)
+            // 3. 改进居中逻辑：使用平移而非简单的边界裁剪
 
-            // Adjust box:
-            // Top: move up by 50% of height (for hair)
-            // Bottom: move down by 100% of height (for neck and shoulders)
-            // Left/Right: widen by 50% of width each side
-
-            let newX = box.x - box.width * 0.5;
-            let newY = box.y - box.height * 0.5;
             let newW = box.width * 2.0;
-            let newH = box.height * 2.5;
+            let newH = box.height * 2.2;
+            
+            // 计算理想的起始坐标，使脸部水平居中，垂直偏上
+            let newX = box.x + (box.width / 2) - (newW / 2);
+            let newY = box.y - (box.height * 0.8);
 
-            // Constrain to image bounds
+            // 边界平移调整：如果框超出了图像边界，尝试平移它以保持大小和居中
             if (newX < 0) newX = 0;
             if (newY < 0) newY = 0;
+            if (newX + newW > width) newX = Math.max(0, width - newW);
+            if (newY + newH > height) newY = Math.max(0, height - newH);
+
+            // 最终约束：如果图像本身比目标框还小，则进行裁剪
             if (newX + newW > width) newW = width - newX;
             if (newY + newH > height) newH = height - newY;
 

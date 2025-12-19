@@ -1,18 +1,7 @@
 import React, { useState } from 'react';
-import { Globe, Send, Monitor, Info, Check, Copy, ArrowRight } from 'lucide-react';
+import { Globe, Send, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-
-// --- Shared Helper: Copy to Clipboard ---
-const useCopyToClipboard = () => {
-  const [copied, setCopied] = useState(false);
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return { copied, copy };
-};
 
 // --- HTTP Request Builder (Simplified) ---
 export const HttpBuilderTool: React.FC = () => {

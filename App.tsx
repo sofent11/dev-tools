@@ -10,7 +10,6 @@ import {
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
 import { JwtTool, UuidTool, HashTool, PasswordGenTool, HmacTool } from './components/tools/SecurityTools';
-import { TimeTool } from './components/tools/TimeTool';
 import { AiAssistant } from './components/tools/AiAssistant';
 import { CaseConverterTool, TextStatsTool, RegexTool } from './components/tools/TextTools';
 import { PxRemTool, ColorConverterTool, QrCodeTool, DeviceInfoTool } from './components/tools/WebTools';

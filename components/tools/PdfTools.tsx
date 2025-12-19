@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { PDFDocument } from 'pdf-lib';
 import * as pdfjsLib from 'pdfjs-dist';
-import { Upload, FileText, Merge, Download, Trash2, Image as ImageIcon } from 'lucide-react';
+import { FileText, Merge, Trash2, Image as ImageIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 

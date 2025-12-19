@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
-  FileCode, Database, RefreshCw, FileText, ArrowRightLeft,
-  Copy, Check, FileSpreadsheet, Eye
+  FileCode, Database, ArrowRightLeft,
+  Copy, Check, FileSpreadsheet
 } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../ui/Card';
+import { Card, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import jsyaml from 'js-yaml';
 import Papa from 'papaparse';

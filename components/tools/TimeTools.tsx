@@ -1,18 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Calculator, Calendar, ArrowRight, Check, Copy } from 'lucide-react';
+import { Calculator, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-
-// --- Shared Helper: Copy to Clipboard ---
-const useCopyToClipboard = () => {
-  const [copied, setCopied] = useState(false);
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return { copied, copy };
-};
 
 // --- Timestamp Tool ---
 export const TimestampTool: React.FC = () => {

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Copy, Check, FileCode, ArrowRight } from 'lucide-react';
-import { quicktype, InputData, jsonInputForTargetLanguage, JSONSchemaInput, FetchingJSONSchemaStore } from "quicktype-core";
+import React, { useState } from 'react';
+import { Copy, Check, ArrowRight } from 'lucide-react';
+import { quicktype, InputData, jsonInputForTargetLanguage } from "quicktype-core";
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
