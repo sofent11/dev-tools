@@ -6,13 +6,22 @@ import opentype from 'opentype.js';
 
 // NOTE: gstatic direct TTF URLs are versioned and may 404.
 // Use a stable, CORS-enabled raw GitHub URL for opentype.js parsing.
-const FONT_URLS = [
-  'https://raw.githubusercontent.com/google/fonts/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf',
-  'https://raw.githubusercontent.com/google/fonts/main/ofl/cinzel/static/Cinzel-Regular.ttf',
+const AVAILABLE_FONTS = [
+  { name: 'Cinzel', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf' },
+  { name: 'Playfair Display', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf' },
+  { name: 'Montserrat', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/static/Montserrat-Regular.ttf' },
+  { name: 'Poppins', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/poppins/Poppins-Regular.ttf' },
+  { name: 'Great Vibes (自动加固)', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/greatvibes/GreatVibes-Regular.ttf' },
+  { name: 'Pacifico', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/pacifico/Pacifico-Regular.ttf' },
+  { name: 'Raleway', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/raleway/Raleway%5Bwght%5D.ttf' },
+  { name: 'Libre Baskerville', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/librebaskerville/LibreBaskerville-Regular.ttf' },
+  { name: 'Abril Fatface', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/abrilfatface/AbrilFatface-Regular.ttf' },
+  { name: 'Cinzel Decorative', url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/cinzeldecorative/CinzelDecorative-Regular.ttf' },
 ];
 
 export const JewelryCustomizer: React.FC = () => {
   // State
+  const [selectedFont, setSelectedFont] = useState(AVAILABLE_FONTS[0]);
   const [text, setText] = useState('ALVIN');
   const [fontSize, setFontSize] = useState(100);
   const [offsetMm, setOffsetMm] = useState(0.2);
@@ -41,32 +50,29 @@ export const JewelryCustomizer: React.FC = () => {
     let cancelled = false;
 
     (async () => {
+      if (!selectedFont) return;
+
       setLoading(true);
       setFontError(null);
 
-      for (const url of FONT_URLS) {
-        try {
-          const loadedFont = await loadFont(url);
-          if (cancelled) return;
-          setFont(loadedFont);
-          setLoading(false);
-          return;
-        } catch (err) {
-          // try next
-          console.warn('Failed to load font URL:', url, err);
-        }
+      try {
+        const loadedFont = await loadFont(selectedFont.url);
+        if (cancelled) return;
+        setFont(loadedFont);
+        setLoading(false);
+      } catch (err) {
+        if (cancelled) return;
+        console.warn('Failed to load font URL:', selectedFont.url, err);
+        setFont(null);
+        setFontError('字体文件加载失败（TTF/OTF URL 可能不可用或被拦截）。');
+        setLoading(false);
       }
-
-      if (cancelled) return;
-      setFont(null);
-      setFontError('字体文件加载失败（TTF/OTF URL 可能不可用或被拦截）。');
-      setLoading(false);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectedFont]);
 
   // Geometry Processing Loop
   useEffect(() => {
@@ -201,6 +207,9 @@ export const JewelryCustomizer: React.FC = () => {
             previewMode={previewMode}
             setPreviewMode={setPreviewMode}
             onExport={handleExport}
+            availableFonts={AVAILABLE_FONTS}
+            selectedFont={selectedFont}
+            setSelectedFont={setSelectedFont}
             isProcessing={processing}
             diagnostics={geometry?.diagnostics ?? null}
           />

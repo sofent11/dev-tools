@@ -25,6 +25,9 @@ interface ControlPanelProps {
   previewMode: 'visual' | 'manufacturing';
   setPreviewMode: (m: 'visual' | 'manufacturing') => void;
   onExport: () => void;
+  availableFonts: Array<{ name: string; url: string }>;
+  selectedFont: { name: string; url: string } | null;
+  setSelectedFont: (font: { name: string; url: string }) => void;
   isProcessing: boolean;
   diagnostics: {
     componentsBeforeRepair: number;
@@ -47,6 +50,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   unitsPerMm, setUnitsPerMm,
   previewMode, setPreviewMode,
   onExport,
+  availableFonts,
+  selectedFont,
+  setSelectedFont,
   isProcessing,
   diagnostics,
 }) => {
@@ -65,16 +71,38 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       </div>
 
       {/* Text Input */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-          <Type className="w-4 h-4" /> 定制文字
-        </label>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-primary-100 focus:border-primary-400 min-h-20"
-          placeholder="请输入文字..."
-        />
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Type className="w-4 h-4" /> 字体选择
+          </label>
+          <select
+            value={selectedFont?.name || ''}
+            onChange={(e) => {
+              const font = availableFonts.find(f => f.name === e.target.value);
+              if (font) setSelectedFont(font);
+            }}
+            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-primary-100 focus:border-primary-400 bg-white"
+          >
+            {availableFonts.map((font) => (
+              <option key={font.name} value={font.name}>
+                {font.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Type className="w-4 h-4" /> 定制文字
+          </label>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-primary-100 focus:border-primary-400 min-h-20"
+            placeholder="请输入文字..."
+          />
+        </div>
       </div>
 
       {/* Sliders */}
