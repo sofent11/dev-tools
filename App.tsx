@@ -5,7 +5,7 @@ import {
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft, 
   QrCode, Monitor, Terminal, KeyRound, Globe, Code,
   FileCode, Database, FileSpreadsheet, FileText, Scissors,
-  Send, Calculator, Image, Files
+  Send, Calculator, Image, Files, Gem
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -25,6 +25,7 @@ import { JsonToTsTool } from './components/tools/JsonToTsTool';
 import { ImageTools } from './components/tools/ImageTools';
 import { HeadshotExtractor } from './components/tools/HeadshotExtractor';
 import { PdfTools } from './components/tools/PdfTools';
+import JewelryCustomizer from './components/tools/JewelryCustomizer';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
@@ -77,6 +78,9 @@ const TOOLS: ToolDef[] = [
   // --- Category 9: Generators (GENERATORS) ---
   { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, category: Category.GENERATORS, component: UuidTool },
   { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, category: Category.GENERATORS, component: RandomStringTool },
+
+  // --- Category 14: Custom (CUSTOM) ---
+  { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器', icon: Gem, category: Category.CUSTOM, component: JewelryCustomizer },
 
   // --- Extra: AI ---
   { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.AI, component: AiAssistant },
