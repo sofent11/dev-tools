@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { ModelFacePack, SourceFacePack } from '../types';
 import { createProgram, loadTexture } from '../utils/webglUtils';
 
@@ -10,201 +10,273 @@ interface FaceSwapCanvasProps {
   className?: string;
 }
 
+// Vertex shader: Transforms model landmarks to screen coordinates,
+// and passes through the source texture coordinates
 const VS_SOURCE = `#version 300 es
-in vec2 a_position; 
-in vec2 a_texCoord; 
+in vec2 a_modelPosition;   // Position in model image (pixels)
+in vec2 a_sourceTexCoord;  // Position in source texture (pixels, 0-512)
 
-uniform vec2 u_resolution;
-uniform vec2 u_sourceResolution;
+uniform vec2 u_modelResolution;     // Model image size
+uniform vec2 u_sourceResolution;    // Source texture size (512x512)
 
-out vec2 v_texCoord;
-out vec2 v_modelUV;
+out vec2 v_sourceUV;   // UV for source face texture
+out vec2 v_modelUV;    // UV for target/mask sampling
 
 void main() {
-  // Convert screen pixels to clip space (-1 to 1)
-  vec2 zeroToOne = a_position / u_resolution;
-  vec2 clipSpace = (zeroToOne * 2.0) - 1.0;
+  // Convert model pixel coords to clip space
+  vec2 normalizedPos = a_modelPosition / u_modelResolution;
+  vec2 clipSpace = (normalizedPos * 2.0) - 1.0;
   
-  // Flip Y for WebGL coords
-  gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+  // Flip Y for WebGL (origin at bottom-left)
+  gl_Position = vec4(clipSpace.x, -clipSpace.y, 0.0, 1.0);
   
-  v_texCoord = a_texCoord / u_sourceResolution;
-  v_modelUV = zeroToOne;
+  // Source texture UV (0-1 range)
+  v_sourceUV = a_sourceTexCoord / u_sourceResolution;
+  
+  // Model UV for target/mask sampling
+  v_modelUV = normalizedPos;
 }
 `;
 
+// Fragment shader: Samples source face, applies color correction, blends with mask
 const FS_SOURCE = `#version 300 es
-precision mediump float;
+precision highp float;
 
-uniform sampler2D u_sourceTexture;
-uniform sampler2D u_targetTexture; // We bind the original model image here
-uniform sampler2D u_maskTexture;
+uniform sampler2D u_sourceTexture;  // The new face to paste
+uniform sampler2D u_targetTexture;  // Original model image (for lighting reference)
+uniform sampler2D u_maskTexture;    // Alpha mask for blending
 
-uniform vec3 u_sourceMean;
-uniform vec3 u_targetMean;
+uniform vec3 u_sourceMean;  // Source face color stats
+uniform vec3 u_targetMean;  // Target face color stats
 
-in vec2 v_texCoord;
+in vec2 v_sourceUV;
 in vec2 v_modelUV;
 
-out vec4 outColor;
+out vec4 fragColor;
 
 float getLuma(vec3 c) {
   return dot(c, vec3(0.299, 0.587, 0.114));
 }
 
 void main() {
-  vec4 sourceVal = texture(u_sourceTexture, v_texCoord);
-  vec4 targetVal = texture(u_targetTexture, v_modelUV);
-  float mask = texture(u_maskTexture, v_modelUV).r; 
-
-  vec3 S = sourceVal.rgb;
-  vec3 T = targetVal.rgb;
-
-  // --- STEP 1: RGB STATISTICAL MATCHING ---
-  // Shift source color histogram to match target mean.
-  // We offset each channel: Source + (TargetMean - SourceMean)
-  vec3 diff = u_targetMean - u_sourceMean;
-  vec3 colorCorrected = S + diff;
+  // Sample the source face texture
+  vec4 srcColor = texture(u_sourceTexture, v_sourceUV);
   
-  // Clamp to avoid artifacts
-  colorCorrected = clamp(colorCorrected, 0.0, 1.0);
-
-  // --- STEP 2: LUMINANCE ANCHORING ---
-  // The structure and lighting come from the target.
-  // We want the Source's details but the Target's lighting.
+  // Sample the target for lighting reference
+  vec4 tgtColor = texture(u_targetTexture, v_modelUV);
   
-  float lumaS = getLuma(colorCorrected);
-  float lumaT = getLuma(T);
+  // Get mask alpha
+  float maskAlpha = texture(u_maskTexture, v_modelUV).r;
   
-  // Simply multiplying by the ratio effectively "relights" the face.
-  // Add epsilon to avoid divide by zero.
-  vec3 relit = colorCorrected * (lumaT / (lumaS + 0.01));
+  // --- Color correction: shift source colors to match target ---
+  vec3 colorDiff = u_targetMean - u_sourceMean;
+  vec3 corrected = srcColor.rgb + colorDiff;
+  corrected = clamp(corrected, 0.0, 1.0);
   
-  // Mix in a bit of the original target color to help blending if the ratio is extreme
-  relit = mix(relit, T, 0.15);
-
-  // --- STEP 3: FINAL BLEND ---
-  // Soft edges using the gradient mask
-  float edgeSoftness = smoothstep(0.0, 1.0, mask);
+  // --- Luminance matching: apply target lighting ---
+  float srcLuma = getLuma(corrected);
+  float tgtLuma = getLuma(tgtColor.rgb);
   
-  outColor = vec4(relit, edgeSoftness); 
+  // Relight the source using target's luminance
+  vec3 relit = corrected * (tgtLuma / max(srcLuma, 0.01));
+  
+  // Blend a bit of target to smooth extreme cases
+  relit = mix(relit, tgtColor.rgb, 0.1);
+  relit = clamp(relit, 0.0, 1.0);
+  
+  // Apply soft edge falloff
+  float alpha = smoothstep(0.0, 0.5, maskAlpha);
+  
+  fragColor = vec4(relit, alpha);
 }
 `;
 
-const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({ 
-  model, 
+const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({
+  model,
   source,
-  className 
+  className
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const glRef = useRef<WebGL2RenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
+  const [renderError, setRenderError] = useState<string | null>(null);
 
+  // Initialize WebGL context and shader program
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Alpha enabled for transparency so we can composite over the <img> tag
-    const gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: false });
-    if (!gl) return;
+    const gl = canvas.getContext('webgl2', {
+      alpha: true,
+      premultipliedAlpha: false,
+      antialias: true
+    });
+
+    if (!gl) {
+      setRenderError('WebGL2 not supported');
+      return;
+    }
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
     const program = createProgram(gl, VS_SOURCE, FS_SOURCE);
-    if (!program) return;
+    if (!program) {
+      setRenderError('Failed to compile shaders');
+      return;
+    }
 
     glRef.current = gl;
     programRef.current = program;
+    setRenderError(null);
   }, []);
 
+  // Render when model or source changes
   useEffect(() => {
     const render = async () => {
       const gl = glRef.current;
       const program = programRef.current;
       if (!gl || !program) return;
 
+      // Validate data
+      if (model.landmarks.length === 0 || source.landmarks.length === 0) {
+        console.error('No landmarks detected');
+        setRenderError('No face landmarks detected');
+        return;
+      }
+
+      if (model.landmarks.length !== source.landmarks.length) {
+        console.error(`Landmark count mismatch: model=${model.landmarks.length}, source=${source.landmarks.length}`);
+        setRenderError('Face landmark count mismatch');
+        return;
+      }
+
+      if (model.triangles.length === 0) {
+        console.error('No triangles for mesh');
+        setRenderError('No triangulation data');
+        return;
+      }
+
       try {
+        // Load all textures
         const [sourceTex, targetTex, maskTex] = await Promise.all([
           loadTexture(gl, source.textureUrl),
-          loadTexture(gl, model.imageUrl), // Bind the model image as a texture for sampling
+          loadTexture(gl, model.imageUrl),
           loadTexture(gl, model.maskUrl)
         ]);
-        
+
+        // Set canvas size to match model
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.width = model.width;
+          canvas.height = model.height;
+        }
+
         gl.viewport(0, 0, model.width, model.height);
-        gl.clearColor(0, 0, 0, 0); // Transparent clear
+        gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
         gl.useProgram(program);
 
-        const loc = (name: string) => gl.getUniformLocation(program, name);
-        
-        gl.uniform2f(loc("u_resolution"), model.width, model.height);
-        gl.uniform2f(loc("u_sourceResolution"), 512, 512);
+        // Create and bind VAO
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
 
-        // Pass RGB Stats
-        gl.uniform3fv(loc("u_sourceMean"), source.skinStats.mean);
-        gl.uniform3fv(loc("u_targetMean"), model.skinStats.mean);
+        // --- Setup vertex positions (model landmarks) ---
+        const modelPositions = new Float32Array(
+          model.landmarks.flatMap(p => [p.x, p.y])
+        );
+        const posBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, modelPositions, gl.STATIC_DRAW);
 
-        // TEXTURE 0: Source Face
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, sourceTex);
-        gl.uniform1i(loc("u_sourceTexture"), 0);
+        const aModelPos = gl.getAttribLocation(program, 'a_modelPosition');
+        gl.enableVertexAttribArray(aModelPos);
+        gl.vertexAttribPointer(aModelPos, 2, gl.FLOAT, false, 0, 0);
 
-        // TEXTURE 1: Target Face (for lighting reference)
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, targetTex);
-        gl.uniform1i(loc("u_targetTexture"), 1);
+        // --- Setup texture coordinates (source landmarks) ---
+        const sourceTexCoords = new Float32Array(
+          source.landmarks.flatMap(p => [p.x, p.y])
+        );
+        const texBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, texBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, sourceTexCoords, gl.STATIC_DRAW);
 
-        // TEXTURE 2: Mask
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, maskTex);
-        gl.uniform1i(loc("u_maskTexture"), 2);
+        const aSourceTex = gl.getAttribLocation(program, 'a_sourceTexCoord');
+        gl.enableVertexAttribArray(aSourceTex);
+        gl.vertexAttribPointer(aSourceTex, 2, gl.FLOAT, false, 0, 0);
 
-        // MESH SETUP
-        const posBuff = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, posBuff);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(model.landmarks.flatMap(p => [p.x, p.y])), gl.STATIC_DRAW);
-        const aPos = gl.getAttribLocation(program, "a_position");
-        gl.enableVertexAttribArray(aPos);
-        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
-
-        const texBuff = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, texBuff);
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(source.landmarks.flatMap(p => [p.x, p.y])), gl.STATIC_DRAW);
-        const aTex = gl.getAttribLocation(program, "a_texCoord");
-        gl.enableVertexAttribArray(aTex);
-        gl.vertexAttribPointer(aTex, 2, gl.FLOAT, false, 0, 0);
-
-        const idxBuff = gl.createBuffer();
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuff);
+        // --- Setup index buffer (triangulation) ---
+        const indexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(model.triangles), gl.STATIC_DRAW);
 
+        // --- Set uniforms ---
+        const getLoc = (name: string) => gl.getUniformLocation(program, name);
+
+        gl.uniform2f(getLoc('u_modelResolution'), model.width, model.height);
+        gl.uniform2f(getLoc('u_sourceResolution'), 512, 512);
+        gl.uniform3fv(getLoc('u_sourceMean'), new Float32Array(source.skinStats.mean));
+        gl.uniform3fv(getLoc('u_targetMean'), new Float32Array(model.skinStats.mean));
+
+        // Bind textures
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, sourceTex);
+        gl.uniform1i(getLoc('u_sourceTexture'), 0);
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, targetTex);
+        gl.uniform1i(getLoc('u_targetTexture'), 1);
+
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, maskTex);
+        gl.uniform1i(getLoc('u_maskTexture'), 2);
+
+        // Draw the face mesh
         gl.drawElements(gl.TRIANGLES, model.triangles.length, gl.UNSIGNED_SHORT, 0);
 
-      } catch (e) {
-        console.error("Render error:", e);
+        // Cleanup
+        gl.bindVertexArray(null);
+        gl.deleteVertexArray(vao);
+        gl.deleteBuffer(posBuffer);
+        gl.deleteBuffer(texBuffer);
+        gl.deleteBuffer(indexBuffer);
+
+        setRenderError(null);
+        console.log(`Rendered face swap: ${model.triangles.length / 3} triangles, ${model.landmarks.length} landmarks`);
+
+      } catch (e: any) {
+        console.error('Render error:', e);
+        setRenderError(e.message || 'Render failed');
       }
     };
-    
+
     render();
   }, [model, source]);
 
   return (
-    <div className={`relative overflow-hidden ${className}`}>
+    <div className={`relative overflow-hidden ${className || ''}`}>
       {/* Background: Original Image */}
-      <img 
-        src={model.imageUrl} 
+      <img
+        src={model.imageUrl}
         alt="base"
         className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
       />
-      {/* Foreground: WebGL Swap */}
+      {/* Foreground: WebGL Face Swap */}
       <canvas
         ref={canvasRef}
         width={model.width}
         height={model.height}
         className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
       />
+      {/* Error overlay */}
+      {renderError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="bg-red-900/80 text-red-100 px-4 py-2 rounded text-sm">
+            {renderError}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
