@@ -50,20 +50,8 @@ export const FaceSwapTool: React.FC = () => {
                     loadScript(SCRIPT_URLS.faceMesh),
                     loadScript(SCRIPT_URLS.delaunator)
                 ]);
-
-                // After scripts load, process the default images to get real stats/landmarks
-                console.log("Dependencies loaded, initializing default images...");
-                const [mPack, sPack] = await Promise.all([
-                    processModelImage(MODELS[0].imageUrl),
-                    processSourceImage(SOURCES[0].textureUrl)
-                ]);
-
-                setModelPack(mPack);
-                setSourcePack(sPack);
                 setIsLoading(false);
-
             } catch (err: any) {
-                console.error("Initialization failed:", err);
                 setScriptsError(err.message);
                 setIsLoading(false);
             }
