@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  FileJson, Type, Link, Clock, Shield, Fingerprint, 
-  Hash, Sparkles, LayoutGrid, Search, Menu, X, 
-  CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft, 
+import {
+  FileJson, Type, Link, Clock, Shield, Fingerprint,
+  Hash, Sparkles, LayoutGrid, Search, Menu, X,
+  CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft,
   QrCode, Monitor, Terminal, KeyRound, Globe, Code,
   FileCode, Database, FileSpreadsheet, FileText, Scissors,
-  Send, Calculator, Image, Files, Gem
+  Send, Calculator, Image, Files, Gem, UserRoundCog
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -26,6 +26,7 @@ import { ImageTools } from './components/tools/ImageTools';
 import { HeadshotExtractor } from './components/tools/HeadshotExtractor';
 import { PdfTools } from './components/tools/PdfTools';
 import JewelryCustomizer from './components/tools/JewelryCustomizer';
+import { FaceSwapTool } from './components/tools/FaceSwapTool';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
@@ -71,6 +72,7 @@ const TOOLS: ToolDef[] = [
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, category: Category.FRONTEND, component: ImageTools },
   { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, category: Category.FRONTEND, component: HeadshotExtractor },
   { id: 'pdf', name: 'PDF 工具箱', description: '合并 / 转图片', icon: Files, category: Category.FRONTEND, component: PdfTools },
+  { id: 'faceswap', name: 'AI 换脸', description: '本地 WebGL 换脸', icon: UserRoundCog, category: Category.FRONTEND, component: FaceSwapTool },
 
   // --- Category 8: DevOps (DEVOPS) ---
   { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, category: Category.DEVOPS, component: ChmodTool },
@@ -93,10 +95,10 @@ export default function App() {
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
-  
+
   // Group tools by category
-  const filteredTools = TOOLS.filter(t => 
-    t.name.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredTools = TOOLS.filter(t =>
+    t.name.toLowerCase().includes(search.toLowerCase()) ||
     t.description.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -111,15 +113,15 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 font-sans">
-      
+
       {/* Mobile Menu Overlay */}
       {!isSidebarOpen && (
-          <button 
-            className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-slate-200"
-            onClick={() => setIsSidebarOpen(true)}
-          >
-            <Menu className="w-5 h-5 text-slate-600" />
-          </button>
+        <button
+          className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-slate-200"
+          onClick={() => setIsSidebarOpen(true)}
+        >
+          <Menu className="w-5 h-5 text-slate-600" />
+        </button>
       )}
 
       {/* Sidebar */}
@@ -127,77 +129,77 @@ export default function App() {
         fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out md:translate-x-0 md:static flex flex-col
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-          <div className="h-16 flex-none flex items-center px-6 border-b border-slate-100">
-              <div className="flex items-center gap-2 text-primary-600 font-bold text-xl tracking-tight">
-                  <LayoutGrid className="w-6 h-6" /> 程序员百宝箱
-              </div>
-              <button 
-                className="ml-auto md:hidden p-1 text-slate-400 hover:text-slate-600"
-                onClick={() => setIsSidebarOpen(false)}
-              >
-                  <X className="w-5 h-5" />
-              </button>
+        <div className="h-16 flex-none flex items-center px-6 border-b border-slate-100">
+          <div className="flex items-center gap-2 text-primary-600 font-bold text-xl tracking-tight">
+            <LayoutGrid className="w-6 h-6" /> 程序员百宝箱
           </div>
+          <button
+            className="ml-auto md:hidden p-1 text-slate-400 hover:text-slate-600"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          <div className="p-4 flex-none">
-              <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input 
-                      type="text" 
-                      placeholder="搜索工具..." 
-                      className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300 transition-colors"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                  />
-              </div>
+        <div className="p-4 flex-none">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="搜索工具..."
+              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300 transition-colors"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
-              {Object.entries(groupedTools).map(([category, tools]) => (
-                  <div key={category}>
-                      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 sticky top-0 bg-white z-10 py-1">{category}</h3>
-                      <div className="space-y-1">
-                          {tools.map(tool => (
-                              <button
-                                  key={tool.id}
-                                  onClick={() => {
-                                      setActiveToolId(tool.id);
-                                      if (window.innerWidth < 768) setIsSidebarOpen(false);
-                                  }}
-                                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
-                                      ${activeToolId === tool.id 
-                                          ? 'bg-primary-50 text-primary-700 shadow-sm' 
-                                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+          {Object.entries(groupedTools).map(([category, tools]) => (
+            <div key={category}>
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 sticky top-0 bg-white z-10 py-1">{category}</h3>
+              <div className="space-y-1">
+                {tools.map(tool => (
+                  <button
+                    key={tool.id}
+                    onClick={() => {
+                      setActiveToolId(tool.id);
+                      if (window.innerWidth < 768) setIsSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
+                                      ${activeToolId === tool.id
+                        ? 'bg-primary-50 text-primary-700 shadow-sm'
+                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
                                   `}
-                              >
-                                  <tool.icon className={`w-5 h-5 ${activeToolId === tool.id ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                                  <div className="flex flex-col items-start text-left truncate">
-                                      <span className="truncate w-full">{tool.name}</span>
-                                  </div>
-                              </button>
-                          ))}
-                      </div>
-                  </div>
-              ))}
+                  >
+                    <tool.icon className={`w-5 h-5 ${activeToolId === tool.id ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                    <div className="flex flex-col items-start text-left truncate">
+                      <span className="truncate w-full">{tool.name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
 
-              {Object.keys(groupedTools).length === 0 && (
-                  <div className="text-center py-8 text-slate-400 text-sm">
-                      未找到相关工具
-                  </div>
-              )}
-          </div>
+          {Object.keys(groupedTools).length === 0 && (
+            <div className="text-center py-8 text-slate-400 text-sm">
+              未找到相关工具
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Main Content */}
       <main className="flex-1 h-full overflow-hidden bg-slate-50/50 relative">
         <div className="h-full p-4 md:p-8 max-w-7xl mx-auto flex flex-col">
-            <div className="flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <activeTool.component />
-            </div>
-            
-            <div className="mt-4 text-center text-xs text-slate-400">
-                程序员百宝箱 &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
-            </div>
+          <div className="flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <activeTool.component />
+          </div>
+
+          <div className="mt-4 text-center text-xs text-slate-400">
+            程序员百宝箱 &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
+          </div>
         </div>
       </main>
     </div>
