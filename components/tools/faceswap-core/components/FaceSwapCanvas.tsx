@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ModelFacePack, SourceFacePack } from '../types';
 import { createProgram, loadTexture } from '../utils/webglUtils';
 
@@ -101,10 +101,13 @@ const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({
   const programRef = useRef<WebGLProgram | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
 
-  // Initialize WebGL context and shader program
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const initializeCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
+    canvasRef.current = canvas;
+    if (!canvas) {
+      glRef.current = null;
+      programRef.current = null;
+      return;
+    }
 
     const gl = canvas.getContext('webgl2', {
       alpha: true,
@@ -264,7 +267,7 @@ const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({
       />
       {/* Foreground: WebGL Face Swap */}
       <canvas
-        ref={canvasRef}
+        ref={initializeCanvas}
         width={model.width}
         height={model.height}
         className="absolute top-0 left-0 w-full h-full object-contain pointer-events-none"
