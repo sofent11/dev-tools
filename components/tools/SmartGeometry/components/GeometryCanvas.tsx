@@ -10,19 +10,27 @@ import 'katex/dist/katex.min.css';
 export function GeometryCanvas() {
   const { mode, tool, question, viewport, setViewport, draftLine, setDraftLine, snappedPoint, setSnappedPoint, addPoint, updatePoint, addLine } = useGeometryStore();
   const svgRef = useRef<SVGSVGElement>(null);
+  const drawingLayerRef = useRef<SVGGElement>(null);
   const { snapToPoint } = useSmartSnapping();
 
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPos, setLastPanPos] = useState<Point>({ x: 0, y: 0 });
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null);
 
-  const getLogcalPosition = (e: React.PointerEvent): Point => {
-    if (!svgRef.current) return { x: 0, y: 0 };
-    const CTM = svgRef.current.getScreenCTM();
-    if (!CTM) return { x: 0, y: 0 };
+  const getLogicalPosition = (e: React.PointerEvent): Point => {
+    if (!svgRef.current || !drawingLayerRef.current) return { x: 0, y: 0 };
+
+    const screenCTM = drawingLayerRef.current.getScreenCTM();
+    if (!screenCTM) return { x: 0, y: 0 };
+
+    const pointer = svgRef.current.createSVGPoint();
+    pointer.x = e.clientX;
+    pointer.y = e.clientY;
+
+    const logicalPoint = pointer.matrixTransform(screenCTM.inverse());
     return {
-      x: (e.clientX - CTM.e) / CTM.a,
-      y: (e.clientY - CTM.f) / CTM.d
+      x: logicalPoint.x,
+      y: logicalPoint.y,
     };
   };
 
@@ -37,7 +45,7 @@ export function GeometryCanvas() {
     }
 
     if (tool === 'move') {
-      const logicalPos = getLogcalPosition(e);
+      const logicalPos = getLogicalPosition(e);
       let closestPtId: string | null = null;
       let minDist = 20; // Hit radius
       
@@ -58,7 +66,7 @@ export function GeometryCanvas() {
     }
 
     if (tool === 'line') {
-      const logicalPos = getLogcalPosition(e);
+      const logicalPos = getLogicalPosition(e);
       const snapped = snapToPoint(logicalPos);
       
       const startPoint = snapped ? snapped.point : logicalPos;
@@ -84,7 +92,7 @@ export function GeometryCanvas() {
       return;
     }
 
-    const logicalPos = getLogcalPosition(e);
+    const logicalPos = getLogicalPosition(e);
 
     if (tool === 'move' && draggingPointId) {
       updatePoint(draggingPointId, { x: logicalPos.x, y: logicalPos.y });
@@ -114,7 +122,7 @@ export function GeometryCanvas() {
 
     if (tool === 'line' && draftLine && draftLine.to) {
       // Finalize line
-      const logicalPos = getLogcalPosition(e);
+      const logicalPos = getLogicalPosition(e);
       const snapped = snapToPoint(logicalPos);
       
       const finalEnd = snapped ? snapped.point : logicalPos;
@@ -201,7 +209,7 @@ export function GeometryCanvas() {
             <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="currentColor" strokeWidth="1" className="text-blue-500 opacity-50" />
           </pattern>
         </defs>
-        <g transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`}>
+        <g ref={drawingLayerRef} transform={`translate(${viewport.x}, ${viewport.y}) scale(${viewport.zoom})`}>
           {/* Polygons */}
           {Object.entries(polygons).map(([id, poly]) => {
             if (poly.isSolution) return null;
