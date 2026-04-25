@@ -1458,6 +1458,7 @@ const StickerSplitterPanel: React.FC = () => {
                               width: `${((result.bounds.right - result.bounds.left + 1) / sourceInfo.width) * 100}%`,
                               height: `${((result.bounds.bottom - result.bounds.top + 1) / sourceInfo.height) * 100}%`,
                               cursor: dragState?.resultId === result.id ? 'grabbing' : 'move',
+                              zIndex: selectedResultId === result.id ? 20 : 10,
                             }}
                             onPointerDown={(event) => startDraggingBox(result, event, 'move')}
                           >
@@ -1470,7 +1471,7 @@ const StickerSplitterPanel: React.FC = () => {
                                   key={handle.mode}
                                   type="button"
                                   className={`absolute h-4 w-4 rounded-full border border-white bg-primary-600 shadow ${handle.className}`}
-                                  style={{ cursor: handle.cursor }}
+                                  style={{ cursor: handle.cursor, zIndex: 30 }}
                                   onPointerDown={(event) => startDraggingBox(result, event, handle.mode)}
                                 />
                               ))}
