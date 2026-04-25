@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FileJson, Type, Link, Clock, Shield, Fingerprint,
   Hash, Sparkles, LayoutGrid, Search, Menu, X,
@@ -90,13 +90,70 @@ const TOOLS: ToolDef[] = [
   { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.AI, component: AiAssistant },
 ];
 
+const DEFAULT_TOOL_ID = TOOLS[0].id;
+const TOOL_ROUTE_PREFIX = 'tools';
+const TOOL_IDS = new Set(TOOLS.map(tool => tool.id));
+
+const getBasePath = () => {
+  const base = import.meta.env.BASE_URL || '/';
+  if (base === '/') return '';
+
+  const withoutTrailingSlash = base.endsWith('/') ? base.slice(0, -1) : base;
+  return withoutTrailingSlash.startsWith('/') ? withoutTrailingSlash : `/${withoutTrailingSlash}`;
+};
+
+const getAppPathname = () => {
+  const basePath = getBasePath();
+  const pathname = window.location.pathname;
+
+  if (basePath && pathname.startsWith(basePath)) {
+    return pathname.slice(basePath.length) || '/';
+  }
+
+  return pathname || '/';
+};
+
+const getToolIdFromLocation = () => {
+  const segments = getAppPathname().split('/').filter(Boolean).map(decodeURIComponent);
+  const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
+
+  return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
+};
+
+const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}`;
+
 export default function App() {
-  const [activeToolId, setActiveToolId] = useState<string>('json');
+  const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
+
+  useEffect(() => {
+    const syncToolFromLocation = () => {
+      setActiveToolId(getToolIdFromLocation());
+    };
+
+    window.addEventListener('popstate', syncToolFromLocation);
+    return () => window.removeEventListener('popstate', syncToolFromLocation);
+  }, []);
+
+  useEffect(() => {
+    document.title = `${activeTool.name} - 程序员百宝箱`;
+  }, [activeTool.name]);
+
+  const activateTool = (toolId: string) => {
+    setActiveToolId(toolId);
+
+    const nextPath = getToolPath(toolId);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (currentPath !== nextPath) {
+      window.history.pushState(null, '', nextPath);
+    }
+
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
 
   // Group tools by category
   const filteredTools = TOOLS.filter(t =>
@@ -162,11 +219,12 @@ export default function App() {
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 sticky top-0 bg-white z-10 py-1">{category}</h3>
               <div className="space-y-1">
                 {tools.map(tool => (
-                  <button
+                  <a
                     key={tool.id}
-                    onClick={() => {
-                      setActiveToolId(tool.id);
-                      if (window.innerWidth < 768) setIsSidebarOpen(false);
+                    href={getToolPath(tool.id)}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      activateTool(tool.id);
                     }}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
                                       ${activeToolId === tool.id
@@ -178,7 +236,7 @@ export default function App() {
                     <div className="flex flex-col items-start text-left truncate">
                       <span className="truncate w-full">{tool.name}</span>
                     </div>
-                  </button>
+                  </a>
                 ))}
               </div>
             </div>
