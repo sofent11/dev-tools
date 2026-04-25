@@ -5,7 +5,7 @@ import {
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft,
   QrCode, Monitor, Terminal, KeyRound, Globe, Code,
   FileCode, Database, FileSpreadsheet, FileText, Scissors,
-  Send, Calculator, Image, Files, Gem, UserRoundCog
+  Send, Calculator, Image, Files, Gem, UserRoundCog, Ruler
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -27,6 +27,7 @@ import { HeadshotExtractor } from './components/tools/HeadshotExtractor';
 import { PdfTools } from './components/tools/PdfTools';
 import JewelryCustomizer from './components/tools/JewelryCustomizer';
 import { FaceSwapTool } from './components/tools/FaceSwapTool';
+import SmartGeometryTool from './components/tools/SmartGeometry';
 
 // Tool Registry
 const TOOLS: ToolDef[] = [
@@ -83,6 +84,7 @@ const TOOLS: ToolDef[] = [
 
   // --- Category 14: Custom (CUSTOM) ---
   { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器', icon: Gem, category: Category.CUSTOM, component: JewelryCustomizer },
+  { id: 'smart-geometry', name: '小学几何解题', description: '加载 JSON 交互讲解', icon: Ruler, category: Category.CUSTOM, component: SmartGeometryTool },
 
   // --- Extra: AI ---
   { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.AI, component: AiAssistant },
