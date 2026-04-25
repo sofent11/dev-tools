@@ -41,6 +41,7 @@ interface ComponentGroup {
   primary: ConnectedComponent;
   members: ConnectedComponent[];
   bounds: BoundingBox;
+  ownershipBounds: BoundingBox;
 }
 
 interface RgbColor {
@@ -248,6 +249,25 @@ const expandBounds = (bounds: BoundingBox, width: number, height: number, paddin
 
 const getBoundWidth = (bounds: BoundingBox) => bounds.right - bounds.left + 1;
 const getBoundHeight = (bounds: BoundingBox) => bounds.bottom - bounds.top + 1;
+const getBoundCenterX = (bounds: BoundingBox) => (bounds.left + bounds.right) / 2;
+const getBoundCenterY = (bounds: BoundingBox) => (bounds.top + bounds.bottom) / 2;
+
+const isPointInBounds = (x: number, y: number, bounds: BoundingBox) =>
+  x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
+
+const mergeBounds = (first: BoundingBox, second: BoundingBox): BoundingBox => ({
+  left: Math.min(first.left, second.left),
+  top: Math.min(first.top, second.top),
+  right: Math.max(first.right, second.right),
+  bottom: Math.max(first.bottom, second.bottom),
+});
+
+const clampBoundsToBounds = (bounds: BoundingBox, limits: BoundingBox): BoundingBox => ({
+  left: clamp(bounds.left, limits.left, limits.right),
+  top: clamp(bounds.top, limits.top, limits.bottom),
+  right: clamp(bounds.right, limits.left, limits.right),
+  bottom: clamp(bounds.bottom, limits.top, limits.bottom),
+});
 
 const applyMoveToBounds = (bounds: BoundingBox, deltaX: number, deltaY: number, sourceInfo: SourceImageInfo) => {
   const width = getBoundWidth(bounds);
@@ -402,19 +422,75 @@ const getBoundingRelationship = (source: BoundingBox, target: BoundingBox) => {
   const verticalGap = Math.max(0, source.top - target.bottom, target.top - source.bottom);
   const overlapWidth = Math.max(0, Math.min(source.right, target.right) - Math.max(source.left, target.left));
   const overlapHeight = Math.max(0, Math.min(source.bottom, target.bottom) - Math.max(source.top, target.top));
+  const centerDistance = Math.hypot(getBoundCenterX(source) - getBoundCenterX(target), getBoundCenterY(source) - getBoundCenterY(target));
+  const score = horizontalGap * 1.2 + verticalGap * 1.6 + centerDistance * 0.08;
 
-  let score = horizontalGap * 1.1 + verticalGap * 1.4;
-  if (overlapWidth > 0) {
-    score -= Math.min(overlapWidth, 40) * 0.4;
-  }
-  if (overlapHeight > 0) {
-    score -= Math.min(overlapHeight, 40) * 0.2;
-  }
-
-  return { horizontalGap, verticalGap, score };
+  return { horizontalGap, verticalGap, overlapWidth, overlapHeight, score };
 };
 
-const buildComponentGroups = (components: ConnectedComponent[], minGap: number) => {
+const buildPrimaryOwnershipBounds = (
+  primaryComponents: ConnectedComponent[],
+  width: number,
+  height: number,
+  minGap: number
+) => {
+  const rows: Array<{ centerY: number; avgHeight: number; items: ConnectedComponent[] }> = [];
+  const sortedComponents = [...primaryComponents].sort((a, b) => getBoundCenterY(a) - getBoundCenterY(b));
+
+  sortedComponents.forEach((component) => {
+    const centerY = getBoundCenterY(component);
+    const componentHeight = getBoundHeight(component);
+    const row = rows.find(
+      (candidate) => Math.abs(centerY - candidate.centerY) <= Math.max(minGap * 3, candidate.avgHeight * 0.55)
+    );
+
+    if (!row) {
+      rows.push({
+        centerY,
+        avgHeight: componentHeight,
+        items: [component],
+      });
+      return;
+    }
+
+    row.items.push(component);
+    row.centerY = (row.centerY * (row.items.length - 1) + centerY) / row.items.length;
+    row.avgHeight = (row.avgHeight * (row.items.length - 1) + componentHeight) / row.items.length;
+  });
+
+  rows.sort((a, b) => a.centerY - b.centerY);
+
+  const ownership = new Map<ConnectedComponent, BoundingBox>();
+  rows.forEach((row, rowIndex) => {
+    const rowTop =
+      rowIndex === 0 ? 0 : Math.floor((rows[rowIndex - 1].centerY + row.centerY) / 2);
+    const rowBottom =
+      rowIndex === rows.length - 1 ? height - 1 : Math.ceil((row.centerY + rows[rowIndex + 1].centerY) / 2);
+    const rowItems = [...row.items].sort((a, b) => getBoundCenterX(a) - getBoundCenterX(b));
+
+    rowItems.forEach((component, componentIndex) => {
+      const left =
+        componentIndex === 0
+          ? 0
+          : Math.floor((getBoundCenterX(rowItems[componentIndex - 1]) + getBoundCenterX(component)) / 2);
+      const right =
+        componentIndex === rowItems.length - 1
+          ? width - 1
+          : Math.ceil((getBoundCenterX(component) + getBoundCenterX(rowItems[componentIndex + 1])) / 2);
+
+      ownership.set(component, {
+        left,
+        top: rowTop,
+        right,
+        bottom: rowBottom,
+      });
+    });
+  });
+
+  return ownership;
+};
+
+const buildComponentGroups = (components: ConnectedComponent[], width: number, height: number, minGap: number) => {
   if (!components.length) {
     return [];
   }
@@ -428,34 +504,46 @@ const buildComponentGroups = (components: ConnectedComponent[], minGap: number) 
     primaryComponents = components.filter((component) => component.area >= primaryThreshold);
   }
 
-  const groups: ComponentGroup[] = primaryComponents.map((component) => ({
-    primary: component,
-    members: [component],
-    bounds: {
+  const ownershipBounds = buildPrimaryOwnershipBounds(primaryComponents, width, height, minGap);
+  const groups: ComponentGroup[] = primaryComponents.map((component) => {
+    const primaryBounds = {
       left: component.left,
       top: component.top,
       right: component.right,
       bottom: component.bottom,
-    },
-  }));
+    };
+
+    return {
+      primary: component,
+      members: [component],
+      bounds: primaryBounds,
+      ownershipBounds: ownershipBounds.get(component) || { left: 0, top: 0, right: width - 1, bottom: height - 1 },
+    };
+  });
 
   const accessoryComponents = components.filter((component) => component.area < primaryThreshold);
   const averagePrimaryWidth =
     primaryComponents.reduce((sum, component) => sum + getBoundWidth(component), 0) / primaryComponents.length;
   const averagePrimaryHeight =
     primaryComponents.reduce((sum, component) => sum + getBoundHeight(component), 0) / primaryComponents.length;
-  const maxHorizontalAttachGap = Math.max(minGap * 3, averagePrimaryWidth * 0.75);
-  const maxVerticalAttachGap = Math.max(minGap * 2.5, averagePrimaryHeight * 0.6);
-  const maxAttachScore = maxHorizontalAttachGap * 1.2;
+  const maxHorizontalAttachGap = Math.max(minGap * 2.5, averagePrimaryWidth * 0.45);
+  const maxVerticalAttachGap = Math.max(minGap * 2.5, averagePrimaryHeight * 0.45);
+  const maxAttachScore = maxHorizontalAttachGap + maxVerticalAttachGap;
 
   accessoryComponents.forEach((component) => {
     let bestGroup: ComponentGroup | null = null;
     let bestScore = Number.POSITIVE_INFINITY;
     let bestHorizontalGap = Number.POSITIVE_INFINITY;
     let bestVerticalGap = Number.POSITIVE_INFINITY;
+    const componentCenterX = getBoundCenterX(component);
+    const componentCenterY = getBoundCenterY(component);
 
     groups.forEach((group) => {
-      const relation = getBoundingRelationship(component, group.bounds);
+      if (!isPointInBounds(componentCenterX, componentCenterY, group.ownershipBounds)) {
+        return;
+      }
+
+      const relation = getBoundingRelationship(component, group.primary);
       if (relation.score < bestScore) {
         bestGroup = group;
         bestScore = relation.score;
@@ -471,12 +559,7 @@ const buildComponentGroups = (components: ConnectedComponent[], minGap: number) 
       bestScore <= maxAttachScore
     ) {
       bestGroup.members.push(component);
-      bestGroup.bounds = {
-        left: Math.min(bestGroup.bounds.left, component.left),
-        top: Math.min(bestGroup.bounds.top, component.top),
-        right: Math.max(bestGroup.bounds.right, component.right),
-        bottom: Math.max(bestGroup.bounds.bottom, component.bottom),
-      };
+      bestGroup.bounds = clampBoundsToBounds(mergeBounds(bestGroup.bounds, component), bestGroup.ownershipBounds);
     }
   });
 
@@ -583,7 +666,10 @@ const createSplitResults = async (
     throw new Error('No isolated stickers were detected. Try increasing the background tolerance.');
   }
 
-  const groupedComponents = sortGroupsByRows(buildComponentGroups(components, options.minGap), options.minGap);
+  const groupedComponents = sortGroupsByRows(
+    buildComponentGroups(components, sourceCanvas.width, sourceCanvas.height, options.minGap),
+    options.minGap
+  );
 
   if (!groupedComponents.length) {
     throw new Error('The sheet was detected, but the sticker groups could not be isolated.');
@@ -595,7 +681,10 @@ const createSplitResults = async (
   const minMeaningfulPixels = Math.max(50, Math.floor((sourceCanvas.width * sourceCanvas.height) / 60000));
 
   for (const group of groupedComponents) {
-    const bounds = expandBounds(group.bounds, sourceCanvas.width, sourceCanvas.height, options.padding);
+    const bounds = clampBoundsToBounds(
+      expandBounds(group.bounds, sourceCanvas.width, sourceCanvas.height, options.padding),
+      group.ownershipBounds
+    );
     const rawWidth = getBoundWidth(bounds);
     const rawHeight = getBoundHeight(bounds);
 
