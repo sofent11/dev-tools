@@ -5,7 +5,8 @@ import {
   CaseUpper, AlignLeft, Regex, Palette, ArrowRightLeft,
   QrCode, Monitor, Terminal, KeyRound, Globe, Code,
   FileCode, Database, FileSpreadsheet, FileText, Scissors,
-  Send, Calculator, Image, Files, Gem, UserRoundCog, Ruler
+  Send, Calculator, Image, Files, Gem, UserRoundCog, Ruler,
+  ChevronDown, ChevronRight
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { JsonTool, Base64Tool, UrlTool } from './components/tools/FormatConverters';
@@ -126,6 +127,7 @@ export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
@@ -153,6 +155,13 @@ export default function App() {
     }
 
     if (window.innerWidth < 768) setIsSidebarOpen(false);
+  };
+
+  const toggleCategory = (category: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category],
+    }));
   };
 
   // Group tools by category
@@ -216,29 +225,49 @@ export default function App() {
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
           {Object.entries(groupedTools).map(([category, tools]) => (
             <div key={category}>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 sticky top-0 bg-white z-10 py-1">{category}</h3>
-              <div className="space-y-1">
-                {tools.map(tool => (
-                  <a
-                    key={tool.id}
-                    href={getToolPath(tool.id)}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      activateTool(tool.id);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
-                                      ${activeToolId === tool.id
-                        ? 'bg-primary-50 text-primary-700 shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
-                                  `}
-                  >
-                    <tool.icon className={`w-5 h-5 ${activeToolId === tool.id ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                    <div className="flex flex-col items-start text-left truncate">
-                      <span className="truncate w-full">{tool.name}</span>
-                    </div>
-                  </a>
-                ))}
-              </div>
+              <h3 className="sticky top-0 bg-white z-10 py-1">
+                <button
+                  type="button"
+                  aria-expanded={!collapsedCategories[category]}
+                  aria-controls={`tool-group-${category}`}
+                  onClick={() => toggleCategory(category)}
+                  className="w-full flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:bg-slate-50 hover:text-slate-600 transition-colors"
+                >
+                  {collapsedCategories[category] ? (
+                    <ChevronRight className="w-3.5 h-3.5 flex-none" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 flex-none" />
+                  )}
+                  <span className="flex-1 text-left truncate">{category}</span>
+                  <span className="flex-none rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] leading-none text-slate-400">
+                    {tools.length}
+                  </span>
+                </button>
+              </h3>
+              {!collapsedCategories[category] && (
+                <div id={`tool-group-${category}`} className="space-y-1 mt-2">
+                  {tools.map(tool => (
+                    <a
+                      key={tool.id}
+                      href={getToolPath(tool.id)}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        activateTool(tool.id);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
+                                        ${activeToolId === tool.id
+                          ? 'bg-primary-50 text-primary-700 shadow-sm'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
+                                    `}
+                    >
+                      <tool.icon className={`w-5 h-5 ${activeToolId === tool.id ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                      <div className="flex flex-col items-start text-left truncate">
+                        <span className="truncate w-full">{tool.name}</span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
 
