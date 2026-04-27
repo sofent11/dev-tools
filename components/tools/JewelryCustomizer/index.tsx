@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { CanvasStage } from './CanvasStage';
 import { ControlPanel } from './ControlPanel';
 import { generateGeometry, loadFont, GeometryResult } from './utils/geometry';

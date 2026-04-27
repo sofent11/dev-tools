@@ -211,9 +211,6 @@ const pathCommandsToPolygons = (path: opentype.Path, toleranceUnits: number): nu
 
   let lastX = 0;
   let lastY = 0;
-  let startX = 0;
-  let startY = 0;
-
   // Flip Y: font coords are Y-up, canvas is Y-down.
   const addPoint = (x: number, y: number) => {
     const flippedY = -y; // Flip Y axis
@@ -272,8 +269,8 @@ const pathCommandsToPolygons = (path: opentype.Path, toleranceUnits: number): nu
         }
         currentPoly = [];
         addPoint(cmd.x, cmd.y);
-        lastX = startX = cmd.x;
-        lastY = startY = cmd.y;
+        lastX = cmd.x;
+        lastY = cmd.y;
         break;
       case 'L':
         addPoint(cmd.x, cmd.y);
@@ -291,7 +288,6 @@ const pathCommandsToPolygons = (path: opentype.Path, toleranceUnits: number): nu
         lastY = cmd.y;
         break;
       case 'Z':
-        // Close: add starting point (but with flipped Y, so use raw startX, startY and let addPoint flip)
         if (currentPoly.length > 0) {
           const first = currentPoly[0];
           // Ensure closed by checking if last point matches first

@@ -100,6 +100,7 @@ const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({
   const glRef = useRef<WebGL2RenderingContext | null>(null);
   const programRef = useRef<WebGLProgram | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
 
   const initializeCanvas = useCallback((canvas: HTMLCanvasElement | null) => {
     canvasRef.current = canvas;
@@ -248,9 +249,9 @@ const FaceSwapCanvas: React.FC<FaceSwapCanvasProps> = ({
         setRenderError(null);
         console.log(`Rendered face swap: ${model.triangles.length / 3} triangles, ${model.landmarks.length} landmarks`);
 
-      } catch (e: any) {
+      } catch (e) {
         console.error('Render error:', e);
-        setRenderError(e.message || 'Render failed');
+        setRenderError(getErrorMessage(e) || 'Render failed');
       }
     };
 

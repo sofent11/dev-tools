@@ -14,6 +14,8 @@ const SCRIPT_URLS = {
     delaunator: 'https://cdn.jsdelivr.net/npm/delaunator@5.0.0/delaunator.min.js'
 };
 
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
 // Helper to load external scripts
 const loadScript = (src: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -51,8 +53,8 @@ export const FaceSwapTool: React.FC = () => {
                     loadScript(SCRIPT_URLS.delaunator)
                 ]);
                 setIsLoading(false);
-            } catch (err: any) {
-                setScriptsError(err.message);
+            } catch (err) {
+                setScriptsError(getErrorMessage(err));
                 setIsLoading(false);
             }
         };
@@ -67,8 +69,8 @@ export const FaceSwapTool: React.FC = () => {
             const url = URL.createObjectURL(e.target.files[0]);
             const pack = await processModelImage(url);
             setModelPack(pack);
-        } catch (err: any) {
-            setError("基础图片错误: " + err.message);
+        } catch (err) {
+            setError("基础图片错误: " + getErrorMessage(err));
         } finally {
             setIsProcessingModel(false);
         }
@@ -82,8 +84,8 @@ export const FaceSwapTool: React.FC = () => {
             const url = URL.createObjectURL(e.target.files[0]);
             const pack = await processSourceImage(url);
             setSourcePack(pack);
-        } catch (err: any) {
-            setError("人脸图片错误: " + err.message);
+        } catch (err) {
+            setError("人脸图片错误: " + getErrorMessage(err));
         } finally {
             setIsProcessingSource(false);
         }

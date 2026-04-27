@@ -1,16 +1,41 @@
 import { Point, LabStats, ModelFacePack, SourceFacePack } from '../types';
 
+interface MediaPipeLandmark {
+  x: number;
+  y: number;
+}
+
+interface FaceMeshResults {
+  multiFaceLandmarks?: MediaPipeLandmark[][];
+}
+
+interface FaceMeshInstance {
+  setOptions(options: {
+    maxNumFaces: number;
+    refineLandmarks: boolean;
+    minDetectionConfidence: number;
+    minTrackingConfidence: number;
+  }): void;
+  onResults(callback: (results: FaceMeshResults) => void): void;
+  initialize(): Promise<void>;
+  send(input: { image: HTMLImageElement }): Promise<void>;
+}
+
+interface DelaunatorInstance {
+  triangles: ArrayLike<number>;
+}
+
 // Declare globals
 declare global {
   interface Window {
-    FaceMesh: any;
-    Delaunator: any;
+    FaceMesh: new (options: { locateFile: (file: string) => string }) => FaceMeshInstance;
+    Delaunator: new (coords: Float32Array) => DelaunatorInstance;
   }
 }
 
 const MP_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/';
 
-let faceMesh: any = null;
+let faceMesh: FaceMeshInstance | null = null;
 let isInitializing = false;
 let CACHED_TRIANGLES: number[] | null = null;
 
@@ -78,7 +103,7 @@ async function initFaceMesh() {
   }
 }
 
-function mapMeshToLandmarks(landmarks: { x: number, y: number }[], width: number, height: number): Point[] {
+function mapMeshToLandmarks(landmarks: MediaPipeLandmark[], width: number, height: number): Point[] {
   const get = (index: number) => ({
     x: landmarks[index].x * width,
     y: landmarks[index].y * height
@@ -116,7 +141,7 @@ export function getCanonicalTriangulation(points: Point[]): number[] {
 export async function detectFace(imageElement: HTMLImageElement): Promise<Point[]> {
   const fm = await initFaceMesh();
   return new Promise((resolve) => {
-    fm.onResults((results: any) => {
+    fm.onResults((results) => {
       if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
         resolve(mapMeshToLandmarks(results.multiFaceLandmarks[0], imageElement.naturalWidth, imageElement.naturalHeight));
       } else {

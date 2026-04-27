@@ -1,4 +1,5 @@
 import React from 'react';
+import Konva from 'konva';
 import { Stage, Layer, Path, Text, Group, Transformer } from 'react-konva';
 import { GeometryResult } from './utils/geometry';
 
@@ -27,13 +28,13 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   previewMode,
   onTransformChange
 }) => {
-  const shapeRef = React.useRef<any>(null);
-  const trRef = React.useRef<any>(null);
+  const shapeRef = React.useRef<Konva.Group>(null);
+  const trRef = React.useRef<Konva.Transformer>(null);
 
   React.useEffect(() => {
     if (trRef.current && shapeRef.current) {
       trRef.current.nodes([shapeRef.current]);
-      trRef.current.getLayer().batchDraw();
+      trRef.current.getLayer()?.batchDraw();
     }
   }, [previewMode, geometry]); // Update transformer when content changes
 
@@ -63,8 +64,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
                 scale: e.target.scaleX(),
               });
             }}
-            onTransformEnd={(e) => {
+            onTransformEnd={() => {
               const node = shapeRef.current;
+              if (!node) return;
               onTransformChange({
                 x: node.x(),
                 y: node.y(),
