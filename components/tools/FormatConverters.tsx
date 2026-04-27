@@ -70,7 +70,7 @@ export const JsonTool: React.FC = () => {
           </Button>
         </div>
         {error && (
-          <div className="mt-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-start gap-2">
+          <div className="status-error mt-4 flex items-start gap-2 p-3 text-sm">
              <span className="font-bold">Error:</span> {error}
           </div>
         )}
@@ -104,26 +104,26 @@ export const Base64Tool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="Base64 Converter" description="Encode and decode Base64 strings." />
-      <CardContent className="flex-1 overflow-auto space-y-4">
-        <div>
+      <CardContent className="grid flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-[1fr_auto_1fr]">
+        <div className="flex min-h-[14rem] flex-col">
           <label className="block text-sm font-medium text-slate-700 mb-1">Input</label>
           <textarea
-            className="w-full h-32 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
+            className="min-h-0 flex-1 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
             placeholder="Text to encode or Base64 to decode..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 justify-center">
+        <div className="flex items-center justify-center gap-2 lg:flex-col">
           <Button onClick={handleEncode} icon={<Binary className="w-4 h-4"/>}>Encode</Button>
           <Button variant="secondary" onClick={handleDecode} icon={<ArrowRightLeft className="w-4 h-4"/>}>Decode</Button>
         </div>
-        <div>
+        <div className="flex min-h-[14rem] flex-col">
           <label className="block text-sm font-medium text-slate-700 mb-1">Output</label>
           <div className="relative">
             <textarea
               readOnly
-              className="w-full h-32 p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
+              className="min-h-[14rem] w-full p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
               value={output}
             />
              <Button 
@@ -154,26 +154,26 @@ export const UrlTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="URL Encoder/Decoder" description="Encode text to URL-safe format or decode it." />
-      <CardContent className="flex-1 overflow-auto space-y-4">
-         <div>
+      <CardContent className="grid flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-[1fr_auto_1fr]">
+         <div className="flex min-h-[14rem] flex-col">
           <label className="block text-sm font-medium text-slate-700 mb-1">Input</label>
           <textarea
-            className="w-full h-32 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
+            className="min-h-0 flex-1 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
             placeholder="Enter URL or text..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 justify-center">
+        <div className="flex items-center justify-center gap-2 lg:flex-col">
           <Button onClick={handleEncode} icon={<Link className="w-4 h-4"/>}>Encode</Button>
           <Button variant="secondary" onClick={handleDecode} icon={<ArrowRightLeft className="w-4 h-4"/>}>Decode</Button>
         </div>
-        <div>
+        <div className="flex min-h-[14rem] flex-col">
           <label className="block text-sm font-medium text-slate-700 mb-1">Output</label>
           <div className="relative">
             <textarea
               readOnly
-              className="w-full h-32 p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
+              className="min-h-[14rem] w-full p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
               value={output}
             />
             <Button 

@@ -13,7 +13,7 @@ interface PermissionGroupProps {
 }
 
 const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => (
-    <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200">
+    <div className="tool-panel flex flex-col gap-3 p-4">
         <span className="font-semibold text-slate-700">{label}</span>
         <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -73,14 +73,14 @@ export const ChmodTool: React.FC = () => {
       <CardHeader title="Chmod 计算器" description="Linux 文件权限计算 (Octal & Symbolic)。" />
       <CardContent className="flex-1 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex-1 bg-slate-900 text-white p-6 rounded-xl flex flex-col items-center justify-center">
-                 <div className="text-sm text-slate-400 mb-2 uppercase tracking-widest font-bold">Octal Value</div>
+            <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-slate-900 p-6 text-white">
+                 <div className="text-sm text-slate-400 mb-2 uppercase font-bold">Octal Value</div>
                  <div className="text-5xl font-mono font-bold text-green-400">{octal}</div>
                  <div className="mt-4 text-sm text-slate-500">chmod {octal} filename</div>
             </div>
-            <div className="flex-1 bg-slate-800 text-white p-6 rounded-xl flex flex-col items-center justify-center">
-                 <div className="text-sm text-slate-400 mb-2 uppercase tracking-widest font-bold">Symbolic Value</div>
-                 <div className="text-3xl font-mono font-bold text-yellow-400 tracking-wider">{symbolic}</div>
+            <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-slate-800 p-6 text-white">
+                 <div className="text-sm text-slate-400 mb-2 uppercase font-bold">Symbolic Value</div>
+                 <div className="text-3xl font-mono font-bold text-yellow-400">{symbolic}</div>
             </div>
         </div>
 

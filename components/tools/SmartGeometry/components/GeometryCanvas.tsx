@@ -172,7 +172,7 @@ export function GeometryCanvas() {
            from: sId,
            to: eId,
            style: 'solid',
-           color: '#2563eb', // Theme blue
+           color: '#0891b2',
            isAuxiliary: true
          }, newPointIds);
       }
@@ -230,7 +230,7 @@ export function GeometryCanvas() {
                 y1={p1.y}
                 x2={p2.x}
                 y2={p2.y}
-                stroke={line.color || (line.isAuxiliary ? "#2563eb" : "#1e293b")}
+                stroke={line.color || (line.isAuxiliary ? "#0891b2" : "#1e293b")}
                 strokeWidth={line.isAuxiliary ? 2 : 3}
                 strokeDasharray={line.style === 'dashed' ? '6,4' : 'none'}
               />
@@ -242,9 +242,9 @@ export function GeometryCanvas() {
             if (pt.isSolution) return null;
             return (
               <g key={id} className={`font-sans font-bold text-sm ${tool === 'move' ? 'cursor-pointer' : ''}`}>
-                 <circle cx={pt.x} cy={pt.y} r={draggingPointId === id ? 8 : 5} fill={draggingPointId === id ? '#2563eb' : '#1e293b'} />
+                 <circle cx={pt.x} cy={pt.y} r={draggingPointId === id ? 8 : 5} fill={draggingPointId === id ? '#0891b2' : '#1e293b'} />
                  {pt.label && (
-                    <text x={pt.x - 8} y={pt.y - 15} fill={draggingPointId === id ? '#2563eb' : '#1e293b'} className="select-none font-bold text-sm pointer-events-none">
+                    <text x={pt.x - 8} y={pt.y - 15} fill={draggingPointId === id ? '#0891b2' : '#1e293b'} className="select-none font-bold text-sm pointer-events-none">
                        {pt.label}
                     </text>
                  )}
@@ -259,7 +259,7 @@ export function GeometryCanvas() {
               y1={draftLine.from.y}
               x2={draftLine.to.x}
               y2={draftLine.to.y}
-              stroke="#2563eb"
+              stroke="#0891b2"
               strokeWidth="2"
               strokeDasharray="6,4"
             />

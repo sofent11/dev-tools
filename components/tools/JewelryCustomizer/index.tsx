@@ -140,12 +140,44 @@ export const JewelryCustomizer: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full gap-4">
-      {/* Top Bar (Optional) */}
-      
-      <div className="flex flex-col lg:flex-row h-full gap-4">
-        {/* Left: Canvas */}
-        <div className="flex-1 bg-white rounded-lg shadow-sm border border-slate-200 p-4 min-h-[400px] flex flex-col">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
+        {/* Left: Controls */}
+        <div className="w-full flex-none lg:w-[21rem]">
+          <ControlPanel
+            text={text}
+            setText={setText}
+            fontSize={fontSize}
+            setFontSize={setFontSize}
+            offsetMm={offsetMm}
+            setOffsetMm={setOffsetMm}
+            letterSpacingMm={letterSpacingMm}
+            setLetterSpacingMm={setLetterSpacingMm}
+            minBridgeMm={minBridgeMm}
+            setMinBridgeMm={setMinBridgeMm}
+            bridgeMaxGapMm={bridgeMaxGapMm}
+            setBridgeMaxGapMm={setBridgeMaxGapMm}
+            flattenToleranceMm={flattenToleranceMm}
+            setFlattenToleranceMm={setFlattenToleranceMm}
+            autoTighten={autoTighten}
+            setAutoTighten={setAutoTighten}
+            autoTightenMaxMm={autoTightenMaxMm}
+            setAutoTightenMaxMm={setAutoTightenMaxMm}
+            unitsPerMm={unitsPerMm}
+            setUnitsPerMm={setUnitsPerMm}
+            previewMode={previewMode}
+            setPreviewMode={setPreviewMode}
+            onExport={handleExport}
+            availableFonts={AVAILABLE_FONTS}
+            selectedFont={selectedFont}
+            setSelectedFont={setSelectedFont}
+            isProcessing={processing}
+            diagnostics={geometry?.diagnostics ?? null}
+          />
+        </div>
+
+        {/* Right: Canvas */}
+        <div className="tool-section flex min-h-[400px] flex-1 flex-col p-4">
           <div className="flex-1 relative">
             {loading ? (
               <div className="absolute inset-0 flex items-center justify-center text-slate-400">
@@ -179,40 +211,6 @@ export const JewelryCustomizer: React.FC = () => {
           <div className="mt-2 text-xs text-slate-400 text-center">
             {previewMode === 'visual' ? '可拖拽文字 • 滚轮缩放' : '红色轮廓为最终切割路径'}
           </div>
-        </div>
-
-        {/* Right: Controls */}
-        <div className="w-full lg:w-80 flex-none">
-          <ControlPanel
-            text={text}
-            setText={setText}
-            fontSize={fontSize}
-            setFontSize={setFontSize}
-            offsetMm={offsetMm}
-            setOffsetMm={setOffsetMm}
-            letterSpacingMm={letterSpacingMm}
-            setLetterSpacingMm={setLetterSpacingMm}
-            minBridgeMm={minBridgeMm}
-            setMinBridgeMm={setMinBridgeMm}
-            bridgeMaxGapMm={bridgeMaxGapMm}
-            setBridgeMaxGapMm={setBridgeMaxGapMm}
-            flattenToleranceMm={flattenToleranceMm}
-            setFlattenToleranceMm={setFlattenToleranceMm}
-            autoTighten={autoTighten}
-            setAutoTighten={setAutoTighten}
-            autoTightenMaxMm={autoTightenMaxMm}
-            setAutoTightenMaxMm={setAutoTightenMaxMm}
-            unitsPerMm={unitsPerMm}
-            setUnitsPerMm={setUnitsPerMm}
-            previewMode={previewMode}
-            setPreviewMode={setPreviewMode}
-            onExport={handleExport}
-            availableFonts={AVAILABLE_FONTS}
-            selectedFont={selectedFont}
-            setSelectedFont={setSelectedFont}
-            isProcessing={processing}
-            diagnostics={geometry?.diagnostics ?? null}
-          />
         </div>
       </div>
     </div>

@@ -46,7 +46,7 @@ export function TeachingSlides() {
 
   return (
     <div className="w-full h-full flex flex-col items-center bg-transparent justify-center p-8">
-       <div className="border border-slate-200 shadow-xl bg-white rounded-2xl overflow-hidden w-full max-w-4xl max-h-[85vh] flex flex-col ring-1 ring-slate-900/5">
+       <div className="flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           
           <div className="flex-1 relative bg-transparent overflow-hidden min-h-[400px]">
             <svg className="absolute inset-0 w-full h-full opacity-[0.03] pointer-events-none" width="100%" height="100%">
@@ -173,7 +173,7 @@ export function TeachingSlides() {
                 <button 
                   onClick={handleNext}
                   disabled={currentSlideIndex === question.slides.length - 1}
-                  className="p-2 sm:px-4 sm:py-2 flex items-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 border border-blue-700 text-white hover:bg-blue-700 shadow-sm"
+                  className="p-2 sm:px-4 sm:py-2 flex items-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary-600 border border-primary-700 text-white hover:bg-primary-700 shadow-sm"
                 >
                   <span className="hidden sm:inline">下一步</span>
                   <ChevronRight size={18} />

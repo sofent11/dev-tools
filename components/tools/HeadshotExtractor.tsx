@@ -319,8 +319,8 @@ export const HeadshotExtractor: React.FC = () => {
       />
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
         {/* Upload Area */}
-        <div className="flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
-            <div className="p-4 bg-white rounded-full shadow-sm">
+        <div className="tool-upload flex-none p-6">
+            <div className="rounded-full bg-white p-4 shadow-sm">
                 <Upload className="w-8 h-8 text-primary-500" />
             </div>
             <div>
@@ -343,7 +343,7 @@ export const HeadshotExtractor: React.FC = () => {
         {imgSrc && (
             <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
                 {/* Editor Area */}
-                <div className="flex-1 flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 p-4 overflow-hidden relative">
+                <div className="tool-panel relative flex flex-1 items-center justify-center overflow-hidden p-4">
                     <ReactCrop
                         crop={crop}
                       onChange={(c) => setCrop(c)}
@@ -362,7 +362,7 @@ export const HeadshotExtractor: React.FC = () => {
 
                 {/* Preview & Action Area */}
                 <div className="w-full md:w-80 flex-none space-y-6">
-                    <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-4">
+                    <div className="tool-section space-y-4 p-4">
                         <h3 className="font-semibold text-slate-800">预览</h3>
                         <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg p-2 min-h-[150px]">
                             {completedCrop ? (
@@ -385,7 +385,7 @@ export const HeadshotExtractor: React.FC = () => {
                         </Button>
                     </div>
 
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 flex items-start gap-2">
+                    <div className="rounded-lg border border-primary-200 bg-primary-50 p-4 text-sm text-primary-800 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                         <p>
                             系统会自动尝试定位头部和肩部区域。您可以通过拖动选择框来微调位置。
@@ -398,4 +398,3 @@ export const HeadshotExtractor: React.FC = () => {
     </Card>
   );
 };
-

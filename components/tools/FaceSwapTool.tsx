@@ -95,7 +95,7 @@ export const FaceSwapTool: React.FC = () => {
         return (
             <div className="h-full flex items-center justify-center">
                 <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+                    <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
                     <p className="text-slate-500">加载 MediaPipe 人脸识别模型...</p>
                 </div>
             </div>
@@ -105,7 +105,7 @@ export const FaceSwapTool: React.FC = () => {
     if (scriptsError) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="text-center p-6 bg-red-50 border border-red-200 rounded-lg max-w-md">
+                <div className="status-error max-w-md p-6 text-center">
                     <p className="text-red-600 font-medium mb-2">加载依赖失败</p>
                     <p className="text-red-500 text-sm">{scriptsError}</p>
                 </div>
@@ -114,28 +114,28 @@ export const FaceSwapTool: React.FC = () => {
     }
 
     return (
-        <div className="h-full flex flex-col lg:flex-row gap-6 p-4 overflow-auto bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl">
+        <div className="flex h-full min-h-0 flex-col gap-4 overflow-auto rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:flex-row">
 
             {/* Sidebar Controls */}
-            <div className="w-full lg:w-80 flex-shrink-0 space-y-6">
-                <div className="bg-slate-800/50 backdrop-blur border border-white/10 rounded-xl p-5">
-                    <h2 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent mb-1">
+            <div className="w-full flex-shrink-0 space-y-4 lg:w-80">
+                <div className="tool-panel p-5">
+                    <h2 className="text-lg font-semibold tracking-normal text-slate-950">
                         FaceMorpheus
                     </h2>
-                    <p className="text-xs text-slate-400 mb-6">本地 WebGL 换脸工具</p>
+                    <p className="mb-5 text-xs font-medium text-slate-500">本地 WebGL 换脸工具</p>
 
                     {/* Step 1: Base Image */}
-                    <div className="space-y-3 mb-6">
+                    <div className="mb-5 space-y-3">
                         <div className="flex justify-between items-center">
-                            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">1. 基础照片</label>
-                            {isProcessingModel && <span className="text-xs text-blue-400 animate-pulse">处理中...</span>}
+                            <label className="text-sm font-semibold text-slate-700">1. 基础照片</label>
+                            {isProcessingModel && <span className="animate-pulse text-xs text-primary-600">处理中...</span>}
                         </div>
 
                         <div className="relative group cursor-pointer">
-                            <div className="w-full aspect-[4/3] bg-black/50 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 group-hover:border-blue-500 transition-colors">
-                                <img src={modelPack.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" />
+                            <div className="w-full aspect-[4/3] overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-100 transition-colors group-hover:border-primary-400 group-hover:bg-primary-50">
+                                <img src={modelPack.imageUrl} className="w-full h-full object-cover opacity-80 transition-opacity group-hover:opacity-60" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="bg-black/70 text-white px-3 py-1 rounded text-sm font-medium backdrop-blur-sm">
+                                    <span className="rounded-lg border border-slate-200 bg-white/90 px-3 py-1 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-sm">
                                         更换基础照片
                                     </span>
                                 </div>
@@ -147,15 +147,15 @@ export const FaceSwapTool: React.FC = () => {
                     {/* Step 2: Face Image */}
                     <div className="space-y-3">
                         <div className="flex justify-between items-center">
-                            <label className="text-sm font-bold text-slate-400 uppercase tracking-wider">2. 替换人脸</label>
-                            {isProcessingSource && <span className="text-xs text-blue-400 animate-pulse">处理中...</span>}
+                            <label className="text-sm font-semibold text-slate-700">2. 替换人脸</label>
+                            {isProcessingSource && <span className="animate-pulse text-xs text-primary-600">处理中...</span>}
                         </div>
 
                         <div className="relative group cursor-pointer">
-                            <div className="w-full aspect-square bg-black/50 rounded-lg overflow-hidden border-2 border-dashed border-slate-600 group-hover:border-purple-500 transition-colors">
-                                <img src={sourcePack.textureUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-40 transition-opacity" />
+                            <div className="w-full aspect-square overflow-hidden rounded-lg border border-dashed border-slate-300 bg-slate-100 transition-colors group-hover:border-primary-400 group-hover:bg-primary-50">
+                                <img src={sourcePack.textureUrl} className="w-full h-full object-cover opacity-80 transition-opacity group-hover:opacity-60" />
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                    <span className="bg-black/70 text-white px-3 py-1 rounded text-sm font-medium backdrop-blur-sm">
+                                    <span className="rounded-lg border border-slate-200 bg-white/90 px-3 py-1 text-sm font-medium text-slate-700 shadow-sm backdrop-blur-sm">
                                         更换人脸
                                     </span>
                                 </div>
@@ -165,20 +165,20 @@ export const FaceSwapTool: React.FC = () => {
                     </div>
 
                     {error && (
-                        <div className="mt-4 p-3 bg-red-900/30 border border-red-500/50 rounded text-red-200 text-xs">
+                        <div className="status-error mt-4 p-3 text-xs">
                             {error}
                         </div>
                     )}
                 </div>
 
-                <div className="text-xs text-slate-500 text-center">
+                <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-center text-xs text-slate-500">
                     使用 MediaPipe & WebGL 本地运行
                 </div>
             </div>
 
             {/* Main Preview Area */}
-            <div className="flex-1 min-h-[400px] lg:min-h-0 flex items-center justify-center">
-                <div className="relative max-w-full max-h-full shadow-2xl rounded-lg overflow-hidden border border-white/10 bg-slate-900"
+            <div className="flex min-h-[400px] flex-1 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-4 lg:min-h-0">
+                <div className="relative max-h-full max-w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
                     style={{
                         aspectRatio: `${modelPack.width} / ${modelPack.height}`,
                         width: 'min(100%, 700px)'

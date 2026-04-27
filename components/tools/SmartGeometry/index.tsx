@@ -84,7 +84,7 @@ export const SmartGeometryTool: React.FC = () => {
   };
 
   return (
-    <div className="flex h-full min-h-[620px] w-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-slate-50 text-slate-900 shadow-sm">
+    <div className="tool-section flex h-full min-h-[620px] w-full flex-col overflow-hidden bg-slate-50 text-slate-900">
       <header className="relative z-10 flex h-auto min-h-16 shrink-0 flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
         <div className="flex flex-wrap items-center gap-4 md:gap-6">
           <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-1">
@@ -93,7 +93,7 @@ export const SmartGeometryTool: React.FC = () => {
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-all md:px-4',
                 mode === 'interactive'
-                  ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
+                  ? 'bg-white text-primary-700 shadow-sm ring-1 ring-slate-200'
                   : 'text-slate-500 hover:text-slate-700',
               )}
             >
@@ -104,7 +104,7 @@ export const SmartGeometryTool: React.FC = () => {
               className={cn(
                 'rounded-md px-3 py-1.5 text-sm font-medium transition-all md:px-4',
                 mode === 'teaching'
-                  ? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200'
+                  ? 'bg-white text-primary-700 shadow-sm ring-1 ring-slate-200'
                   : 'text-slate-500 hover:text-slate-700',
               )}
             >
@@ -114,10 +114,10 @@ export const SmartGeometryTool: React.FC = () => {
 
           <div className="hidden h-6 w-px bg-slate-200 md:block" />
           <div>
-            <h1 className="text-base font-bold tracking-tight text-slate-900 md:text-lg">
+            <h1 className="text-base font-bold text-slate-900 md:text-lg">
               {question?.meta.title || '智能几何练习'}
             </h1>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">小学几何解题工作区</p>
+            <p className="text-xs font-semibold uppercase text-slate-500">小学几何解题工作区</p>
           </div>
         </div>
 
@@ -147,7 +147,7 @@ export const SmartGeometryTool: React.FC = () => {
 
           <span
             className={cn(
-              'rounded border px-2 py-1 text-[10px] font-bold uppercase tracking-widest',
+              'rounded border px-2 py-1 text-[10px] font-bold uppercase',
               question?.meta.difficulty === 'easy' && 'border-green-200 bg-green-50 text-green-700',
               question?.meta.difficulty === 'medium' && 'border-amber-200 bg-amber-50 text-amber-700',
               question?.meta.difficulty === 'hard' && 'border-rose-200 bg-rose-50 text-rose-700',
@@ -164,7 +164,7 @@ export const SmartGeometryTool: React.FC = () => {
 
       <main className="relative flex min-h-0 flex-1 overflow-hidden">
         {mode === 'interactive' && (
-          <nav className="relative z-20 flex w-14 shrink-0 flex-col items-center gap-6 border-r border-slate-200 bg-white py-5 shadow-sm md:w-16">
+          <nav className="relative z-20 flex w-14 shrink-0 flex-col items-center gap-6 border-r border-slate-200 bg-white py-5 md:w-16">
             <div className="flex flex-col items-center gap-3">
               <ToolButton active={tool === 'pan'} onClick={() => setTool('pan')} icon={<Hand size={20} />} label="漫游画布" />
               <ToolButton
@@ -204,7 +204,7 @@ export const SmartGeometryTool: React.FC = () => {
           {mode === 'interactive' ? <GeometryCanvas /> : <TeachingSlides />}
 
           {mode === 'interactive' && question?.meta?.originalText && (
-            <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[min(24rem,calc(100%-2rem))] rounded-xl border border-slate-200 bg-white/90 p-4 shadow-lg backdrop-blur-sm md:left-6 md:top-6">
+            <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[min(24rem,calc(100%-2rem))] rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm md:left-6 md:top-6">
               <h3 className="mb-2 border-b border-slate-200 pb-2 text-sm font-bold text-slate-800">题目已知条件</h3>
               <div className="markdown-body text-sm font-medium leading-relaxed text-slate-700">
                 <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
@@ -239,9 +239,9 @@ function ToolButton({
       title={label}
       disabled={disabled}
       className={cn(
-        'flex h-10 w-10 items-center justify-center rounded-xl border transition-all',
+        'flex h-10 w-10 items-center justify-center rounded-lg border transition-all',
         active
-          ? 'border-blue-200 bg-blue-50 text-blue-600'
+          ? 'border-primary-200 bg-primary-50 text-primary-700'
           : disabled
             ? 'pointer-events-none border-transparent text-slate-300'
             : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900',

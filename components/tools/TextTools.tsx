@@ -47,7 +47,7 @@ export const CaseConverterTool: React.FC = () => {
         />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {transformers.map((t) => (
-            <div key={t.name} className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg shadow-sm">
+            <div key={t.name} className="tool-section flex items-center gap-2 p-2">
               <div className="flex-1 min-w-0">
                 <div className="text-xs text-slate-500 font-medium mb-1">{t.name}</div>
                 <div className="text-sm font-mono truncate text-slate-800 h-5">

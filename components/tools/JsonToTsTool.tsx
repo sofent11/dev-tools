@@ -81,7 +81,7 @@ export const JsonToTsTool: React.FC = () => {
       <CardContent className="flex-1 flex flex-col min-h-0 space-y-4">
 
         {/* Controls */}
-        <div className="flex flex-wrap gap-4 items-center bg-slate-50 p-3 rounded-lg border border-slate-200">
+        <div className="tool-panel flex flex-wrap items-center gap-4 p-3">
             <div className="flex items-center gap-2">
                 <label className="text-sm font-medium text-slate-700">Target Language:</label>
                 <select
@@ -150,7 +150,7 @@ export const JsonToTsTool: React.FC = () => {
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 flex items-start gap-2">
+          <div className="status-error flex items-start gap-2 p-3 text-sm">
              <span className="font-bold">Error:</span> {error}
           </div>
         )}

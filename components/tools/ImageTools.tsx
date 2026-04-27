@@ -15,6 +15,7 @@ import imageCompression from 'browser-image-compression';
 import JSZip from 'jszip';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { TabButton, Tabs } from '../ui/ToolUi';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -787,8 +788,8 @@ const ImageCompressorPanel: React.FC = () => {
 
   return (
     <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
-      <div className="relative flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
-        <div className="p-4 bg-white rounded-full shadow-sm">
+      <div className="tool-upload flex-none p-6">
+        <div className="rounded-full bg-white p-4 shadow-sm">
           <Upload className="w-8 h-8 text-primary-500" />
         </div>
         <div>
@@ -805,7 +806,7 @@ const ImageCompressorPanel: React.FC = () => {
 
       {file && (
         <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
-          <div className="w-full md:w-80 flex-none space-y-6 p-4 bg-white border border-slate-200 rounded-xl shadow-sm h-fit">
+          <div className="tool-section h-fit w-full flex-none space-y-6 p-4 md:w-80">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
               <Settings className="w-4 h-4" /> Compression Settings
             </h3>
@@ -868,7 +869,7 @@ const ImageCompressorPanel: React.FC = () => {
           </div>
 
           <div className="flex-1 flex flex-col gap-4">
-            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="tool-panel flex items-center gap-4 p-4">
               <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center text-slate-400">
                 <ImageIcon className="w-6 h-6" />
               </div>
@@ -882,7 +883,7 @@ const ImageCompressorPanel: React.FC = () => {
 
             {compressedFile && (
               <div className="flex-1 flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4">
-                <div className="flex items-center gap-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="status-success flex items-center gap-4 p-4">
                   <div className="w-12 h-12 bg-green-100 rounded flex items-center justify-center text-green-600">
                     <FileImage className="w-6 h-6" />
                   </div>
@@ -899,7 +900,7 @@ const ImageCompressorPanel: React.FC = () => {
                   </Button>
                 </div>
 
-                <div className="flex-1 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-center p-4 relative min-h-[200px]">
+                <div className="tool-panel relative flex min-h-[200px] flex-1 items-center justify-center p-4">
                   {compressedPreviewUrl && (
                     <img
                       src={compressedPreviewUrl}
@@ -1240,8 +1241,8 @@ const StickerSplitterPanel: React.FC = () => {
 
   return (
     <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
-      <div className="relative flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
-        <div className="p-4 bg-white rounded-full shadow-sm">
+      <div className="tool-upload flex-none p-6">
+        <div className="rounded-full bg-white p-4 shadow-sm">
           <Scissors className="w-8 h-8 text-primary-500" />
         </div>
         <div>
@@ -1258,7 +1259,7 @@ const StickerSplitterPanel: React.FC = () => {
 
       {file && (
         <div className="flex flex-col xl:flex-row gap-6 min-h-0">
-          <div className="w-full xl:w-[22rem] flex-none space-y-5 p-4 bg-white border border-slate-200 rounded-xl shadow-sm h-fit">
+          <div className="tool-section h-fit w-full flex-none space-y-5 p-4 xl:w-[22rem]">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
               <Settings className="w-4 h-4" /> 拆分参数
             </h3>
@@ -1368,7 +1369,7 @@ const StickerSplitterPanel: React.FC = () => {
               {isSplitting ? '正在拆分...' : '自动拆分表情包'}
             </Button>
 
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 space-y-2">
+            <div className="tool-panel space-y-2 p-3 text-sm text-slate-600">
               <div className="flex items-center gap-2 text-slate-700 font-medium">
                 <Sparkles className="w-4 h-4 text-amber-500" />
                 使用建议
@@ -1479,7 +1480,7 @@ const StickerSplitterPanel: React.FC = () => {
           </div>
 
           <div className="flex-1 min-w-0 space-y-4">
-            <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="tool-panel flex items-center gap-4 p-4">
               <div className="w-12 h-12 bg-slate-200 rounded flex items-center justify-center text-slate-400">
                 <ImageIcon className="w-6 h-6" />
               </div>
@@ -1497,13 +1498,13 @@ const StickerSplitterPanel: React.FC = () => {
             </div>
 
             {error && (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="status-error px-4 py-3 text-sm">
                 {error}
               </div>
             )}
 
             {previewUrl && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="tool-section overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                   <div>
                     <p className="font-medium text-slate-800">原图预览</p>
@@ -1529,7 +1530,7 @@ const StickerSplitterPanel: React.FC = () => {
                   )}
                 </div>
                 <div className="p-4">
-                  <div ref={previewFrameRef} className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                  <div ref={previewFrameRef} className="relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
                     <img src={previewUrl} alt="Sticker sheet preview" className="block w-full h-auto" />
                     {splitResults.length > 0 && sourceInfo && (
                       <div className="absolute inset-0">
@@ -1576,14 +1577,14 @@ const StickerSplitterPanel: React.FC = () => {
             {splitResults.length > 0 && (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
+                  <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Grid3X3 className="w-4 h-4" />
                       已切出数量
                     </div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{splitResults.length}</p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
+                  <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <FileImage className="w-4 h-4" />
                       单张默认格式
@@ -1592,7 +1593,7 @@ const StickerSplitterPanel: React.FC = () => {
                       {getExtensionForMimeType(options.outputFormat).toUpperCase()}
                     </p>
                   </div>
-                  <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-4">
+                  <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Archive className="w-4 h-4" />
                       打包下载
@@ -1605,7 +1606,7 @@ const StickerSplitterPanel: React.FC = () => {
                   {splitResults.map((result, index) => (
                     <div
                       key={result.id}
-                      className={`bg-white p-3 rounded-xl border shadow-sm space-y-3 cursor-pointer transition-colors ${
+                      className={`space-y-3 rounded-lg border bg-white p-3 shadow-sm transition-colors ${
                         selectedResultId === result.id
                           ? 'border-primary-300 ring-2 ring-primary-100'
                           : 'border-slate-200 hover:border-primary-200'
@@ -1652,28 +1653,14 @@ export const ImageTools: React.FC = () => {
         title="Image Toolbox"
         description="Compress images, convert formats, or split a sticker sheet into separate images."
       />
-      <div className="flex border-b border-slate-200 bg-white px-6">
-        <button
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'compress'
-              ? 'border-primary-500 text-primary-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-          onClick={() => setActiveTab('compress')}
-        >
+      <Tabs>
+        <TabButton active={activeTab === 'compress'} onClick={() => setActiveTab('compress')}>
           图片压缩/转换
-        </button>
-        <button
-          className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'split'
-              ? 'border-primary-500 text-primary-600'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-          onClick={() => setActiveTab('split')}
-        >
+        </TabButton>
+        <TabButton active={activeTab === 'split'} onClick={() => setActiveTab('split')}>
           表情包拆分
-        </button>
-      </div>
+        </TabButton>
+      </Tabs>
 
       {activeTab === 'compress' ? <ImageCompressorPanel /> : <StickerSplitterPanel />}
     </Card>

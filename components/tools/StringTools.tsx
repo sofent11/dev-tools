@@ -191,7 +191,7 @@ export const RandomStringTool: React.FC = () => {
         <Card className="h-full flex flex-col">
             <CardHeader title="随机字符串 / ID" description="生成随机字符串或 NanoID" />
             <CardContent className="space-y-6">
-                <div className="flex items-center gap-4">
+                <div className="tool-panel flex flex-wrap items-center gap-4 p-4">
                     <label className="text-sm">Length: </label>
                     <input
                         type="number"

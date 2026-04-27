@@ -9,7 +9,7 @@ export const DiffViewer: React.FC = () => {
         <Card className="h-full flex flex-col">
             <CardHeader title="简易文本对比" description="按行对比两个文本的差异 (简单的逐行比较)。" />
             <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden">
-                 <div className="grid grid-cols-2 gap-4 h-1/2">
+                 <div className="grid h-1/2 grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="flex flex-col">
                          <label className="text-sm font-bold text-slate-600 mb-1">Original</label>
                          <textarea
@@ -28,7 +28,7 @@ export const DiffViewer: React.FC = () => {
                     </div>
                  </div>
 
-                 <div className="flex-1 bg-slate-50 border border-slate-200 rounded-lg overflow-auto p-4 font-mono text-sm">
+                 <div className="tool-panel flex-1 overflow-auto p-4 font-mono text-sm">
                     {(() => {
                         const lines1 = oldText.split('\n');
                         const lines2 = newText.split('\n');

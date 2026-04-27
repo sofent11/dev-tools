@@ -103,7 +103,7 @@ export const XmlTool: React.FC = () => {
               </Button>
         </div>
       </div>
-      {error && <div className="p-2 bg-red-100 text-red-700 text-sm text-center">{error}</div>}
+      {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
     </Card>
   );
 };
@@ -174,7 +174,7 @@ export const YamlTool: React.FC = () => {
                     </Button>
                 </div>
             </div>
-             {error && <div className="p-2 bg-red-100 text-red-700 text-sm text-center">{error}</div>}
+             {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
         </Card>
     );
 };
@@ -247,7 +247,7 @@ export const CsvTool: React.FC = () => {
                     </Button>
                 </div>
             </div>
-             {error && <div className="p-2 bg-red-100 text-red-700 text-sm text-center">{error}</div>}
+             {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
         </Card>
     );
 };

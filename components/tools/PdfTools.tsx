@@ -4,6 +4,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { FileText, Merge, Trash2, Image as ImageIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { TabButton, Tabs } from '../ui/ToolUi';
 
 // Initialize PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
@@ -17,20 +18,14 @@ export const PdfTools: React.FC = () => {
         title="PDF Toolbox"
         description="Merge PDFs or convert PDF pages to images."
       />
-      <div className="flex border-b border-slate-200 bg-white px-6">
-        <button
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'merge' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            onClick={() => setActiveTab('merge')}
-        >
-            Merge PDFs
-        </button>
-        <button
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'toImage' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-            onClick={() => setActiveTab('toImage')}
-        >
-            PDF to Image
-        </button>
-      </div>
+      <Tabs>
+        <TabButton active={activeTab === 'merge'} onClick={() => setActiveTab('merge')}>
+          Merge PDFs
+        </TabButton>
+        <TabButton active={activeTab === 'toImage'} onClick={() => setActiveTab('toImage')}>
+          PDF to Image
+        </TabButton>
+      </Tabs>
       <CardContent className="flex-1 overflow-auto p-0">
         {activeTab === 'merge' ? <PdfMergeTool /> : <PdfToImageTool />}
       </CardContent>
@@ -91,8 +86,8 @@ const PdfMergeTool: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-       <div className="p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors relative">
-            <div className="p-4 bg-white rounded-full shadow-sm">
+       <div className="tool-upload p-8">
+            <div className="rounded-full bg-white p-4 shadow-sm">
                 <Merge className="w-8 h-8 text-primary-500" />
             </div>
             <div>
@@ -113,7 +108,7 @@ const PdfMergeTool: React.FC = () => {
             <h3 className="font-medium text-slate-800">Selected Files ({files.length})</h3>
             <div className="space-y-2">
               {files.map((file, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 bg-white border border-slate-200 rounded-lg shadow-sm">
+                <div key={i} className="tool-section flex items-center gap-4 p-3">
                   <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center text-red-600">
                     <FileText className="w-4 h-4" />
                   </div>
@@ -200,8 +195,8 @@ const PdfToImageTool: React.FC = () => {
     return (
          <div className="p-6 space-y-6">
              {!file ? (
-                <div className="p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors relative">
-                    <div className="p-4 bg-white rounded-full shadow-sm">
+                <div className="tool-upload p-8">
+                    <div className="rounded-full bg-white p-4 shadow-sm">
                         <ImageIcon className="w-8 h-8 text-primary-500" />
                     </div>
                     <div>
@@ -216,7 +211,7 @@ const PdfToImageTool: React.FC = () => {
                 </div>
              ) : (
                  <div className="space-y-4">
-                     <div className="flex items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg">
+                     <div className="tool-section flex items-center gap-4 p-4">
                         <FileText className="w-6 h-6 text-red-500" />
                         <span className="flex-1 font-medium">{file.name}</span>
                         <Button variant="secondary" size="sm" onClick={() => setFile(null)}>Change</Button>
@@ -233,7 +228,7 @@ const PdfToImageTool: React.FC = () => {
              {images.length > 0 && (
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                      {images.map((img, idx) => (
-                         <div key={idx} className="bg-white p-2 rounded-lg border border-slate-200 shadow-sm space-y-2">
+                         <div key={idx} className="tool-section space-y-2 p-2">
                              <div className="aspect-[1/1.4] bg-slate-100 rounded overflow-hidden">
                                  <img src={img} alt={`Page ${idx + 1}`} className="w-full h-full object-contain" />
                              </div>

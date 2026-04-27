@@ -46,14 +46,14 @@ export const AiAssistant: React.FC = () => {
       <CardHeader 
         title="AI Code Assistant" 
         description="Ask Gemini to explain code, write regex, or convert formats." 
-        actions={<Sparkles className="w-5 h-5 text-purple-500" />}
+        actions={<Sparkles className="w-5 h-5 text-primary-600" />}
       />
       <CardContent className="flex-1 flex flex-col gap-4 min-h-0">
         
         {/* Output Area */}
-        <div className="flex-1 bg-slate-50 rounded-xl border border-slate-200 p-4 overflow-y-auto">
+        <div className="tool-panel flex-1 overflow-y-auto p-4">
           {error && (
-            <div className="p-4 bg-red-50 text-red-600 rounded-lg border border-red-100 mb-4">
+            <div className="status-error mb-4 p-4">
               {error}
             </div>
           )}
@@ -79,7 +79,7 @@ export const AiAssistant: React.FC = () => {
         </div>
 
         {/* Input Area */}
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 md:flex-row">
           <input
             type="text"
             className="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 shadow-sm"

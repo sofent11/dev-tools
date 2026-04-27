@@ -117,7 +117,7 @@ export const UuidTool: React.FC = () => {
         </div>
         <div className="space-y-2">
           {uuids.map((uuid, idx) => (
-            <div key={idx} className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-lg group hover:border-primary-200 transition-colors">
+            <div key={idx} className="tool-panel group flex items-center gap-2 p-3 transition-colors hover:border-primary-200">
               <code className="flex-1 font-mono text-slate-700">{uuid}</code>
               <Button 
                 variant="ghost" 
@@ -182,7 +182,7 @@ export const HashTool: React.FC = () => {
                     {c ? <><Check className="w-3 h-3"/> 已复制</> : <><Copy className="w-3 h-3"/> 复制</>}
                 </button>
             </div>
-            <div className="p-3 bg-slate-100 rounded-lg break-all font-mono text-sm text-slate-800 border border-slate-200">
+            <div className="tool-panel break-all p-3 font-mono text-sm text-slate-800">
                 {val || '...'}
             </div>
         </div>
@@ -368,7 +368,7 @@ export const PasswordGenTool: React.FC = () => {
             />
             <CardContent className="flex-1 space-y-8">
                 <div className="relative">
-                    <div className="w-full p-4 bg-slate-100 rounded-xl text-center text-2xl font-mono tracking-wider break-all border border-slate-200 min-h-[4rem] flex items-center justify-center">
+                    <div className="tool-panel flex min-h-[4rem] w-full items-center justify-center break-all p-4 text-center font-mono text-2xl tracking-normal text-slate-950">
                         {password}
                     </div>
                      <Button 
@@ -398,7 +398,7 @@ export const PasswordGenTool: React.FC = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                         {Object.keys(options).map(key => (
-                            <label key={key} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-white transition-colors">
+                            <label key={key} className="tool-panel flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-white">
                                 <input 
                                     type="checkbox" 
                                     checked={options[key as keyof typeof options]}

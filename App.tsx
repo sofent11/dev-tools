@@ -126,7 +126,7 @@ const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/$
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   // Fallback to first tool if active one not found
@@ -180,58 +180,72 @@ export default function App() {
   }, {} as Record<string, ToolDef[]>);
 
   return (
-    <div className="flex h-screen w-screen bg-slate-50 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--surface-canvas)] font-sans text-slate-950">
 
       {/* Mobile Menu Overlay */}
       {!isSidebarOpen && (
         <button
-          className="md:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-slate-200"
+          className="fixed left-4 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
           onClick={() => setIsSidebarOpen(true)}
+          aria-label="打开工具目录"
         >
           <Menu className="w-5 h-5 text-slate-600" />
         </button>
       )}
 
+      {isSidebarOpen && (
+        <button
+          className="fixed inset-0 z-30 bg-slate-950/20 md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+          aria-label="关闭工具目录遮罩"
+        />
+      )}
+
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 transform transition-transform duration-200 ease-in-out md:translate-x-0 md:static flex flex-col
+        fixed inset-y-0 left-0 z-40 flex w-80 transform flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out md:static md:translate-x-0
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="h-16 flex-none flex items-center px-6 border-b border-slate-100">
-          <div className="flex items-center gap-2 text-primary-600 font-bold text-xl tracking-tight">
-            <LayoutGrid className="w-6 h-6" /> 程序员百宝箱
+        <div className="flex h-16 flex-none items-center gap-3 border-b border-slate-100 px-5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-700 ring-1 ring-primary-100">
+            <LayoutGrid className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold tracking-normal text-slate-950">程序员百宝箱</div>
+            <div className="text-xs font-medium text-slate-500">{TOOLS.length} 个开发效率工具</div>
           </div>
           <button
-            className="ml-auto md:hidden p-1 text-slate-400 hover:text-slate-600"
+            className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 md:hidden"
             onClick={() => setIsSidebarOpen(false)}
+            aria-label="关闭工具目录"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 flex-none">
+        <div className="flex-none border-b border-slate-100 p-4">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="搜索工具..."
-              className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300 transition-colors"
+              className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/15"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-6 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+        <div className="app-scrollbar flex-1 space-y-5 overflow-y-auto px-3 py-4">
           {Object.entries(groupedTools).map(([category, tools]) => (
             <div key={category}>
-              <h3 className="sticky top-0 bg-white z-10 py-1">
+              <h3 className="sticky top-0 z-10 bg-white/95 py-1 backdrop-blur">
                 <button
                   type="button"
                   aria-expanded={!collapsedCategories[category]}
                   aria-controls={`tool-group-${category}`}
                   onClick={() => toggleCategory(category)}
-                  className="w-full flex items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold text-slate-400 uppercase tracking-wider hover:bg-slate-50 hover:text-slate-600 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold uppercase tracking-normal text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
                 >
                   {collapsedCategories[category] ? (
                     <ChevronRight className="w-3.5 h-3.5 flex-none" />
@@ -239,13 +253,13 @@ export default function App() {
                     <ChevronDown className="w-3.5 h-3.5 flex-none" />
                   )}
                   <span className="flex-1 text-left truncate">{category}</span>
-                  <span className="flex-none rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] leading-none text-slate-400">
+                  <span className="flex-none rounded-full bg-slate-100 px-2 py-0.5 text-[10px] leading-none text-slate-500">
                     {tools.length}
                   </span>
                 </button>
               </h3>
               {!collapsedCategories[category] && (
-                <div id={`tool-group-${category}`} className="space-y-1 mt-2">
+                <div id={`tool-group-${category}`} className="mt-1 space-y-1">
                   {tools.map(tool => (
                     <a
                       key={tool.id}
@@ -254,15 +268,21 @@ export default function App() {
                         event.preventDefault();
                         activateTool(tool.id);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group
-                                        ${activeToolId === tool.id
-                          ? 'bg-primary-50 text-primary-700 shadow-sm'
-                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}
-                                    `}
+                      className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
+                        ${activeToolId === tool.id
+                          ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'}
+                      `}
+                      title={`${tool.name} - ${tool.description}`}
                     >
-                      <tool.icon className={`w-5 h-5 ${activeToolId === tool.id ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
-                      <div className="flex flex-col items-start text-left truncate">
-                        <span className="truncate w-full">{tool.name}</span>
+                      <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-lg border
+                        ${activeToolId === tool.id ? 'border-primary-100 bg-white text-primary-700' : 'border-slate-100 bg-white text-slate-400 group-hover:text-slate-700'}
+                      `}>
+                        <tool.icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <span className="block truncate font-medium">{tool.name}</span>
+                        <span className="block truncate text-xs text-slate-400 group-hover:text-slate-500">{tool.description}</span>
                       </div>
                     </a>
                   ))}
@@ -272,7 +292,7 @@ export default function App() {
           ))}
 
           {Object.keys(groupedTools).length === 0 && (
-            <div className="text-center py-8 text-slate-400 text-sm">
+            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-400">
               未找到相关工具
             </div>
           )}
@@ -280,13 +300,42 @@ export default function App() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 h-full overflow-hidden bg-slate-50/50 relative">
-        <div className="h-full p-4 md:p-8 max-w-7xl mx-auto flex flex-col">
-          <div className="flex-1 min-h-0 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-auto min-h-16 flex-none flex-col gap-3 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:flex-row md:items-center md:justify-between md:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
+              onClick={() => setIsSidebarOpen(true)}
+              aria-label="打开工具目录"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-primary-100 bg-primary-50 text-primary-700">
+              <activeTool.icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="truncate text-lg font-semibold tracking-normal text-slate-950">{activeTool.name}</h1>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-500">
+                  {activeTool.category}
+                </span>
+              </div>
+              <p className="mt-0.5 truncate text-sm text-slate-500">{activeTool.description}</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 text-xs font-medium text-slate-400 md:flex">
+            <span>Workspace</span>
+            <span className="h-1 w-1 rounded-full bg-slate-300" />
+            <span>{new Date().getFullYear()}</span>
+          </div>
+        </header>
+
+        <div className="flex min-h-0 flex-1 flex-col p-3 md:p-5">
+          <div className="tool-workspace min-h-0 flex-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <activeTool.component />
           </div>
 
-          <div className="mt-4 text-center text-xs text-slate-400">
+          <div className="mt-3 flex-none text-center text-xs text-slate-400">
             程序员百宝箱 &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
           </div>
         </div>

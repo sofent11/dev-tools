@@ -43,7 +43,7 @@ export const HttpBuilderTool: React.FC = () => {
         <Card className="h-full flex flex-col">
             <CardHeader title="HTTP 请求构造" description="发送简单的 HTTP 请求 (注意 CORS 限制)" />
             <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden">
-                <div className="flex gap-2">
+                <div className="tool-panel flex flex-col gap-2 p-3 md:flex-row">
                     <select
                         className="p-2 border rounded bg-white"
                         value={method}
@@ -63,8 +63,8 @@ export const HttpBuilderTool: React.FC = () => {
                     <Button onClick={sendRequest} disabled={loading} icon={<Send className="w-4 h-4"/>}>Send</Button>
                 </div>
 
-                <div className="flex-1 flex flex-col md:flex-row gap-4 min-h-0">
-                    <div className="flex-1 flex flex-col gap-2">
+                <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                    <div className="flex min-h-0 flex-col gap-3">
                          <label className="text-sm font-bold">Headers (JSON)</label>
                          <textarea
                             className="flex-1 p-2 border rounded font-mono text-sm resize-none"
@@ -78,7 +78,7 @@ export const HttpBuilderTool: React.FC = () => {
                             onChange={e => setBody(e.target.value)}
                          />
                     </div>
-                    <div className="flex-1 flex flex-col">
+                    <div className="flex min-h-0 flex-col">
                         <label className="text-sm font-bold mb-2">Response</label>
                         <textarea
                             readOnly
@@ -105,7 +105,7 @@ export const UserAgentTool: React.FC = () => {
                     value={ua}
                     onChange={e => setUa(e.target.value)}
                 />
-                <div className="p-4 bg-slate-50 border rounded-lg space-y-2">
+                <div className="tool-panel space-y-2 p-4">
                     {/* Simple parsing demonstration */}
                     <div className="flex justify-between border-b pb-2">
                         <span className="font-semibold">Browser:</span>
@@ -131,7 +131,7 @@ export const IpInfoTool: React.FC = () => {
         <Card className="h-full flex flex-col">
              <CardHeader title="IP 地址信息" description="查看本机公网 IP 信息" />
              <CardContent className="space-y-4">
-                <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg text-sm border border-yellow-200">
+                <div className="status-warning p-4 text-sm">
                     <Info className="w-4 h-4 inline mr-2" />
                     Due to browser security restrictions, purely client-side tools cannot reliably get your public IP without calling an external API.
                 </div>

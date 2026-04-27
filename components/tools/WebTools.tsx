@@ -30,7 +30,7 @@ export const PxRemTool: React.FC = () => {
     <Card className="h-full flex flex-col">
       <CardHeader title="PX / REM 转换器" description="CSS 像素与 REM 单位互转。" />
       <CardContent className="flex-1 flex flex-col items-center justify-center space-y-8">
-        <div className="w-full max-w-md bg-slate-50 p-6 rounded-xl border border-slate-200">
+        <div className="tool-panel w-full max-w-md p-6">
             <div className="mb-6">
                  <label className="block text-xs uppercase text-slate-500 font-bold mb-1">Root Font Size (px)</label>
                  <input 
@@ -103,12 +103,12 @@ export const ColorConverterTool: React.FC = () => {
             <CardHeader title="颜色转换器" description="Hex 与 RGB 格式互转及预览。" />
             <CardContent className="flex-1 flex flex-col items-center justify-center space-y-8">
                  <div 
-                    className="w-32 h-32 rounded-full shadow-lg border-4 border-white ring-1 ring-slate-200 transition-colors duration-300"
+                    className="h-32 w-32 rounded-full border-4 border-white shadow-sm ring-1 ring-slate-200 transition-colors duration-300"
                     style={{ backgroundColor: hex }}
                  />
                  
                  <div className="w-full max-w-lg grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HEX Color</label>
                         <div className="flex items-center gap-2">
                             <span className="text-slate-400 text-lg">#</span>
@@ -121,7 +121,7 @@ export const ColorConverterTool: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">RGB Color</label>
                         <div className="flex gap-2">
                             <input 
@@ -186,7 +186,7 @@ export const QrCodeTool: React.FC = () => {
                          />
                     </div>
                 </div>
-                <div className="flex-1 flex items-center justify-center bg-slate-50 rounded-xl border border-slate-200 min-h-[300px]">
+                <div className="tool-panel flex min-h-[300px] flex-1 items-center justify-center">
                     {text ? (
                         <img src={qrUrl} alt="QR Code" className="mix-blend-multiply" />
                     ) : (
@@ -242,8 +242,8 @@ export const DeviceInfoTool: React.FC = () => {
             <CardContent className="flex-1 overflow-auto">
                 <div className="grid grid-cols-1 gap-4">
                     {Object.entries(info).map(([key, value]) => (
-                        <div key={key} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-lg">
-                            <span className="text-sm font-semibold text-slate-500 uppercase tracking-wide">{key}</span>
+                        <div key={key} className="tool-panel flex flex-col justify-between p-4 md:flex-row md:items-center">
+                            <span className="text-sm font-semibold text-slate-500 uppercase">{key}</span>
                             <code className="mt-1 md:mt-0 text-sm font-mono text-slate-800 bg-white px-2 py-1 rounded border border-slate-200 break-all">
                                 {value}
                             </code>

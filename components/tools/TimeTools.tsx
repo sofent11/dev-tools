@@ -38,10 +38,10 @@ export const TimestampTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col space-y-4">
       <CardHeader title="时间戳转换" description={`Current Unix Timestamp: ${now}`} />
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-5">
 
         {/* Timestamp -> Date */}
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="tool-panel flex flex-col gap-4 p-4 md:flex-row md:items-end">
              <div className="flex-1 w-full">
                 <label className="text-sm font-medium text-slate-700">Timestamp (s/ms)</label>
                 <input
@@ -65,7 +65,7 @@ export const TimestampTool: React.FC = () => {
         <div className="border-t border-slate-100"></div>
 
         {/* Date -> Timestamp */}
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className="tool-panel flex flex-col gap-4 p-4 md:flex-row md:items-end">
              <div className="flex-1 w-full">
                 <label className="text-sm font-medium text-slate-700">Date Time String</label>
                 <input
@@ -125,7 +125,7 @@ export const DateDiffTool: React.FC = () => {
                     </div>
                  </div>
                  <Button onClick={calculateDiff} className="w-full" icon={<Calculator className="w-4 h-4"/>}>Calculate Difference</Button>
-                 <div className="p-4 bg-slate-100 rounded-lg text-center font-bold text-lg text-primary-700">
+                 <div className="tool-panel p-4 text-center text-lg font-bold text-primary-700">
                     {diff || "Result will appear here"}
                  </div>
             </CardContent>
