@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import {
   LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight
 } from 'lucide-react';
-import { Category } from './types';
+import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS } from './components/tools/registry';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
@@ -44,6 +44,7 @@ export default function App() {
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
+  const ActiveToolComponent = activeTool.component;
 
   useEffect(() => {
     const syncToolFromLocation = () => {
@@ -245,7 +246,15 @@ export default function App() {
 
         <div className="flex min-h-0 flex-1 flex-col p-3 md:p-5">
           <div className="tool-workspace min-h-0 flex-1 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <activeTool.component />
+            <Suspense
+              fallback={
+                <div className="flex h-full min-h-[20rem] items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-500">
+                  正在加载 {activeTool.name}...
+                </div>
+              }
+            >
+              <ActiveToolComponent />
+            </Suspense>
           </div>
 
           <div className="mt-3 flex-none text-center text-xs text-slate-400">

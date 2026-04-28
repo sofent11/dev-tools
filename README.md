@@ -101,8 +101,7 @@
 - Google GenAI SDK
 - MediaPipe Tasks Vision / Face Mesh
 - Konva / React Konva
-- pdf-lib / pdfjs-dist
-- quicktype-core
+- pdf-lib
 - browser-image-compression
 - qrcode / turndown
 - js-yaml / fast-xml-parser / papaparse

@@ -1,6 +1,4 @@
-import React from 'react';
-import Konva from 'konva';
-import { Stage, Layer, Path, Text, Group, Transformer } from 'react-konva';
+import React, { useRef, useState } from 'react';
 import { GeometryResult } from './utils/geometry';
 
 interface CanvasStageProps {
@@ -16,6 +14,16 @@ interface CanvasStageProps {
   onTransformChange: (newAttrs: { x: number; y: number; rotation: number; scale: number }) => void;
 }
 
+const getSvgPoint = (svg: SVGSVGElement, event: React.PointerEvent): { x: number; y: number } => {
+  const point = svg.createSVGPoint();
+  point.x = event.clientX;
+  point.y = event.clientY;
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return { x: 0, y: 0 };
+  const transformed = point.matrixTransform(matrix.inverse());
+  return { x: transformed.x, y: transformed.y };
+};
+
 export const CanvasStage: React.FC<CanvasStageProps> = ({
   width,
   height,
@@ -26,109 +34,106 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   scale,
   geometry,
   previewMode,
-  onTransformChange
+  onTransformChange,
 }) => {
-  const shapeRef = React.useRef<Konva.Group>(null);
-  const trRef = React.useRef<Konva.Transformer>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [dragStart, setDragStart] = useState<{ pointer: { x: number; y: number }; position: { x: number; y: number } } | null>(null);
 
-  React.useEffect(() => {
-    if (trRef.current && shapeRef.current) {
-      trRef.current.nodes([shapeRef.current]);
-      trRef.current.getLayer()?.batchDraw();
-    }
-  }, [previewMode, geometry]); // Update transformer when content changes
+  const handlePointerDown = (event: React.PointerEvent<SVGGElement>) => {
+    if (!svgRef.current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragStart({
+      pointer: getSvgPoint(svgRef.current, event),
+      position,
+    });
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<SVGGElement>) => {
+    if (!svgRef.current || !dragStart) return;
+    const pointer = getSvgPoint(svgRef.current, event);
+    onTransformChange({
+      x: dragStart.position.x + pointer.x - dragStart.pointer.x,
+      y: dragStart.position.y + pointer.y - dragStart.pointer.y,
+      rotation,
+      scale,
+    });
+  };
+
+  const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
+    event.preventDefault();
+    const nextScale = Math.min(6, Math.max(0.15, scale * (event.deltaY > 0 ? 0.92 : 1.08)));
+    onTransformChange({
+      x: position.x,
+      y: position.y,
+      rotation,
+      scale: nextScale,
+    });
+  };
 
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-100 shadow-inner">
-      <Stage width={width} height={height}>
-        <Layer>
-          {/* Background Grid or Guide (Optional) */}
-          <Group>
-             {/* Simple grid lines could go here */}
-          </Group>
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-inner">
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        className="block max-h-[70vh] w-full touch-none select-none"
+        onWheel={handleWheel}
+      >
+        <defs>
+          <pattern id="jewelry-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+            <path d="M 24 0 L 0 0 0 24" fill="none" stroke="#cbd5e1" strokeWidth="0.75" opacity="0.45" />
+          </pattern>
+        </defs>
+        <rect width={width} height={height} fill="url(#jewelry-grid)" />
 
-          {/* Main Design Group */}
-          <Group
-            ref={shapeRef}
-            x={position.x}
-            y={position.y}
-            rotation={rotation}
-            scaleX={scale}
-            scaleY={scale}
-            draggable
-            onDragEnd={(e) => {
-              onTransformChange({
-                x: e.target.x(),
-                y: e.target.y(),
-                rotation: e.target.rotation(),
-                scale: e.target.scaleX(),
-              });
-            }}
-            onTransformEnd={() => {
-              const node = shapeRef.current;
-              if (!node) return;
-              onTransformChange({
-                x: node.x(),
-                y: node.y(),
-                rotation: node.rotation(),
-                scale: node.scaleX(),
-              });
-            }}
-          >
-            {previewMode === 'visual' ? (
-              // Visual Mode: Always render Konva Text for reliability.
-              // (Some SVG path strings from font tools can be parsed inconsistently by Konva.)
-              <>
-                <Text
-                  text={text}
-                  fontSize={fontSize}
-                  fontFamily="Cinzel, serif"
-                  fill="#334155"
-                />
-                {geometry?.originalPath && (
-                  <Path
-                    data={geometry.originalPath}
-                    fill="transparent"
-                    stroke="#0ea5e9"
-                    strokeWidth={1}
-                    opacity={0.35}
-                    fillRule="evenodd"
-                    listening={false}
-                  />
-                )}
-              </>
-            ) : (
-              // Manufacturing Mode: The processed path
-              geometry?.processedPath && (
-                <Path
-                  data={geometry.processedPath}
-                  fill="#e2e8f0"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  opacity={0.9}
+        <g
+          transform={`translate(${position.x} ${position.y}) rotate(${rotation}) scale(${scale})`}
+          className="cursor-move"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={() => setDragStart(null)}
+          onPointerCancel={() => setDragStart(null)}
+        >
+          {previewMode === 'visual' ? (
+            <>
+              <text
+                x={0}
+                y={0}
+                fontSize={fontSize}
+                fontFamily="Cinzel, serif"
+                fill="#334155"
+                dominantBaseline="hanging"
+              >
+                {text}
+              </text>
+              {geometry?.originalPath && (
+                <path
+                  d={geometry.originalPath}
+                  fill="transparent"
+                  stroke="#0ea5e9"
+                  strokeWidth={1}
+                  opacity={0.35}
                   fillRule="evenodd"
+                  pointerEvents="none"
                 />
-              )
-            )}
-            
-            {/* Origin marker for debugging */}
-            <Path data="M -5 0 L 5 0 M 0 -5 L 0 5" stroke="blue" strokeWidth={1} opacity={0.5} />
-          </Group>
-
-          {/* Transformer */}
-          <Transformer
-            ref={trRef}
-            enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-            boundBoxFunc={(oldBox, newBox) => {
-              // Limit resize if needed
-              if (newBox.width < 5 || newBox.height < 5) {
-                return oldBox;
-              }
-              return newBox;
-            }}
-          />
-        </Layer>
-      </Stage>
+              )}
+            </>
+          ) : (
+            geometry?.processedPath && (
+              <path
+                d={geometry.processedPath}
+                fill="#e2e8f0"
+                stroke="#ef4444"
+                strokeWidth={2}
+                opacity={0.9}
+                fillRule="evenodd"
+              />
+            )
+          )}
+          <path d="M -5 0 L 5 0 M 0 -5 L 0 5" stroke="#2563eb" strokeWidth={1} opacity={0.55} pointerEvents="none" />
+        </g>
+      </svg>
     </div>
   );
 };

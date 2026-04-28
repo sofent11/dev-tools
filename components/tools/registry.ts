@@ -1,38 +1,76 @@
+import { lazy, type ElementType } from 'react';
 import {
   AlignLeft, ArrowRightLeft, BadgeCent, Binary, Braces, CalendarClock, CaseUpper, Clock,
   Code, Database, FileArchive, FileCode, FileJson, FileSearch, FileSpreadsheet, FileText,
   Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
   Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
-  Type, UserRoundCog, WalletCards
+  Type, UserRoundCog, WalletCards,
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
-import { JsonTool, Base64Tool, UrlTool } from './FormatConverters';
-import { JwtTool, UuidTool, HashTool, PasswordGenTool, HmacTool } from './SecurityTools';
-import { AiAssistant } from './AiAssistant';
-import { CaseConverterTool, TextStatsTool, RegexTool } from './TextTools';
-import { PxRemTool, ColorConverterTool, QrCodeTool, DeviceInfoTool } from './WebTools';
-import { ChmodTool } from './DevOpsTools';
-import { StringEscaper } from './StringEscaper';
-import { UrlParser } from './UrlParser';
-import { DiffViewer } from './DiffViewer';
-import { XmlTool, YamlTool, CsvTool, MarkdownTool } from './FormatTools';
-import { StringManipulatorTool, SlugTool, RandomStringTool } from './StringTools';
-import { TimestampTool, DateDiffTool } from './TimeTools';
-import { HttpBuilderTool, UserAgentTool, IpInfoTool } from './NetworkTools';
-import { JsonToTsTool } from './JsonToTsTool';
-import { ImageTools } from './ImageTools';
-import { HeadshotExtractor } from './HeadshotExtractor';
-import { PdfTools } from './PdfTools';
-import JewelryCustomizer from './JewelryCustomizer';
-import { FaceSwapTool } from './FaceSwapTool';
-import SmartGeometryTool from './SmartGeometry';
-import { HtmlFormatTool, HtmlToMarkdownTool, RmbUppercaseTool } from './text';
-import { TimestampPlusTool, WorldClockTool } from './time';
-import { FileBase64Tool, FileInfoTool, FileNameExtractorTool } from './files';
-import { ImageColorExtractTool, ImageToBase64Tool, ImageWatermarkTool } from './images';
-import { MimeTypeTool, SvgToCssTool } from './frontend';
-import { BasicAuthTool, CertificateParserTool } from './security';
-import { RandomNumberTool } from './generators';
+
+const lazyNamed = <T extends Record<string, ElementType>, K extends keyof T>(
+  loader: () => Promise<T>,
+  exportName: K,
+) => lazy(async () => ({ default: (await loader())[exportName] }));
+
+const lazyDefault = <T extends { default: ElementType }>(loader: () => Promise<T>) =>
+  lazy(async () => ({ default: (await loader()).default }));
+
+const JsonTool = lazyNamed(() => import('./FormatConverters'), 'JsonTool');
+const Base64Tool = lazyNamed(() => import('./FormatConverters'), 'Base64Tool');
+const UrlTool = lazyNamed(() => import('./FormatConverters'), 'UrlTool');
+const JwtTool = lazyNamed(() => import('./SecurityTools'), 'JwtTool');
+const UuidTool = lazyNamed(() => import('./SecurityTools'), 'UuidTool');
+const HashTool = lazyNamed(() => import('./SecurityTools'), 'HashTool');
+const PasswordGenTool = lazyNamed(() => import('./SecurityTools'), 'PasswordGenTool');
+const HmacTool = lazyNamed(() => import('./SecurityTools'), 'HmacTool');
+const AiAssistant = lazyNamed(() => import('./AiAssistant'), 'AiAssistant');
+const CaseConverterTool = lazyNamed(() => import('./TextTools'), 'CaseConverterTool');
+const TextStatsTool = lazyNamed(() => import('./TextTools'), 'TextStatsTool');
+const RegexTool = lazyNamed(() => import('./TextTools'), 'RegexTool');
+const PxRemTool = lazyNamed(() => import('./WebTools'), 'PxRemTool');
+const ColorConverterTool = lazyNamed(() => import('./WebTools'), 'ColorConverterTool');
+const QrCodeTool = lazyNamed(() => import('./WebTools'), 'QrCodeTool');
+const DeviceInfoTool = lazyNamed(() => import('./WebTools'), 'DeviceInfoTool');
+const ChmodTool = lazyNamed(() => import('./DevOpsTools'), 'ChmodTool');
+const StringEscaper = lazyNamed(() => import('./StringEscaper'), 'StringEscaper');
+const UrlParser = lazyNamed(() => import('./UrlParser'), 'UrlParser');
+const DiffViewer = lazyNamed(() => import('./DiffViewer'), 'DiffViewer');
+const XmlTool = lazyNamed(() => import('./FormatTools'), 'XmlTool');
+const YamlTool = lazyNamed(() => import('./FormatTools'), 'YamlTool');
+const CsvTool = lazyNamed(() => import('./FormatTools'), 'CsvTool');
+const MarkdownTool = lazyNamed(() => import('./FormatTools'), 'MarkdownTool');
+const StringManipulatorTool = lazyNamed(() => import('./StringTools'), 'StringManipulatorTool');
+const SlugTool = lazyNamed(() => import('./StringTools'), 'SlugTool');
+const RandomStringTool = lazyNamed(() => import('./StringTools'), 'RandomStringTool');
+const TimestampTool = lazyNamed(() => import('./TimeTools'), 'TimestampTool');
+const DateDiffTool = lazyNamed(() => import('./TimeTools'), 'DateDiffTool');
+const HttpBuilderTool = lazyNamed(() => import('./NetworkTools'), 'HttpBuilderTool');
+const UserAgentTool = lazyNamed(() => import('./NetworkTools'), 'UserAgentTool');
+const IpInfoTool = lazyNamed(() => import('./NetworkTools'), 'IpInfoTool');
+const JsonToTsTool = lazyNamed(() => import('./JsonToTsTool'), 'JsonToTsTool');
+const ImageTools = lazyNamed(() => import('./ImageTools'), 'ImageTools');
+const HeadshotExtractor = lazyNamed(() => import('./HeadshotExtractor'), 'HeadshotExtractor');
+const PdfTools = lazyNamed(() => import('./PdfTools'), 'PdfTools');
+const JewelryCustomizer = lazyDefault(() => import('./JewelryCustomizer'));
+const FaceSwapTool = lazyNamed(() => import('./FaceSwapTool'), 'FaceSwapTool');
+const SmartGeometryTool = lazyDefault(() => import('./SmartGeometry'));
+const HtmlToMarkdownTool = lazyNamed(() => import('./text'), 'HtmlToMarkdownTool');
+const HtmlFormatTool = lazyNamed(() => import('./text'), 'HtmlFormatTool');
+const RmbUppercaseTool = lazyNamed(() => import('./text'), 'RmbUppercaseTool');
+const TimestampPlusTool = lazyNamed(() => import('./time'), 'TimestampPlusTool');
+const WorldClockTool = lazyNamed(() => import('./time'), 'WorldClockTool');
+const FileBase64Tool = lazyNamed(() => import('./files'), 'FileBase64Tool');
+const FileInfoTool = lazyNamed(() => import('./files'), 'FileInfoTool');
+const FileNameExtractorTool = lazyNamed(() => import('./files'), 'FileNameExtractorTool');
+const ImageColorExtractTool = lazyNamed(() => import('./images'), 'ImageColorExtractTool');
+const ImageToBase64Tool = lazyNamed(() => import('./images'), 'ImageToBase64Tool');
+const ImageWatermarkTool = lazyNamed(() => import('./images'), 'ImageWatermarkTool');
+const MimeTypeTool = lazyNamed(() => import('./frontend'), 'MimeTypeTool');
+const SvgToCssTool = lazyNamed(() => import('./frontend'), 'SvgToCssTool');
+const BasicAuthTool = lazyNamed(() => import('./security'), 'BasicAuthTool');
+const CertificateParserTool = lazyNamed(() => import('./security'), 'CertificateParserTool');
+const RandomNumberTool = lazyNamed(() => import('./generators'), 'RandomNumberTool');
 
 export const TOOLS: ToolDef[] = [
   { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.TEXT, component: JsonTool },

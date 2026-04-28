@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { PDFDocument } from 'pdf-lib';
-import * as pdfjsLib from 'pdfjs-dist';
 import { FileText, Merge, Trash2, Image as ImageIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
 
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+const loadPdfJs = async () => {
+  const pdfjsLib = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
+  return pdfjsLib;
+};
 
 export const PdfTools: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'merge' | 'toImage'>('merge');
@@ -60,6 +61,7 @@ const PdfMergeTool: React.FC = () => {
     if (files.length < 2) return;
     setIsMerging(true);
     try {
+      const { PDFDocument } = await import('pdf-lib');
       const mergedPdf = await PDFDocument.create();
 
       for (const file of files) {
@@ -166,6 +168,7 @@ const PdfToImageTool: React.FC = () => {
         setImages([]);
 
         try {
+            const pdfjsLib = await loadPdfJs();
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
             const newImages: string[] = [];

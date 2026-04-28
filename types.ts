@@ -1,3 +1,4 @@
+import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
 export enum Category {
@@ -24,7 +25,7 @@ export interface ToolDef {
   description: string;
   icon: LucideIcon;
   category: Category;
-  component: React.FC;
+  component: React.ElementType;
 }
 
 export type Tab = 'input' | 'output';

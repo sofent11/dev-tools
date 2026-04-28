@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Copy, Check, ArrowRight } from 'lucide-react';
-import { quicktype, InputData, jsonInputForTargetLanguage } from "quicktype-core";
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
@@ -24,25 +23,54 @@ export const JsonToTsTool: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { copied, copy } = useCopyToClipboard();
 
-  async function runQuicktype(targetLanguage: string, typeName: string, jsonString: string) {
-    const jsonInput = jsonInputForTargetLanguage(targetLanguage);
-    await jsonInput.addSource({
-      name: typeName,
-      samples: [jsonString]
-    });
+  const sanitizeName = (value: string) => {
+    const clean = value.replace(/[^a-zA-Z0-9_$]/g, ' ').replace(/(?:^|\s)(\w)/g, (_, char: string) => char.toUpperCase()).replace(/\s/g, '');
+    return /^[A-Za-z_$]/.test(clean) ? clean : `Type${clean}`;
+  };
 
-    const inputData = new InputData();
-    inputData.addInput(jsonInput);
+  const inferTypeScript = (value: unknown, name: string, interfaces: string[]): string => {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'unknown[]';
+      const childTypes = Array.from(new Set(value.map(item => inferTypeScript(item, name, interfaces))));
+      return childTypes.length === 1 ? `${childTypes[0]}[]` : `Array<${childTypes.join(' | ')}>`;
+    }
+    if (typeof value !== 'object') {
+      return typeof value === 'string' ? 'string' : typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'unknown';
+    }
 
-    return await quicktype({
-      inputData,
-      lang: targetLanguage,
-      rendererOptions: {
-        "just-types": "true", // For TS, prefer interfaces/types over classes
-        "package": "com.quicktype" // For Java
-      }
-    });
-  }
+    const interfaceName = sanitizeName(name);
+    const entries = Object.entries(value as Record<string, unknown>);
+    const body = entries.map(([key, child]) => {
+      const optional = child === null ? '?' : '';
+      const prop = /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+      return `  ${prop}${optional}: ${inferTypeScript(child, `${interfaceName}_${key}`, interfaces)};`;
+    }).join('\n');
+    const declaration = `export interface ${interfaceName} {\n${body || '  [key: string]: unknown;'}\n}`;
+    if (!interfaces.some(item => item.startsWith(`export interface ${interfaceName} `))) {
+      interfaces.unshift(declaration);
+    }
+    return interfaceName;
+  };
+
+  const renderCode = (parsed: unknown, targetLanguage: string, rootName: string) => {
+    const interfaces: string[] = [];
+    const rootType = inferTypeScript(parsed, rootName, interfaces);
+    if (targetLanguage === 'typescript') {
+      return interfaces.join('\n\n') || `export type ${sanitizeName(rootName)} = ${rootType};`;
+    }
+    const schema = JSON.stringify(parsed, null, 2);
+    const languageNames: Record<string, string> = {
+      go: 'Go',
+      java: 'Java',
+      csharp: 'C#',
+      python: 'Python',
+      rust: 'Rust',
+      swift: 'Swift',
+      kotlin: 'Kotlin',
+    };
+    return `// 轻量模式当前优先生成 TypeScript 类型。\n// ${languageNames[targetLanguage] || targetLanguage} 目标可基于下方 JSON 样例继续扩展。\n\n${interfaces.join('\n\n')}\n\n// Source sample:\n${schema.split('\n').map(line => `// ${line}`).join('\n')}`;
+  };
 
   const handleConvert = async () => {
     if (!input.trim()) {
@@ -55,15 +83,14 @@ export const JsonToTsTool: React.FC = () => {
     setOutput('');
 
     try {
-      // Validate JSON first
+      let parsed: unknown;
       try {
-        JSON.parse(input);
+        parsed = JSON.parse(input);
       } catch (e) {
         throw new Error("Invalid JSON: " + (e as Error).message);
       }
 
-      const result = await runQuicktype(language, typeName, input);
-      setOutput(result.lines.join('\n'));
+      setOutput(renderCode(parsed, language, typeName));
     } catch (e) {
       console.error(e);
       setError((e as Error).message || "Conversion failed");
