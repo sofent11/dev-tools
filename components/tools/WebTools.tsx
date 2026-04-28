@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ArrowRightLeft, QrCode } from 'lucide-react';
+import QRCode from 'qrcode';
 import { Card, CardContent, CardHeader } from '../ui/Card';
+import { Button } from '../ui/Button';
 
 // --- PX to REM Tool ---
 export const PxRemTool: React.FC = () => {
@@ -73,6 +75,37 @@ export const ColorConverterTool: React.FC = () => {
     const [hex, setHex] = useState('#3b82f6');
     const [rgb, setRgb] = useState({ r: 59, g: 130, b: 246 });
 
+    const hsl = useMemo(() => {
+        const r = rgb.r / 255;
+        const g = rgb.g / 255;
+        const b = rgb.b / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h = 0;
+        let s = 0;
+        const l = (max + min) / 2;
+        if (max !== min) {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r:
+                    h = (g - b) / d + (g < b ? 6 : 0);
+                    break;
+                case g:
+                    h = (b - r) / d + 2;
+                    break;
+                default:
+                    h = (r - g) / d + 4;
+            }
+            h /= 6;
+        }
+        return {
+            h: Math.round(h * 360),
+            s: Math.round(s * 100),
+            l: Math.round(l * 100),
+        };
+    }, [rgb]);
+
     const handleHexChange = (val: string) => {
         setHex(val);
         // Basic hex parsing
@@ -107,7 +140,7 @@ export const ColorConverterTool: React.FC = () => {
                     style={{ backgroundColor: hex }}
                  />
                  
-                 <div className="w-full max-w-lg grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HEX Color</label>
                         <div className="flex items-center gap-2">
@@ -147,6 +180,13 @@ export const ColorConverterTool: React.FC = () => {
                             />
                         </div>
                     </div>
+                    <div className="tool-panel p-4">
+                        <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HSL Color</label>
+                        <div className="space-y-2 font-mono text-sm text-slate-800">
+                            <div>hsl({hsl.h} {hsl.s}% {hsl.l}%)</div>
+                            <div className="text-xs text-slate-500">H {hsl.h} / S {hsl.s}% / L {hsl.l}%</div>
+                        </div>
+                    </div>
                  </div>
             </CardContent>
         </Card>
@@ -155,23 +195,86 @@ export const ColorConverterTool: React.FC = () => {
 
 // --- QR Code Tool ---
 export const QrCodeTool: React.FC = () => {
+    const [mode, setMode] = useState<'text' | 'wifi' | 'vcard' | 'event'>('text');
     const [text, setText] = useState('https://example.com');
+    const [wifi, setWifi] = useState({ ssid: 'MyWifi', password: 'password', encryption: 'WPA' });
+    const [vcard, setVcard] = useState({ name: '张三', phone: '13800000000', email: 'hello@example.com' });
+    const [event, setEvent] = useState({ title: 'Demo Event', start: '20260428T090000', end: '20260428T100000' });
     const [size, setSize] = useState(200);
+    const [qrDataUrl, setQrDataUrl] = useState('');
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
+    const content = useMemo(() => {
+        if (mode === 'wifi') return `WIFI:T:${wifi.encryption};S:${wifi.ssid};P:${wifi.password};;`;
+        if (mode === 'vcard') return `BEGIN:VCARD\nVERSION:3.0\nFN:${vcard.name}\nTEL:${vcard.phone}\nEMAIL:${vcard.email}\nEND:VCARD`;
+        if (mode === 'event') return `BEGIN:VEVENT\nSUMMARY:${event.title}\nDTSTART:${event.start}\nDTEND:${event.end}\nEND:VEVENT`;
+        return text;
+    }, [event, mode, text, vcard, wifi]);
+
+    useEffect(() => {
+        let isActive = true;
+        (content
+            ? QRCode.toDataURL(content, { width: size, margin: 2, errorCorrectionLevel: 'M' })
+            : Promise.resolve('')
+        )
+            .then(url => {
+                if (isActive) setQrDataUrl(url);
+            })
+            .catch(() => {
+                if (isActive) setQrDataUrl('');
+            });
+        return () => {
+            isActive = false;
+        };
+    }, [content, size]);
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="二维码生成器" description="将文本或 URL 转换为二维码图片。" />
+            <CardHeader title="二维码生成器" description="本地生成文本、WiFi、名片和事件二维码。" />
             <CardContent className="flex-1 flex flex-col md:flex-row gap-8 p-6">
                 <div className="flex-1 space-y-4">
+                    <div className="flex flex-wrap gap-2">
+                        {(['text', 'wifi', 'vcard', 'event'] as const).map(item => (
+                            <Button key={item} size="sm" variant={mode === item ? 'primary' : 'secondary'} onClick={() => setMode(item)}>
+                                {item === 'text' ? '文本' : item === 'wifi' ? 'WiFi' : item === 'vcard' ? '名片' : '事件'}
+                            </Button>
+                        ))}
+                    </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">内容 (文本 / URL)</label>
-                        <textarea 
-                            value={text}
-                            onChange={e => setText(e.target.value)}
-                            className="w-full h-32 p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
-                        />
+                        {mode === 'text' && (
+                            <>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">内容 (文本 / URL)</label>
+                                <textarea
+                                    value={text}
+                                    onChange={e => setText(e.target.value)}
+                                    className="w-full h-32 p-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
+                                />
+                            </>
+                        )}
+                        {mode === 'wifi' && (
+                            <div className="grid gap-3">
+                                <input className="p-2 border rounded-lg" placeholder="SSID" value={wifi.ssid} onChange={e => setWifi({ ...wifi, ssid: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder="密码" value={wifi.password} onChange={e => setWifi({ ...wifi, password: e.target.value })} />
+                                <select className="p-2 border rounded-lg bg-white" value={wifi.encryption} onChange={e => setWifi({ ...wifi, encryption: e.target.value })}>
+                                    <option>WPA</option>
+                                    <option>WEP</option>
+                                    <option>nopass</option>
+                                </select>
+                            </div>
+                        )}
+                        {mode === 'vcard' && (
+                            <div className="grid gap-3">
+                                <input className="p-2 border rounded-lg" placeholder="姓名" value={vcard.name} onChange={e => setVcard({ ...vcard, name: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder="电话" value={vcard.phone} onChange={e => setVcard({ ...vcard, phone: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder="邮箱" value={vcard.email} onChange={e => setVcard({ ...vcard, email: e.target.value })} />
+                            </div>
+                        )}
+                        {mode === 'event' && (
+                            <div className="grid gap-3">
+                                <input className="p-2 border rounded-lg" placeholder="标题" value={event.title} onChange={e => setEvent({ ...event, title: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder="开始 YYYYMMDDTHHmmss" value={event.start} onChange={e => setEvent({ ...event, start: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder="结束 YYYYMMDDTHHmmss" value={event.end} onChange={e => setEvent({ ...event, end: e.target.value })} />
+                            </div>
+                        )}
                     </div>
                     <div>
                          <label className="block text-sm font-medium text-slate-700 mb-1">尺寸 ({size}px)</label>
@@ -187,8 +290,8 @@ export const QrCodeTool: React.FC = () => {
                     </div>
                 </div>
                 <div className="tool-panel flex min-h-[300px] flex-1 items-center justify-center">
-                    {text ? (
-                        <img src={qrUrl} alt="QR Code" className="mix-blend-multiply" />
+                    {qrDataUrl ? (
+                        <img src={qrDataUrl} alt="QR Code" className="mix-blend-multiply" />
                     ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                             <QrCode className="w-12 h-12 mb-2 opacity-20"/>

@@ -20,6 +20,7 @@ export const JwtTool: React.FC = () => {
   // Derived state during render
   let header = '';
   let payload = '';
+  let claims: { label: string; value: string }[] = [];
   let error: string | null = null;
 
   if (token) {
@@ -37,6 +38,16 @@ export const JwtTool: React.FC = () => {
 
       header = decode(parts[0]);
       payload = decode(parts[1]);
+      const payloadObject = JSON.parse(payload);
+      const toDate = (value: unknown) => typeof value === 'number' ? new Date(value * 1000).toLocaleString() : '';
+      claims = [
+        payloadObject.iss ? { label: 'Issuer', value: String(payloadObject.iss) } : null,
+        payloadObject.sub ? { label: 'Subject', value: String(payloadObject.sub) } : null,
+        payloadObject.aud ? { label: 'Audience', value: Array.isArray(payloadObject.aud) ? payloadObject.aud.join(', ') : String(payloadObject.aud) } : null,
+        payloadObject.iat ? { label: 'Issued At', value: toDate(payloadObject.iat) } : null,
+        payloadObject.nbf ? { label: 'Not Before', value: toDate(payloadObject.nbf) } : null,
+        payloadObject.exp ? { label: 'Expires At', value: `${toDate(payloadObject.exp)}${Date.now() > payloadObject.exp * 1000 ? '（已过期）' : '（未过期）'}` } : null,
+      ].filter(Boolean) as { label: string; value: string }[];
     } catch {
       error = "Invalid JWT Token";
     }
@@ -71,6 +82,17 @@ export const JwtTool: React.FC = () => {
             </pre>
           </div>
         </div>
+        {claims.length > 0 && (
+          <div className="tool-panel grid gap-3 p-4 md:grid-cols-2">
+            {claims.map(claim => (
+              <div key={claim.label}>
+                <div className="text-xs font-semibold uppercase text-slate-500">{claim.label}</div>
+                <div className="break-all text-sm text-slate-900">{claim.value}</div>
+              </div>
+            ))}
+            <div className="md:col-span-2 text-xs text-slate-500">签名未在浏览器本地校验；此工具只解码 Header 和 Payload。</div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
