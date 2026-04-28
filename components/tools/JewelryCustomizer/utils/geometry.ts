@@ -688,8 +688,28 @@ const safeCleanDedupe = (shape: Shape, fallback: Shape): Shape => {
   }
 };
 
+const normalizeClosedShape = (shape: Shape, fallback: Shape, scaleUp: number): Shape => {
+  try {
+    const normalized = shape.offset(0, {
+      jointType: 'jtRound',
+      endType: 'etClosedPolygon',
+      roundPrecision: 0.25 * scaleUp,
+    });
+    return normalized.paths.length > 0 ? safeCleanDedupe(normalized, fallback) : safeCleanDedupe(shape, fallback);
+  } catch {
+    try {
+      const normalized = shape.union(shape);
+      return normalized.paths.length > 0 ? safeCleanDedupe(normalized, fallback) : safeCleanDedupe(shape, fallback);
+    } catch {
+      return safeCleanDedupe(shape, fallback);
+    }
+  }
+};
+
 const componentArea = (shape: Shape): number =>
   ((shape.paths as IntPoint[][]) ?? []).reduce((total, path) => total + Math.abs(polygonArea(path)), 0);
+
+const textComponentCount = (shape: Shape): number => getTextComponents(shape).length;
 
 const pointClosestTo = (points: IntPoint[], target: IntPoint, yMode?: 'min' | 'max'): IntPoint | null => {
   if (points.length === 0) return null;
@@ -709,7 +729,9 @@ const pointClosestTo = (points: IntPoint[], target: IntPoint, yMode?: 'min' | 'm
 const unionBridge = (merged: Shape, bridgeShape: Shape | null): Shape | null => {
   if (!bridgeShape || bridgeShape.paths.length === 0) return null;
   const unionResult = merged.union(bridgeShape);
-  return unionResult.paths.length > 0 ? safeCleanDedupe(unionResult, merged) : null;
+  if (unionResult.paths.length === 0) return null;
+  const next = safeCleanDedupe(unionResult, merged);
+  return textComponentCount(next) < textComponentCount(merged) ? next : null;
 };
 
 const glyphsAlreadyConnected = (left: GlyphGeometry, right: GlyphGeometry): boolean => {
@@ -871,17 +893,21 @@ const applyNaturalGlyphBridges = (
   return { shape: merged, count };
 };
 
-const applyConstrainedFallbackBridges = (
+const buildDirectBridgeShape = (start: IntPoint, end: IntPoint, width: number): Shape | null => {
+  const bridge = buildCapsuleBridge(start, end, width);
+  return bridge.length >= 3 ? new Shape([bridge], true, false, false, true) : null;
+};
+
+const applyGuaranteedFallbackBridges = (
   initial: Shape,
   bridgeWidth: number,
-  maxGap: number,
-  scaleUp: number
+  maxGap: number
 ): { shape: Shape; count: number } => {
   let merged = initial;
   let count = 0;
-  const fallbackMaxGap = Math.min(maxGap, bridgeWidth * 6);
+  const softMaxGap = Math.max(maxGap, bridgeWidth * 6);
 
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 48; attempt++) {
     const parts = getTextComponents(merged);
     if (parts.length <= 1) break;
 
@@ -896,10 +922,10 @@ const applyConstrainedFallbackBridges = (
       if (!best || pair.dist2 < best.dist2) best = pair;
     }
 
-    if (!best || best.dist2 > fallbackMaxGap * fallbackMaxGap) break;
-    const start: BridgeCandidate = { point: best.a, tangent: { x: 1, y: 0 }, scoreBase: 0 };
-    const end: BridgeCandidate = { point: best.b, tangent: { x: 1, y: 0 }, scoreBase: 0 };
-    const next = unionBridge(merged, buildSmoothBridgeShape(start, end, bridgeWidth, scaleUp));
+    if (!best) break;
+    const gap = Math.sqrt(best.dist2);
+    const directWidth = gap > softMaxGap ? Math.max(bridgeWidth, gap * 0.18) : bridgeWidth;
+    const next = unionBridge(merged, buildDirectBridgeShape(best.a, best.b, directWidth));
     if (!next) break;
 
     merged = next;
@@ -969,8 +995,8 @@ export const generateGeometry = (
   // Just apply offset directly to the shape
   let merged = shape;
   
-  // Try to clean up, but fall back if result is empty
-  merged = safeCleanDedupe(shape, shape);
+  // Normalize raw font contours into closed components before connectivity repair.
+  merged = normalizeClosedShape(shape, shape, scaleUp);
   
   const componentsBefore = getTextComponents(merged).length;
 
@@ -981,9 +1007,8 @@ export const generateGeometry = (
       const tighten = (-maxTightenUnits * i) / steps;
       const candidateLetterSpacingUnits = baseLetterSpacingUnits + tighten;
       const candidate = tryBuildShape(candidateLetterSpacingUnits);
-      let candidateMerged = candidate.shape.clean(1).removeDuplicates();
-      if (candidateMerged.paths.length === 0) candidateMerged = candidate.shape;
-      if (candidateMerged.separateShapes().length <= 1) {
+      const candidateMerged = normalizeClosedShape(candidate.shape, candidate.shape, scaleUp);
+      if (textComponentCount(candidateMerged) <= 1) {
         appliedLetterSpacingUnits = candidateLetterSpacingUnits;
         originalSvg = candidate.originalSvg;
         shape = candidate.shape;
@@ -1008,17 +1033,18 @@ export const generateGeometry = (
   merged = naturalRepair.shape;
   usedBridgeCount += naturalRepair.count;
 
-  // 4.5) Hard guarantee: if still disconnected, use short constrained fallback joins only.
+  // 4.5) Hard guarantee: keep joining the remaining visible text components until
+  // the design is one manufacturable piece.
   const forceBridge = config.forceBridgeIfStillDisconnected ?? true;
-  if (forceBridge && naturalRepair.count === 0 && dotRepair.count === 0) {
-    const fallbackRepair = applyConstrainedFallbackBridges(merged, bridgeWidth, maxGap, scaleUp);
+  if (forceBridge && textComponentCount(merged) > 1) {
+    const fallbackRepair = applyGuaranteedFallbackBridges(merged, bridgeWidth, maxGap);
     merged = fallbackRepair.shape;
     usedBridgeCount += fallbackRepair.count;
   }
 
   // 4.8) Last resort: morphological closing to merge “almost touching” parts.
   // This helps when Clipper considers a bridge as point-touch and still keeps components separate.
-  if (forceBridge && merged.paths.length > 0 && getTextComponents(merged).length > 1) {
+  if (forceBridge && merged.paths.length > 0 && textComponentCount(merged) > 1) {
     try {
       const closeR = Math.max(bridgeWidth * 0.6, 20);
       const grown = merged.offset(closeR, {
@@ -1091,10 +1117,7 @@ export const generateGeometry = (
     polygons: finalPolygons,
     diagnostics: {
       componentsBeforeRepair: componentsBefore,
-      componentsAfterRepair: (() => {
-        const nonEmptyLines = new Set(glyphs.filter((glyph) => glyph.bounds).map((glyph) => glyph.lineIndex)).size;
-        return nonEmptyLines === 1 && naturalRepair.count > 0 ? 1 : getTextComponents(merged).length;
-      })(),
+      componentsAfterRepair: textComponentCount(merged),
       appliedLetterSpacingMm: appliedLetterSpacingUnits / unitsPerMm,
       usedBridgeCount,
     },
