@@ -22,7 +22,7 @@ const AVAILABLE_FONTS = [
 export const JewelryCustomizer: React.FC = () => {
   // State
   const [selectedFont, setSelectedFont] = useState(AVAILABLE_FONTS[0]);
-  const [text, setText] = useState('ALVIN');
+  const [text, setText] = useState('Fantistic');
   const [fontSize, setFontSize] = useState(100);
   const [offsetMm, setOffsetMm] = useState(0.2);
   const [letterSpacingMm, setLetterSpacingMm] = useState(0);
@@ -33,7 +33,6 @@ export const JewelryCustomizer: React.FC = () => {
   const [autoTightenMaxMm, setAutoTightenMaxMm] = useState(1.5);
   // Default to ~96DPI px/mm for a more intuitive “mm” mapping in preview space.
   const [unitsPerMm, setUnitsPerMm] = useState(3.78);
-  const [previewMode, setPreviewMode] = useState<'visual' | 'manufacturing'>('visual');
   const [geometry, setGeometry] = useState<GeometryResult | null>(null);
   
   const [position, setPosition] = useState({ x: 300, y: 300 });
@@ -165,8 +164,6 @@ export const JewelryCustomizer: React.FC = () => {
             setAutoTightenMaxMm={setAutoTightenMaxMm}
             unitsPerMm={unitsPerMm}
             setUnitsPerMm={setUnitsPerMm}
-            previewMode={previewMode}
-            setPreviewMode={setPreviewMode}
             onExport={handleExport}
             availableFonts={AVAILABLE_FONTS}
             selectedFont={selectedFont}
@@ -193,13 +190,10 @@ export const JewelryCustomizer: React.FC = () => {
               <CanvasStage
                 width={800} // Ideally dynamic based on container
                 height={600}
-                text={text}
-                fontSize={fontSize}
                 position={position}
                 rotation={rotation}
                 scale={scale}
                 geometry={geometry}
-                previewMode={previewMode}
                 onTransformChange={(attrs) => {
                   setPosition({ x: attrs.x, y: attrs.y });
                   setRotation(attrs.rotation);
@@ -209,7 +203,7 @@ export const JewelryCustomizer: React.FC = () => {
             )}
           </div>
           <div className="mt-2 text-xs text-slate-400 text-center">
-            {previewMode === 'visual' ? '可拖拽文字 • 滚轮缩放' : '红色轮廓为最终切割路径'}
+            最终预览 • 可拖拽 • 滚轮缩放
           </div>
         </div>
       </div>

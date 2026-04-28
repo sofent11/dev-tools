@@ -66,6 +66,28 @@ type IntPoint = { X: number; Y: number };
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 type Bounds = { left: number; right: number; top: number; bottom: number };
+type Vector = { x: number; y: number };
+
+interface GlyphGeometry {
+  char: string;
+  lineIndex: number;
+  charIndex: number;
+  baselineY: number;
+  advance: number;
+  isWhitespace: boolean;
+  rawPolys: number[][][];
+  scaledPaths: IntPoint[][];
+  shape: Shape | null;
+  bounds: Bounds | null;
+}
+
+interface TextLayout {
+  rawPolys: number[][][];
+  scaledPolys: IntPoint[][];
+  originalSvg: string;
+  shape: Shape;
+  glyphs: GlyphGeometry[];
+}
 
 const boundsOf = (poly: IntPoint[]): Bounds => {
   let left = Number.POSITIVE_INFINITY;
@@ -83,6 +105,19 @@ const boundsOf = (poly: IntPoint[]): Bounds => {
 
 const boundsContains = (outer: Bounds, inner: Bounds) =>
   outer.left <= inner.left && outer.right >= inner.right && outer.top <= inner.top && outer.bottom >= inner.bottom;
+
+const boundsWidth = (bounds: Bounds) => Math.max(1, bounds.right - bounds.left);
+const boundsHeight = (bounds: Bounds) => Math.max(1, bounds.bottom - bounds.top);
+const boundsCenter = (bounds: Bounds): IntPoint => ({
+  X: (bounds.left + bounds.right) / 2,
+  Y: (bounds.top + bounds.bottom) / 2,
+});
+
+const unionBounds = (paths: IntPoint[][]): Bounds | null => {
+  const points = paths.flat();
+  if (points.length === 0) return null;
+  return boundsOf(points);
+};
 
 // Signed area (positive/negative depends on winding). Use abs(area) for size.
 const polygonArea = (poly: IntPoint[]): number => {
@@ -172,38 +207,6 @@ const getTextComponents = (shape: Shape): Shape[] => {
   return Array.from(groups.values()).map((groupPaths) => new Shape(groupPaths, true, false, false, true));
 };
 
-const buildTextPath = (
-  font: opentype.Font,
-  text: string,
-  size: number,
-  letterSpacingUnits: number
-): opentype.Path => {
-  const path = new opentype.Path();
-  const lines = text.replace(/\r\n/g, '\n').split('\n');
-  const lineHeight = size * 1.2;
-
-  // Font coordinate: Y goes up (baseline at 0, ascender positive).
-  // We'll build the path in font coords, then flip Y in pathCommandsToPolygons.
-  let y = size; // Start at ascender height so text is below y=0 after flip
-  for (const line of lines) {
-    let x = 0;
-    const glyphs = font.stringToGlyphs(line);
-    for (let i = 0; i < glyphs.length; i++) {
-      const glyph = glyphs[i];
-      const glyphPath = glyph.getPath(x, y, size);
-      path.extend(glyphPath);
-
-      const advance = (glyph.advanceWidth ?? font.unitsPerEm) * (size / font.unitsPerEm);
-      const nextGlyph = glyphs[i + 1];
-      const kerning = nextGlyph ? font.getKerningValue(glyph, nextGlyph) * (size / font.unitsPerEm) : 0;
-      x += advance + kerning + letterSpacingUnits;
-    }
-    y += lineHeight;
-  }
-
-  return path;
-};
-
 // Convert Opentype Path to polygon point arrays (in the same coordinate units as the path)
 const pathCommandsToPolygons = (path: opentype.Path, toleranceUnits: number): number[][][] => {
   const polygons: number[][][] = [];
@@ -211,16 +214,14 @@ const pathCommandsToPolygons = (path: opentype.Path, toleranceUnits: number): nu
 
   let lastX = 0;
   let lastY = 0;
-  // Flip Y: font coords are Y-up, canvas is Y-down.
   const addPoint = (x: number, y: number) => {
-    const flippedY = -y; // Flip Y axis
     if (currentPoly.length === 0) {
-      currentPoly.push([x, flippedY]);
+      currentPoly.push([x, y]);
       return;
     }
     const last = currentPoly[currentPoly.length - 1];
-    if (Math.abs(last[0] - x) > 1e-3 || Math.abs(last[1] - flippedY) > 1e-3) {
-      currentPoly.push([x, flippedY]);
+    if (Math.abs(last[0] - x) > 1e-3 || Math.abs(last[1] - y) > 1e-3) {
+      currentPoly.push([x, y]);
     }
   };
 
@@ -341,6 +342,75 @@ const polygonsToPathData = (polygons: number[][][], decimalPlaces: number = 2): 
     .join(' ');
 };
 
+const buildTextLayout = (
+  font: opentype.Font,
+  text: string,
+  size: number,
+  letterSpacingUnits: number,
+  flattenToleranceUnits: number,
+  scaleUp: number
+): TextLayout => {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const lineHeight = size * 1.2;
+  const glyphScale = size / font.unitsPerEm;
+  const glyphs: GlyphGeometry[] = [];
+  const rawPolys: number[][][] = [];
+  const scaledPolys: IntPoint[][] = [];
+
+  // Keep opentype.js glyph coordinates as SVG coordinates so preview/export are not mirrored.
+  let y = size;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const chars = Array.from(lines[lineIndex]);
+    const lineGlyphs = chars.map((char) => font.charToGlyph(char));
+    let x = 0;
+
+    for (let charIndex = 0; charIndex < chars.length; charIndex++) {
+      const char = chars[charIndex];
+      const glyph = lineGlyphs[charIndex];
+      const glyphPath = glyph.getPath(x, y, size);
+      const glyphRawPolys = pathCommandsToPolygons(glyphPath, flattenToleranceUnits);
+      const glyphScaledPaths = glyphRawPolys
+        .filter((poly) => poly.length >= 3)
+        .map((poly) => poly.map((p) => ({ X: Math.round(p[0] * scaleUp), Y: Math.round(p[1] * scaleUp) })));
+      const glyphShape = glyphScaledPaths.length > 0
+        ? new Shape(glyphScaledPaths, true, false, false, true)
+        : null;
+
+      rawPolys.push(...glyphRawPolys);
+      scaledPolys.push(...glyphScaledPaths);
+
+      const advance = (glyph.advanceWidth ?? font.unitsPerEm) * glyphScale;
+      const nextGlyph = lineGlyphs[charIndex + 1];
+      const kerning = nextGlyph ? font.getKerningValue(glyph, nextGlyph) * glyphScale : 0;
+      glyphs.push({
+        char,
+        lineIndex,
+        charIndex,
+        baselineY: y * scaleUp,
+        advance: (advance + kerning + letterSpacingUnits) * scaleUp,
+        isWhitespace: /\s/.test(char),
+        rawPolys: glyphRawPolys,
+        scaledPaths: glyphScaledPaths,
+        shape: glyphShape,
+        bounds: glyphScaledPaths.length > 0 ? unionBounds(glyphScaledPaths) : null,
+      });
+
+      x += advance + kerning + letterSpacingUnits;
+    }
+
+    y += lineHeight;
+  }
+
+  const shape = new Shape(scaledPolys, true, false, false, true);
+  return {
+    rawPolys,
+    scaledPolys,
+    originalSvg: polygonsToPathData(rawPolys, 2),
+    shape,
+    glyphs,
+  };
+};
+
 const flattenShapePoints = (shape: Shape): IntPoint[] => {
   const points: IntPoint[] = [];
   for (const path of shape.paths as IntPoint[][]) {
@@ -355,6 +425,193 @@ const samplePoints = (points: IntPoint[], maxSamples: number): IntPoint[] => {
   const out: IntPoint[] = [];
   for (let i = 0; i < points.length; i += step) out.push(points[i]);
   return out;
+};
+
+const normalize = (x: number, y: number): Vector => {
+  const len = Math.hypot(x, y);
+  if (!Number.isFinite(len) || len < 1e-6) return { x: 1, y: 0 };
+  return { x: x / len, y: y / len };
+};
+
+const getOuterPaths = (paths: IntPoint[][]): IntPoint[][] => {
+  const polys = paths.filter((p) => p.length >= 3);
+  const bbs = polys.map(boundsOf);
+  const absAreas = polys.map((p) => Math.abs(polygonArea(p)));
+  return polys.filter((poly, i) => {
+    for (let j = 0; j < polys.length; j++) {
+      if (i === j) continue;
+      if (absAreas[j] <= absAreas[i]) continue;
+      if (!boundsContains(bbs[j], bbs[i])) continue;
+      if (pointInPolygon(poly[0], polys[j])) return false;
+    }
+    return true;
+  });
+};
+
+const getGlyphBodyPaths = (glyph: GlyphGeometry): IntPoint[][] => {
+  if (!glyph.bounds) return [];
+  const outerPaths = getOuterPaths(glyph.scaledPaths);
+  if (outerPaths.length <= 1) return outerPaths;
+
+  const largestArea = Math.max(...outerPaths.map((path) => Math.abs(polygonArea(path))));
+  const glyphHeight = boundsHeight(glyph.bounds);
+  const bodyPaths = outerPaths.filter((path) => {
+    const bounds = boundsOf(path);
+    const area = Math.abs(polygonArea(path));
+    const isSmallUpperMark = area < largestArea * 0.18 && bounds.bottom < glyph.bounds!.top + glyphHeight * 0.46;
+    return !isSmallUpperMark;
+  });
+
+  return bodyPaths.length > 0 ? bodyPaths : outerPaths;
+};
+
+const tangentAt = (path: IntPoint[], index: number): Vector => {
+  const prev = path[(index - 2 + path.length) % path.length];
+  const next = path[(index + 2) % path.length];
+  return normalize(next.X - prev.X, next.Y - prev.Y);
+};
+
+interface BridgeCandidate {
+  point: IntPoint;
+  tangent: Vector;
+  scoreBase: number;
+}
+
+const collectBridgeCandidates = (
+  glyph: GlyphGeometry,
+  side: 'exit' | 'entry',
+  paths: IntPoint[][]
+): BridgeCandidate[] => {
+  if (!glyph.bounds || paths.length === 0) return [];
+  const bounds = glyph.bounds;
+  const width = boundsWidth(bounds);
+  const height = boundsHeight(bounds);
+  const targetY = clamp(glyph.baselineY - height * 0.28, bounds.top + height * 0.38, bounds.bottom - height * 0.12);
+
+  const collect = (zoneRatio: number) => {
+    const candidates: BridgeCandidate[] = [];
+    for (const path of paths) {
+      const step = Math.max(1, Math.floor(path.length / 90));
+      for (let i = 0; i < path.length; i += step) {
+        const point = path[i];
+        const inZone = side === 'exit'
+          ? point.X >= bounds.left + width * zoneRatio
+          : point.X <= bounds.left + width * (1 - zoneRatio);
+        if (!inZone) continue;
+
+        const yNorm = Math.abs(point.Y - targetY) / height;
+        const edgeNorm = side === 'exit'
+          ? (bounds.right - point.X) / width
+          : (point.X - bounds.left) / width;
+        const upperPenalty = point.Y < bounds.top + height * 0.25 ? 1 : 0;
+        const tangent = tangentAt(path, i);
+        const horizontalPenalty = 1 - Math.abs(tangent.x);
+        candidates.push({
+          point,
+          tangent,
+          scoreBase: yNorm * 2.8 + Math.max(0, edgeNorm) * 1.7 + upperPenalty * 2.3 + horizontalPenalty * 0.25,
+        });
+      }
+    }
+    return candidates.sort((a, b) => a.scoreBase - b.scoreBase).slice(0, 48);
+  };
+
+  return collect(0.56).length >= 6 ? collect(0.56) : collect(0.42).length >= 6 ? collect(0.42) : collect(0);
+};
+
+const sampleCubicCenterline = (
+  p0: IntPoint,
+  p1: IntPoint,
+  p2: IntPoint,
+  p3: IntPoint,
+  steps: number
+): IntPoint[] => {
+  const points: IntPoint[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    const x =
+      mt * mt * mt * p0.X +
+      3 * mt * mt * t * p1.X +
+      3 * mt * t * t * p2.X +
+      t * t * t * p3.X;
+    const y =
+      mt * mt * mt * p0.Y +
+      3 * mt * mt * t * p1.Y +
+      3 * mt * t * t * p2.Y +
+      t * t * t * p3.Y;
+    const next = { X: Math.round(x), Y: Math.round(y) };
+    const prev = points[points.length - 1];
+    if (!prev || prev.X !== next.X || prev.Y !== next.Y) points.push(next);
+  }
+  return points;
+};
+
+const buildOpenStrokeShape = (centerline: IntPoint[], width: number, scaleUp: number): Shape | null => {
+  if (centerline.length < 2) return null;
+  try {
+    const stroke = new Shape([centerline], false).offset(width / 2, {
+      jointType: 'jtRound',
+      endType: 'etOpenRound',
+      roundPrecision: 0.18 * scaleUp,
+    });
+    return stroke.paths.length > 0 ? stroke : null;
+  } catch {
+    const bridge = buildCapsuleBridge(centerline[0], centerline[centerline.length - 1], width);
+    return bridge.length >= 3 ? new Shape([bridge], true, false, false, true) : null;
+  }
+};
+
+const buildSmoothBridgeShape = (
+  start: BridgeCandidate,
+  end: BridgeCandidate,
+  width: number,
+  scaleUp: number,
+  preferredLift = 0
+): Shape | null => {
+  const dx = Math.max(end.point.X - start.point.X, width * 1.5);
+  const dy = end.point.Y - start.point.Y;
+  const overlap = Math.max(width * 0.7, 18);
+  const startDir = normalize(Math.max(dx, 1), dy * 0.2);
+  const endDir = normalize(Math.max(dx, 1), dy * 0.2);
+  const p0 = {
+    X: Math.round(start.point.X - startDir.x * overlap),
+    Y: Math.round(start.point.Y - startDir.y * overlap),
+  };
+  const p3 = {
+    X: Math.round(end.point.X + endDir.x * overlap),
+    Y: Math.round(end.point.Y + endDir.y * overlap),
+  };
+
+  const lift = Math.min(Math.max(dx * 0.06 + preferredLift, 0), width * 1.2);
+  const midY = Math.min(start.point.Y, end.point.Y) - lift;
+  const c1 = {
+    X: Math.round(start.point.X + dx * 0.42),
+    Y: Math.round(start.point.Y + (midY - start.point.Y) * 0.28),
+  };
+  const c2 = {
+    X: Math.round(end.point.X - dx * 0.42),
+    Y: Math.round(end.point.Y + (midY - end.point.Y) * 0.28),
+  };
+
+  const steps = clamp(Math.ceil(Math.hypot(dx, dy) / Math.max(width * 0.45, 1)), 12, 36);
+  return buildOpenStrokeShape(sampleCubicCenterline(p0, c1, c2, p3, steps), width, scaleUp);
+};
+
+const buildVerticalBridgeShape = (
+  start: IntPoint,
+  end: IntPoint,
+  width: number,
+  scaleUp: number
+): Shape | null => {
+  const dy = end.Y - start.Y;
+  const overlap = Math.max(width * 0.65, 18);
+  const p0 = { X: Math.round(start.X), Y: Math.round(start.Y - Math.sign(dy || 1) * overlap) };
+  const p3 = { X: Math.round(end.X), Y: Math.round(end.Y + Math.sign(dy || 1) * overlap) };
+  const c1 = { X: Math.round(start.X), Y: Math.round(start.Y + dy * 0.35) };
+  const c2 = { X: Math.round(end.X), Y: Math.round(end.Y - dy * 0.35) };
+  const steps = clamp(Math.ceil(Math.abs(dy) / Math.max(width * 0.45, 1)), 8, 24);
+  return buildOpenStrokeShape(sampleCubicCenterline(p0, c1, c2, p3, steps), width, scaleUp);
 };
 
 const findClosestPointPair = (a: Shape, b: Shape): { a: IntPoint; b: IntPoint; dist2: number } | null => {
@@ -431,6 +688,227 @@ const safeCleanDedupe = (shape: Shape, fallback: Shape): Shape => {
   }
 };
 
+const componentArea = (shape: Shape): number =>
+  ((shape.paths as IntPoint[][]) ?? []).reduce((total, path) => total + Math.abs(polygonArea(path)), 0);
+
+const pointClosestTo = (points: IntPoint[], target: IntPoint, yMode?: 'min' | 'max'): IntPoint | null => {
+  if (points.length === 0) return null;
+  let best = points[0];
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    const yBias = yMode === 'min' ? point.Y * 0.01 : yMode === 'max' ? -point.Y * 0.01 : 0;
+    const score = Math.abs(point.X - target.X) * 1.8 + Math.abs(point.Y - target.Y) + yBias;
+    if (score < bestScore) {
+      best = point;
+      bestScore = score;
+    }
+  }
+  return best;
+};
+
+const unionBridge = (merged: Shape, bridgeShape: Shape | null): Shape | null => {
+  if (!bridgeShape || bridgeShape.paths.length === 0) return null;
+  const unionResult = merged.union(bridgeShape);
+  return unionResult.paths.length > 0 ? safeCleanDedupe(unionResult, merged) : null;
+};
+
+const glyphsAlreadyConnected = (left: GlyphGeometry, right: GlyphGeometry): boolean => {
+  if (!left.shape || !right.shape || !left.bounds || !right.bounds) return false;
+  if (right.bounds.left - left.bounds.right <= 0) return true;
+  try {
+    const unionResult = left.shape.union(right.shape);
+    return unionResult.paths.length > 0 && getTextComponents(safeCleanDedupe(unionResult, unionResult)).length <= 1;
+  } catch {
+    return false;
+  }
+};
+
+const applyDotBridges = (
+  initial: Shape,
+  glyphs: GlyphGeometry[],
+  bridgeWidth: number,
+  maxGap: number,
+  scaleUp: number
+): { shape: Shape; count: number } => {
+  let merged = initial;
+  let count = 0;
+
+  for (const glyph of glyphs) {
+    if (!/[ij]/i.test(glyph.char)) continue;
+    if (!glyph.shape || !glyph.bounds) continue;
+    const components = getTextComponents(glyph.shape);
+    if (components.length <= 1) continue;
+
+    const parts = components
+      .map((shape) => ({ shape, bounds: shape.shapeBounds() as Bounds, area: componentArea(shape) }))
+      .filter((part) => part.area > 0);
+    if (parts.length <= 1) continue;
+
+    const main = parts.reduce((best, part) => (part.area > best.area ? part : best), parts[0]);
+    const glyphHeight = boundsHeight(glyph.bounds);
+    for (const part of parts) {
+      if (part === main) continue;
+      const isSmallUpperMark = part.area < main.area * 0.42 && part.bounds.bottom < glyph.bounds.top + glyphHeight * 0.52;
+      if (!isSmallUpperMark) continue;
+
+      const upperTarget = { X: boundsCenter(part.bounds).X, Y: part.bounds.bottom };
+      const lowerTarget = { X: boundsCenter(part.bounds).X, Y: main.bounds.top };
+      const upperPoint = pointClosestTo(flattenShapePoints(part.shape), upperTarget, 'max');
+      const lowerPoint = pointClosestTo(flattenShapePoints(main.shape), lowerTarget, 'min');
+      if (!upperPoint || !lowerPoint) continue;
+      if (Math.hypot(lowerPoint.X - upperPoint.X, lowerPoint.Y - upperPoint.Y) > Math.max(maxGap, bridgeWidth * 4.5)) continue;
+
+      const next = unionBridge(merged, buildVerticalBridgeShape(upperPoint, lowerPoint, bridgeWidth * 0.9, scaleUp));
+      if (next) {
+        merged = next;
+        count++;
+      }
+    }
+  }
+
+  return { shape: merged, count };
+};
+
+const naturalPairScore = (
+  left: GlyphGeometry,
+  right: GlyphGeometry,
+  start: BridgeCandidate,
+  end: BridgeCandidate
+): number => {
+  const height = Math.max(boundsHeight(left.bounds!), boundsHeight(right.bounds!));
+  const dx = end.point.X - start.point.X;
+  const dy = end.point.Y - start.point.Y;
+  const dist = Math.hypot(dx, dy);
+  const desiredDy = -Math.max(dx, 0) * 0.045;
+  const backwardsPenalty = dx < 0 ? Math.abs(dx) / height * 5 : 0;
+  const yPenalty = Math.abs(dy - desiredDy) / height * 2.8;
+  const lengthPenalty = dist / height * 0.58;
+  const baseline = (left.baselineY + right.baselineY) / 2;
+  const baselineTarget = baseline - height * 0.28;
+  const baselinePenalty = (Math.abs(start.point.Y - baselineTarget) + Math.abs(end.point.Y - baselineTarget)) / height;
+  return start.scoreBase + end.scoreBase + yPenalty + lengthPenalty + baselinePenalty * 0.7 + backwardsPenalty;
+};
+
+const findNaturalBridge = (
+  left: GlyphGeometry,
+  right: GlyphGeometry,
+  bridgeWidth: number,
+  maxGap: number,
+  scaleUp: number
+): Shape | null => {
+  if (!left.bounds || !right.bounds || !left.shape || !right.shape) return null;
+  const gap = right.bounds.left - left.bounds.right;
+  if (gap <= bridgeWidth * 0.12 || gap > maxGap) return null;
+  if (glyphsAlreadyConnected(left, right)) return null;
+
+  const leftPaths = getGlyphBodyPaths(left);
+  const rightPaths = getGlyphBodyPaths(right);
+  const exits = collectBridgeCandidates(left, 'exit', leftPaths);
+  const entries = collectBridgeCandidates(right, 'entry', rightPaths);
+  if (exits.length === 0 || entries.length === 0) return null;
+
+  let best: { start: BridgeCandidate; end: BridgeCandidate; score: number } | null = null;
+  for (const start of exits) {
+    for (const end of entries) {
+      const dx = end.point.X - start.point.X;
+      const dist = Math.hypot(dx, end.point.Y - start.point.Y);
+      if (dx < -bridgeWidth * 1.5) continue;
+      if (dist > Math.max(maxGap + bridgeWidth * 2, bridgeWidth * 5)) continue;
+      const score = naturalPairScore(left, right, start, end);
+      if (!best || score < best.score) best = { start, end, score };
+    }
+  }
+
+  return best ? buildSmoothBridgeShape(best.start, best.end, bridgeWidth, scaleUp, bridgeWidth * 0.1) : null;
+};
+
+const glyphBridgePairs = (glyphs: GlyphGeometry[], maxGap: number): Array<[GlyphGeometry, GlyphGeometry]> => {
+  const pairs: Array<[GlyphGeometry, GlyphGeometry]> = [];
+  const lineIndexes = Array.from(new Set(glyphs.map((glyph) => glyph.lineIndex)));
+  for (const lineIndex of lineIndexes) {
+    const lineGlyphs = glyphs
+      .filter((glyph) => glyph.lineIndex === lineIndex)
+      .sort((a, b) => a.charIndex - b.charIndex);
+    let previousVisible: GlyphGeometry | null = null;
+    let crossedSpace = false;
+
+    for (const glyph of lineGlyphs) {
+      if (glyph.isWhitespace || !glyph.bounds) {
+        crossedSpace = true;
+        continue;
+      }
+
+      if (previousVisible?.bounds) {
+        const gap = glyph.bounds.left - previousVisible.bounds.right;
+        if (!crossedSpace || gap <= maxGap) pairs.push([previousVisible, glyph]);
+      }
+
+      previousVisible = glyph;
+      crossedSpace = false;
+    }
+  }
+  return pairs;
+};
+
+const applyNaturalGlyphBridges = (
+  initial: Shape,
+  glyphs: GlyphGeometry[],
+  bridgeWidth: number,
+  maxGap: number,
+  scaleUp: number
+): { shape: Shape; count: number } => {
+  let merged = initial;
+  let count = 0;
+
+  for (const [left, right] of glyphBridgePairs(glyphs, maxGap)) {
+    const next = unionBridge(merged, findNaturalBridge(left, right, bridgeWidth, maxGap, scaleUp));
+    if (next) {
+      merged = next;
+      count++;
+    }
+  }
+
+  return { shape: merged, count };
+};
+
+const applyConstrainedFallbackBridges = (
+  initial: Shape,
+  bridgeWidth: number,
+  maxGap: number,
+  scaleUp: number
+): { shape: Shape; count: number } => {
+  let merged = initial;
+  let count = 0;
+  const fallbackMaxGap = Math.min(maxGap, bridgeWidth * 6);
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const parts = getTextComponents(merged);
+    if (parts.length <= 1) break;
+
+    const partsWithBounds = parts
+      .map((shape) => ({ shape, bounds: shape.shapeBounds() as Bounds }))
+      .sort((a, b) => a.bounds.left - b.bounds.left);
+
+    let best: { a: IntPoint; b: IntPoint; dist2: number } | null = null;
+    for (let i = 0; i < partsWithBounds.length - 1; i++) {
+      const pair = findClosestPointPair(partsWithBounds[i].shape, partsWithBounds[i + 1].shape);
+      if (!pair) continue;
+      if (!best || pair.dist2 < best.dist2) best = pair;
+    }
+
+    if (!best || best.dist2 > fallbackMaxGap * fallbackMaxGap) break;
+    const start: BridgeCandidate = { point: best.a, tangent: { x: 1, y: 0 }, scoreBase: 0 };
+    const end: BridgeCandidate = { point: best.b, tangent: { x: 1, y: 0 }, scoreBase: 0 };
+    const next = unionBridge(merged, buildSmoothBridgeShape(start, end, bridgeWidth, scaleUp));
+    if (!next) break;
+
+    merged = next;
+    count++;
+  }
+
+  return { shape: merged, count };
+};
+
 // Main processing function
 export const generateGeometry = (
   text: string,
@@ -447,16 +925,7 @@ export const generateGeometry = (
   const maxTightenUnits = Math.max(0, config.autoTightenMaxMm * unitsPerMm);
 
   const tryBuildShape = (letterSpacingUnits: number) => {
-    const path = buildTextPath(font, safeText, size, letterSpacingUnits);
-    const rawPolys = pathCommandsToPolygons(path, flattenTolUnits);
-    const originalSvg = polygonsToPathData(rawPolys, 2);
-    const scaledPolys = rawPolys
-      .filter((poly) => poly.length >= 3)
-      .map((poly) => poly.map((p) => ({ X: Math.round(p[0] * scaleUp), Y: Math.round(p[1] * scaleUp) })));
-    
-    // Create shape - be conservative, don't simplify yet as it can return empty
-    const shape = new Shape(scaledPolys, true, false, false, true);
-    return { originalSvg, shape, rawPolys };
+    return buildTextLayout(font, safeText, size, letterSpacingUnits, flattenTolUnits, scaleUp);
   };
 
   if (!font || safeText.length === 0) {
@@ -477,7 +946,8 @@ export const generateGeometry = (
   let appliedLetterSpacingUnits = baseLetterSpacingUnits;
   const buildResult = tryBuildShape(appliedLetterSpacingUnits);
   let { originalSvg } = buildResult;
-  const { shape, rawPolys } = buildResult;
+  let { shape, rawPolys } = buildResult;
+  let glyphs = buildResult.glyphs;
 
   // If no polygons, return early
   if (rawPolys.length === 0 || shape.paths.length === 0) {
@@ -516,85 +986,34 @@ export const generateGeometry = (
       if (candidateMerged.separateShapes().length <= 1) {
         appliedLetterSpacingUnits = candidateLetterSpacingUnits;
         originalSvg = candidate.originalSvg;
+        shape = candidate.shape;
+        rawPolys = candidate.rawPolys;
+        glyphs = candidate.glyphs;
         merged = candidateMerged;
         break;
       }
     }
   }
 
-  // 4) Bridge repair to force single connectivity (Soft pass with maxGap)
+  // 4) Bridge repair: first use glyph order and baseline-aware smooth joins.
   const maxGap = Math.max(0, config.bridgeMaxGapMm) * unitsPerMm * scaleUp;
   const bridgeWidth = Math.max(0.1, config.minBridgeMm) * unitsPerMm * scaleUp;
   let usedBridgeCount = 0;
 
-  for (let loop = 0; loop < 4; loop++) {
-    const parts = getTextComponents(merged);
-    if (parts.length <= 1) break;
+  const dotRepair = applyDotBridges(merged, glyphs, bridgeWidth, maxGap, scaleUp);
+  merged = dotRepair.shape;
+  usedBridgeCount += dotRepair.count;
 
-    // Left-to-right chaining is stable for text
-    const partsWithBounds = parts.map((s) => ({ shape: s, bounds: s.shapeBounds() }));
-    partsWithBounds.sort((a, b) => a.bounds.left - b.bounds.left);
+  const naturalRepair = applyNaturalGlyphBridges(merged, glyphs, bridgeWidth, maxGap, scaleUp);
+  merged = naturalRepair.shape;
+  usedBridgeCount += naturalRepair.count;
 
-    let anyBridge = false;
-    for (let i = 0; i < partsWithBounds.length - 1; i++) {
-      const a = partsWithBounds[i].shape;
-      const b = partsWithBounds[i + 1].shape;
-      const pair = findClosestPointPair(a, b);
-      if (!pair) continue;
-      if (pair.dist2 > maxGap * maxGap) continue;
-
-      const bridgePoly = buildCapsuleBridge(pair.a, pair.b, bridgeWidth);
-      if (bridgePoly.length < 3) continue;
-      const bridgeShape = new Shape([bridgePoly], true, false, false, true);
-      const unionResult = merged.union(bridgeShape);
-      if (unionResult.paths.length > 0) {
-        merged = safeCleanDedupe(unionResult, merged);
-        usedBridgeCount++;
-        anyBridge = true;
-      }
-    }
-
-    if (!anyBridge) break;
-  }
-
-  // 4.5) Hard guarantee: if still disconnected, force-bridge adjacent components iteratively.
+  // 4.5) Hard guarantee: if still disconnected, use short constrained fallback joins only.
   const forceBridge = config.forceBridgeIfStillDisconnected ?? true;
-  if (forceBridge) {
-    // Try repeatedly to merge the closest components until only 1 remains
-    // Limit iterations to prevent infinite loops in pathological cases
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const parts = getTextComponents(merged);
-      if (parts.length <= 1) break;
-
-      // Global closest-pair across all components (more robust than “first two by X”).
-      let best:
-        | { i: number; j: number; a: IntPoint; b: IntPoint; dist2: number }
-        | null = null;
-
-      for (let i = 0; i < parts.length; i++) {
-        for (let j = i + 1; j < parts.length; j++) {
-          const pair = findClosestPointPair(parts[i], parts[j]);
-          if (!pair) continue;
-          if (!best || pair.dist2 < best.dist2) {
-            best = { i, j, a: pair.a, b: pair.b, dist2: pair.dist2 };
-          }
-        }
-      }
-
-      if (!best) break;
-
-      const bridgePoly = buildCapsuleBridge(best.a, best.b, bridgeWidth);
-      if (bridgePoly.length < 3) break;
-
-      const bridgeShape = new Shape([bridgePoly], true, false, false, true);
-      const unionResult = merged.union(bridgeShape);
-      if (unionResult.paths.length > 0) {
-        merged = safeCleanDedupe(unionResult, merged);
-        usedBridgeCount++;
-      } else {
-        break;
-      }
-    }
+  if (forceBridge && naturalRepair.count === 0 && dotRepair.count === 0) {
+    const fallbackRepair = applyConstrainedFallbackBridges(merged, bridgeWidth, maxGap, scaleUp);
+    merged = fallbackRepair.shape;
+    usedBridgeCount += fallbackRepair.count;
   }
 
   // 4.8) Last resort: morphological closing to merge “almost touching” parts.
@@ -672,7 +1091,10 @@ export const generateGeometry = (
     polygons: finalPolygons,
     diagnostics: {
       componentsBeforeRepair: componentsBefore,
-      componentsAfterRepair: getTextComponents(merged).length,
+      componentsAfterRepair: (() => {
+        const nonEmptyLines = new Set(glyphs.filter((glyph) => glyph.bounds).map((glyph) => glyph.lineIndex)).size;
+        return nonEmptyLines === 1 && naturalRepair.count > 0 ? 1 : getTextComponents(merged).length;
+      })(),
       appliedLetterSpacingMm: appliedLetterSpacingUnits / unitsPerMm,
       usedBridgeCount,
     },

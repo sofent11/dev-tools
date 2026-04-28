@@ -4,13 +4,10 @@ import { GeometryResult } from './utils/geometry';
 interface CanvasStageProps {
   width: number;
   height: number;
-  text: string;
-  fontSize: number;
   position: { x: number; y: number };
   rotation: number;
   scale: number;
   geometry: GeometryResult | null;
-  previewMode: 'visual' | 'manufacturing';
   onTransformChange: (newAttrs: { x: number; y: number; rotation: number; scale: number }) => void;
 }
 
@@ -27,13 +24,10 @@ const getSvgPoint = (svg: SVGSVGElement, event: React.PointerEvent): { x: number
 export const CanvasStage: React.FC<CanvasStageProps> = ({
   width,
   height,
-  text,
-  fontSize,
   position,
   rotation,
   scale,
   geometry,
-  previewMode,
   onTransformChange,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -95,41 +89,15 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           onPointerUp={() => setDragStart(null)}
           onPointerCancel={() => setDragStart(null)}
         >
-          {previewMode === 'visual' ? (
-            <>
-              <text
-                x={0}
-                y={0}
-                fontSize={fontSize}
-                fontFamily="Cinzel, serif"
-                fill="#334155"
-                dominantBaseline="hanging"
-              >
-                {text}
-              </text>
-              {geometry?.originalPath && (
-                <path
-                  d={geometry.originalPath}
-                  fill="transparent"
-                  stroke="#0ea5e9"
-                  strokeWidth={1}
-                  opacity={0.35}
-                  fillRule="evenodd"
-                  pointerEvents="none"
-                />
-              )}
-            </>
-          ) : (
-            geometry?.processedPath && (
-              <path
-                d={geometry.processedPath}
-                fill="#e2e8f0"
-                stroke="#ef4444"
-                strokeWidth={2}
-                opacity={0.9}
-                fillRule="evenodd"
-              />
-            )
+          {geometry?.processedPath && (
+            <path
+              d={geometry.processedPath}
+              fill="#e2e8f0"
+              stroke="#ef4444"
+              strokeWidth={2}
+              opacity={0.9}
+              fillRule="evenodd"
+            />
           )}
           <path d="M -5 0 L 5 0 M 0 -5 L 0 5" stroke="#2563eb" strokeWidth={1} opacity={0.55} pointerEvents="none" />
         </g>
