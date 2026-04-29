@@ -23,7 +23,7 @@ type CleanupResult = {
 
 const ctx: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
 
-const positionKey = (x: number, y: number, z: number, tolerance: number) => {
+const positionKey = (x: number, y: number, z: number, tolerance = 0) => {
   if (tolerance <= 0) return `${x},${y},${z}`;
   return `${Math.round(x / tolerance)},${Math.round(y / tolerance)},${Math.round(z / tolerance)}`;
 };
@@ -43,7 +43,6 @@ const triangleAreaSquared = (
   const cx = positions[ic * 3];
   const cy = positions[ic * 3 + 1];
   const cz = positions[ic * 3 + 2];
-
   const abx = bx - ax;
   const aby = by - ay;
   const abz = bz - az;
@@ -86,7 +85,32 @@ const parseStl = (buffer: ArrayBuffer): MeshData => {
   return { positions, indices };
 };
 
-const cleanupMesh = (mesh: MeshData, tolerance: number): CleanupResult => {
+const indexVertices = (mesh: MeshData, tolerance = 0): MeshData => {
+  const vertexMap = new Map<string, number>();
+  const positions: number[] = [];
+  const indices = new Uint32Array(mesh.indices.length);
+
+  for (let offset = 0; offset < mesh.indices.length; offset += 1) {
+    const sourceIndex = mesh.indices[offset];
+    const x = mesh.positions[sourceIndex * 3];
+    const y = mesh.positions[sourceIndex * 3 + 1];
+    const z = mesh.positions[sourceIndex * 3 + 2];
+    const key = positionKey(x, y, z, tolerance);
+    let mapped = vertexMap.get(key);
+
+    if (mapped === undefined) {
+      mapped = positions.length / 3;
+      vertexMap.set(key, mapped);
+      positions.push(x, y, z);
+    }
+
+    indices[offset] = mapped;
+  }
+
+  return { positions: new Float32Array(positions), indices };
+};
+
+const cleanupMesh = (mesh: MeshData, tolerance = 0): CleanupResult => {
   const vertexMap = new Map<string, number>();
   const positions: number[] = [];
   const indices: number[] = [];
@@ -169,18 +193,23 @@ const compactMesh = (mesh: MeshData): MeshData => {
 
 const edgeKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`);
 
+const faceKey = (a: number, b: number, c: number) => [a, b, c].sort((left, right) => left - right).join(':');
+
 const getComponentFaceSets = (mesh: MeshData) => {
   const faceCount = mesh.indices.length / 3;
-  const vertexToFaces = new Map<number, number[]>();
+  const edgeToFaces = new Map<string, number[]>();
 
   for (let face = 0; face < faceCount; face += 1) {
-    for (let corner = 0; corner < 3; corner += 1) {
-      const vertex = mesh.indices[face * 3 + corner];
-      const faces = vertexToFaces.get(vertex);
+    const offset = face * 3;
+    const vertices = [mesh.indices[offset], mesh.indices[offset + 1], mesh.indices[offset + 2]];
+    for (const [left, right] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+      if (left === right) continue;
+      const key = edgeKey(left, right);
+      const faces = edgeToFaces.get(key);
       if (faces) {
         faces.push(face);
       } else {
-        vertexToFaces.set(vertex, [face]);
+        edgeToFaces.set(key, [face]);
       }
     }
   }
@@ -199,9 +228,12 @@ const getComponentFaceSets = (mesh: MeshData) => {
       const face = queue[cursor];
       component.push(face);
 
-      for (let corner = 0; corner < 3; corner += 1) {
-        const vertex = mesh.indices[face * 3 + corner];
-        const neighbors = vertexToFaces.get(vertex) ?? [];
+      const offset = face * 3;
+      const vertices = [mesh.indices[offset], mesh.indices[offset + 1], mesh.indices[offset + 2]];
+      for (const [left, right] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+        const neighbors = edgeToFaces.get(edgeKey(left, right)) ?? [];
+        if (neighbors.length !== 2) continue;
+
         for (const neighbor of neighbors) {
           if (!visited[neighbor]) {
             visited[neighbor] = 1;
@@ -300,7 +332,27 @@ const computeStats = (mesh: MeshData): MeshStats => {
   };
 };
 
-const findBoundaryEdges = (mesh: MeshData) => {
+const getEdgeFaceMap = (mesh: MeshData) => {
+  const edges = new Map<string, number[]>();
+
+  for (let offset = 0; offset < mesh.indices.length; offset += 3) {
+    const face = offset / 3;
+    const vertices = [mesh.indices[offset], mesh.indices[offset + 1], mesh.indices[offset + 2]];
+    for (const [a, b] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+      const key = edgeKey(a, b);
+      const faces = edges.get(key);
+      if (faces) {
+        faces.push(face);
+      } else {
+        edges.set(key, [face]);
+      }
+    }
+  }
+
+  return edges;
+};
+
+const getBoundaryEdges = (mesh: MeshData) => {
   const edges = new Map<string, { count: number; a: number; b: number }>();
 
   for (let offset = 0; offset < mesh.indices.length; offset += 3) {
@@ -319,80 +371,131 @@ const findBoundaryEdges = (mesh: MeshData) => {
   return Array.from(edges.values()).filter(edge => edge.count === 1);
 };
 
-const fillSmallBoundaryLoops = (mesh: MeshData, maxEdges: number) => {
-  const boundaryEdges = findBoundaryEdges(mesh);
-  const adjacency = new Map<number, number[]>();
-  const unused = new Set<string>();
+const getEdgeCountMap = (mesh: MeshData) => {
+  const edgeCounts = new Map<string, number>();
 
-  const addNeighbor = (a: number, b: number) => {
+  for (let offset = 0; offset < mesh.indices.length; offset += 3) {
+    const vertices = [mesh.indices[offset], mesh.indices[offset + 1], mesh.indices[offset + 2]];
+    for (const [a, b] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+      const key = edgeKey(a, b);
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  return edgeCounts;
+};
+
+const removeExtraNonManifoldFaces = (mesh: MeshData) => {
+  const edgeFaces = getEdgeFaceMap(mesh);
+  const removeFaces = new Set<number>();
+
+  edgeFaces.forEach(faces => {
+    if (faces.length <= 2) return;
+
+    faces
+      .map(face => ({
+        face,
+        area: triangleAreaSquared(
+          mesh.positions,
+          mesh.indices[face * 3],
+          mesh.indices[face * 3 + 1],
+          mesh.indices[face * 3 + 2],
+        ),
+      }))
+      .sort((left, right) => right.area - left.area)
+      .slice(2)
+      .forEach(({ face }) => removeFaces.add(face));
+  });
+
+  if (!removeFaces.size) return { mesh, removedFaces: 0 };
+
+  const indices: number[] = [];
+  for (let face = 0; face < mesh.indices.length / 3; face += 1) {
+    if (removeFaces.has(face)) continue;
+
+    indices.push(
+      mesh.indices[face * 3],
+      mesh.indices[face * 3 + 1],
+      mesh.indices[face * 3 + 2],
+    );
+  }
+
+  return {
+    mesh: compactMesh({ positions: mesh.positions, indices: new Uint32Array(indices) }),
+    removedFaces: removeFaces.size,
+  };
+};
+
+const fillSingleTriangleAndQuadHoles = (mesh: MeshData) => {
+  const boundaryEdges = getBoundaryEdges(mesh);
+  const adjacency = new Map<number, Set<number>>();
+  const edgeSet = new Set<string>();
+  const edgeCounts = getEdgeCountMap(mesh);
+
+  const connect = (a: number, b: number) => {
     const neighbors = adjacency.get(a);
     if (neighbors) {
-      neighbors.push(b);
+      neighbors.add(b);
     } else {
-      adjacency.set(a, [b]);
+      adjacency.set(a, new Set([b]));
     }
   };
 
   for (const edge of boundaryEdges) {
-    addNeighbor(edge.a, edge.b);
-    addNeighbor(edge.b, edge.a);
-    unused.add(edgeKey(edge.a, edge.b));
+    connect(edge.a, edge.b);
+    connect(edge.b, edge.a);
+    edgeSet.add(edgeKey(edge.a, edge.b));
   }
 
   const positions = Array.from(mesh.positions);
   const indices = Array.from(mesh.indices);
+  const usedEdges = new Set<string>();
+  const faceKeys = new Set<string>();
   let filledHoles = 0;
+
+  for (let offset = 0; offset < mesh.indices.length; offset += 3) {
+    faceKeys.add(faceKey(mesh.indices[offset], mesh.indices[offset + 1], mesh.indices[offset + 2]));
+  }
 
   for (const edge of boundaryEdges) {
     const firstKey = edgeKey(edge.a, edge.b);
-    if (!unused.has(firstKey)) continue;
+    if (usedEdges.has(firstKey)) continue;
 
-    const loop = [edge.a, edge.b];
-    unused.delete(firstKey);
-    let previous = edge.a;
-    let current = edge.b;
-    let closed = false;
+    const loop = findBoundaryLoop(edge.a, edge.b, adjacency, edgeSet);
+    if (!loop || loop.length < 3 || loop.length > 4) continue;
 
-    while (loop.length <= maxEdges + 1) {
-      const next = (adjacency.get(current) ?? []).find(candidate => {
-        if (candidate === previous) return false;
-        return unused.has(edgeKey(current, candidate)) || candidate === loop[0];
-      });
+    const loopEdges = loop.map((vertex, index) => edgeKey(vertex, loop[(index + 1) % loop.length]));
+    if (loopEdges.some(key => usedEdges.has(key))) continue;
 
-      if (next === undefined) break;
-      if (next === loop[0]) {
-        closed = true;
-        unused.delete(edgeKey(current, next));
-        break;
+    if (loop.length === 3) {
+      indices.push(loop[0], loop[1], loop[2]);
+    } else {
+      const diagonalA = edgeKey(loop[0], loop[2]);
+      const diagonalB = edgeKey(loop[1], loop[3]);
+      const trianglesA = [[loop[0], loop[1], loop[2]], [loop[0], loop[2], loop[3]]];
+      const trianglesB = [[loop[1], loop[2], loop[3]], [loop[1], loop[3], loop[0]]];
+      const canUseA = (edgeCounts.get(diagonalA) ?? 0) === 0 && trianglesA.every(([a, b, c]) => !faceKeys.has(faceKey(a, b, c)));
+      const canUseB = (edgeCounts.get(diagonalB) ?? 0) === 0 && trianglesB.every(([a, b, c]) => !faceKeys.has(faceKey(a, b, c)));
+
+      if (canUseA || canUseB) {
+        const triangles = canUseB && !canUseA ? trianglesB : trianglesA;
+        for (const [a, b, c] of triangles) indices.push(a, b, c);
+      } else {
+        const centerIndex = positions.length / 3;
+        const center = [0, 0, 0];
+        for (const vertex of loop) {
+          center[0] += positions[vertex * 3];
+          center[1] += positions[vertex * 3 + 1];
+          center[2] += positions[vertex * 3 + 2];
+        }
+        positions.push(center[0] / 4, center[1] / 4, center[2] / 4);
+        for (let index = 0; index < loop.length; index += 1) {
+          indices.push(loop[index], loop[(index + 1) % loop.length], centerIndex);
+        }
       }
-
-      unused.delete(edgeKey(current, next));
-      loop.push(next);
-      previous = current;
-      current = next;
     }
 
-    if (!closed || loop.length < 3 || loop.length > maxEdges) continue;
-
-    const unique = new Set(loop);
-    if (unique.size !== loop.length) continue;
-
-    const centerIndex = positions.length / 3;
-    const center = [0, 0, 0];
-    for (const vertex of loop) {
-      center[0] += positions[vertex * 3];
-      center[1] += positions[vertex * 3 + 1];
-      center[2] += positions[vertex * 3 + 2];
-    }
-    center[0] /= loop.length;
-    center[1] /= loop.length;
-    center[2] /= loop.length;
-    positions.push(center[0], center[1], center[2]);
-
-    for (let index = 0; index < loop.length; index += 1) {
-      indices.push(loop[index], loop[(index + 1) % loop.length], centerIndex);
-    }
-
+    loopEdges.forEach(key => usedEdges.add(key));
     filledHoles += 1;
   }
 
@@ -402,6 +505,35 @@ const fillSmallBoundaryLoops = (mesh: MeshData, maxEdges: number) => {
     mesh: cleanupMesh({ positions: new Float32Array(positions), indices: new Uint32Array(indices) }, 0).mesh,
     filledHoles,
   };
+};
+
+const findBoundaryLoop = (
+  start: number,
+  next: number,
+  adjacency: Map<number, Set<number>>,
+  edgeSet: Set<string>,
+) => {
+  const loop = [start, next];
+  let previous = start;
+  let current = next;
+
+  while (loop.length <= 4) {
+    const candidates = Array.from(adjacency.get(current) ?? []);
+    const candidate = candidates.find(vertex => {
+      if (vertex === previous) return false;
+      if (vertex === start) return loop.length >= 3;
+      return !loop.includes(vertex) && edgeSet.has(edgeKey(current, vertex));
+    });
+
+    if (candidate === undefined) return null;
+    if (candidate === start) return loop;
+
+    loop.push(candidate);
+    previous = current;
+    current = candidate;
+  }
+
+  return null;
 };
 
 const simplifyMesh = async (mesh: MeshData, targetFaces: number, targetError: number) => {
@@ -422,7 +554,7 @@ const simplifyMesh = async (mesh: MeshData, targetFaces: number, targetError: nu
     3,
     targetIndexCount,
     targetError,
-    ['Prune', 'Regularize'],
+    ['LockBorder'],
   );
 
   return {
@@ -432,12 +564,180 @@ const simplifyMesh = async (mesh: MeshData, targetFaces: number, targetError: nu
   };
 };
 
-const addCylinderBase = (mesh: MeshData) => {
+const getFaceNormal = (positions: Float32Array, ia: number, ib: number, ic: number): [number, number, number] => {
+  const ax = positions[ia * 3];
+  const ay = positions[ia * 3 + 1];
+  const az = positions[ia * 3 + 2];
+  const bx = positions[ib * 3];
+  const by = positions[ib * 3 + 1];
+  const bz = positions[ib * 3 + 2];
+  const cx = positions[ic * 3];
+  const cy = positions[ic * 3 + 1];
+  const cz = positions[ic * 3 + 2];
+  const abx = bx - ax;
+  const aby = by - ay;
+  const abz = bz - az;
+  const acx = cx - ax;
+  const acy = cy - ay;
+  const acz = cz - az;
+  const nx = aby * acz - abz * acy;
+  const ny = abz * acx - abx * acz;
+  const nz = abx * acy - aby * acx;
+  const length = Math.hypot(nx, ny, nz) || 1;
+
+  return [nx / length, ny / length, nz / length];
+};
+
+const getSignedVolume = (mesh: MeshData) => {
+  let volume = 0;
+
+  for (let offset = 0; offset < mesh.indices.length; offset += 3) {
+    const ia = mesh.indices[offset] * 3;
+    const ib = mesh.indices[offset + 1] * 3;
+    const ic = mesh.indices[offset + 2] * 3;
+    const ax = mesh.positions[ia];
+    const ay = mesh.positions[ia + 1];
+    const az = mesh.positions[ia + 2];
+    const bx = mesh.positions[ib];
+    const by = mesh.positions[ib + 1];
+    const bz = mesh.positions[ib + 2];
+    const cx = mesh.positions[ic];
+    const cy = mesh.positions[ic + 1];
+    const cz = mesh.positions[ic + 2];
+
+    volume += ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
+  }
+
+  return volume / 6;
+};
+
+const orientFacesConsistently = (mesh: MeshData): MeshData => {
+  const faceCount = mesh.indices.length / 3;
+  const oriented = new Uint32Array(mesh.indices);
+  const edgeToFaces = new Map<string, Array<{ face: number; from: number; to: number }>>();
+
+  for (let face = 0; face < faceCount; face += 1) {
+    const vertices = [oriented[face * 3], oriented[face * 3 + 1], oriented[face * 3 + 2]];
+    for (const [from, to] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+      const key = edgeKey(from, to);
+      const faces = edgeToFaces.get(key);
+      const entry = { face, from, to };
+      if (faces) {
+        faces.push(entry);
+      } else {
+        edgeToFaces.set(key, [entry]);
+      }
+    }
+  }
+
+  const flipFace = (face: number) => {
+    const offset = face * 3;
+    const tmp = oriented[offset + 1];
+    oriented[offset + 1] = oriented[offset + 2];
+    oriented[offset + 2] = tmp;
+  };
+
+  const faceHasDirectedEdge = (face: number, from: number, to: number) => {
+    const offset = face * 3;
+    const a = oriented[offset];
+    const b = oriented[offset + 1];
+    const c = oriented[offset + 2];
+    return (a === from && b === to) || (b === from && c === to) || (c === from && a === to);
+  };
+
+  const visited = new Uint8Array(faceCount);
+  for (let seed = 0; seed < faceCount; seed += 1) {
+    if (visited[seed]) continue;
+
+    const queue = [seed];
+    visited[seed] = 1;
+
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const face = queue[cursor];
+      const offset = face * 3;
+      const vertices = [oriented[offset], oriented[offset + 1], oriented[offset + 2]];
+
+      for (const [from, to] of [[vertices[0], vertices[1]], [vertices[1], vertices[2]], [vertices[2], vertices[0]]]) {
+        const neighbors = edgeToFaces.get(edgeKey(from, to)) ?? [];
+        for (const neighbor of neighbors) {
+          if (neighbor.face === face || visited[neighbor.face]) continue;
+
+          if (faceHasDirectedEdge(neighbor.face, to, from) === false) {
+            flipFace(neighbor.face);
+          }
+
+          visited[neighbor.face] = 1;
+          queue.push(neighbor.face);
+        }
+      }
+    }
+  }
+
+  return fixOutwardNormals({ positions: mesh.positions, indices: oriented });
+};
+
+const fixOutwardNormals = (mesh: MeshData): MeshData => {
+  const signedVolume = getSignedVolume(mesh);
+  if (Math.abs(signedVolume) > Number.EPSILON) {
+    if (signedVolume > 0) return mesh;
+
+    const indices = new Uint32Array(mesh.indices);
+    for (let offset = 0; offset < indices.length; offset += 3) {
+      const tmp = indices[offset + 1];
+      indices[offset + 1] = indices[offset + 2];
+      indices[offset + 2] = tmp;
+    }
+
+    return { positions: mesh.positions, indices };
+  }
+
+  const bounds = computeBounds(mesh.positions);
+  const center = [
+    (bounds.min[0] + bounds.max[0]) / 2,
+    (bounds.min[1] + bounds.max[1]) / 2,
+    (bounds.min[2] + bounds.max[2]) / 2,
+  ];
+  let signed = 0;
+
+  for (let offset = 0; offset < mesh.indices.length; offset += 3) {
+    const ia = mesh.indices[offset];
+    const ib = mesh.indices[offset + 1];
+    const ic = mesh.indices[offset + 2];
+    const normal = getFaceNormal(mesh.positions, ia, ib, ic);
+    const faceCenter = [
+      (mesh.positions[ia * 3] + mesh.positions[ib * 3] + mesh.positions[ic * 3]) / 3,
+      (mesh.positions[ia * 3 + 1] + mesh.positions[ib * 3 + 1] + mesh.positions[ic * 3 + 1]) / 3,
+      (mesh.positions[ia * 3 + 2] + mesh.positions[ib * 3 + 2] + mesh.positions[ic * 3 + 2]) / 3,
+    ];
+    signed +=
+      normal[0] * (faceCenter[0] - center[0]) +
+      normal[1] * (faceCenter[1] - center[1]) +
+      normal[2] * (faceCenter[2] - center[2]);
+  }
+
+  if (signed >= 0) return mesh;
+
+  const indices = new Uint32Array(mesh.indices);
+  for (let offset = 0; offset < indices.length; offset += 3) {
+    const tmp = indices[offset + 1];
+    indices[offset + 1] = indices[offset + 2];
+    indices[offset + 2] = tmp;
+  }
+
+  return { positions: mesh.positions, indices };
+};
+
+const estimateBaseInfo = (mesh: MeshData) => {
   const bounds = computeBounds(mesh.positions);
   const [sizeX, sizeY, sizeZ] = bounds.size;
   const maxXY = Math.max(sizeX, sizeY);
   const thickness = Math.max(sizeZ * 0.1, maxXY * 0.08, 1e-6);
   const diameter = Math.max(maxXY * 1.35, sizeZ * 0.45);
+  return { bounds, thickness, diameter };
+};
+
+const addCylinderBase = (mesh: MeshData) => {
+  const { bounds, thickness, diameter } = estimateBaseInfo(mesh);
   const radius = diameter / 2;
   const sections = 96;
   const centerX = (bounds.min[0] + bounds.max[0]) / 2;
@@ -474,7 +774,7 @@ const addCylinderBase = (mesh: MeshData) => {
   }
 
   return {
-    mesh: { positions: new Float32Array(positions), indices: new Uint32Array(indices) },
+    mesh: cleanupMesh({ positions: new Float32Array(positions), indices: new Uint32Array(indices) }, 0).mesh,
     baseInfo: { diameter, thickness },
   };
 };
@@ -483,30 +783,6 @@ const writeNormal = (view: DataView, offset: number, normal: [number, number, nu
   view.setFloat32(offset, normal[0], true);
   view.setFloat32(offset + 4, normal[1], true);
   view.setFloat32(offset + 8, normal[2], true);
-};
-
-const getFaceNormal = (positions: Float32Array, ia: number, ib: number, ic: number): [number, number, number] => {
-  const ax = positions[ia * 3];
-  const ay = positions[ia * 3 + 1];
-  const az = positions[ia * 3 + 2];
-  const bx = positions[ib * 3];
-  const by = positions[ib * 3 + 1];
-  const bz = positions[ib * 3 + 2];
-  const cx = positions[ic * 3];
-  const cy = positions[ic * 3 + 1];
-  const cz = positions[ic * 3 + 2];
-  const abx = bx - ax;
-  const aby = by - ay;
-  const abz = bz - az;
-  const acx = cx - ax;
-  const acy = cy - ay;
-  const acz = cz - az;
-  const nx = aby * acz - abz * acy;
-  const ny = abz * acx - abx * acz;
-  const nz = abx * acy - aby * acx;
-  const length = Math.hypot(nx, ny, nz) || 1;
-
-  return [nx / length, ny / length, nz / length];
 };
 
 const serializeBinaryStl = (mesh: MeshData, fileName: string) => {
@@ -541,14 +817,12 @@ const serializeBinaryStl = (mesh: MeshData, fileName: string) => {
 };
 
 const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerResponse> => {
-  const parsed = parseStl(request.buffer);
+  const parsed = indexVertices(parseStl(request.buffer), 0);
   if (!parsed.indices.length) {
     throw new Error('STL 没有可处理的三角面');
   }
 
-  const initial = computeStats(parsed);
-  const cleanup = cleanupMesh(parsed, request.options.weldTolerance);
-  let mesh = cleanup.mesh;
+  let mesh = parsed;
   let removedFragments = 0;
 
   if (request.options.keepLargest) {
@@ -557,35 +831,65 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
     removedFragments = result.removedFragments;
   }
 
+  const initial = computeStats(mesh);
+  const cleanup = cleanupMesh(mesh, request.options.weldTolerance);
+  mesh = cleanup.mesh;
   const afterCleanup = computeStats(mesh);
-  let filledHoles = 0;
-  if (request.options.fillHoles && afterCleanup.boundaryEdges > 0) {
-    const fillResult = fillSmallBoundaryLoops(mesh, request.options.holeEdgeLimit);
-    mesh = fillResult.mesh;
-    filledHoles = fillResult.filledHoles;
-  }
 
   const simplify = request.options.decimate
     ? await simplifyMesh(mesh, request.options.targetFaces, request.options.targetError)
     : { mesh, simplified: false, simplifyError: null };
   mesh = simplify.mesh;
 
+  let removedPostSimplifyFragments = 0;
+  if (request.options.keepLargest && simplify.simplified) {
+    const simplifiedStats = computeStats(mesh);
+    if (!simplifiedStats.watertight && simplifiedStats.components > 1) {
+      const result = keepLargestComponent(mesh);
+      mesh = result.mesh;
+      removedPostSimplifyFragments = result.removedFragments;
+    }
+  }
+
+  let removedNonManifoldFaces = 0;
+  if (computeStats(mesh).nonManifoldEdges > 0) {
+    const result = removeExtraNonManifoldFaces(mesh);
+    mesh = result.mesh;
+    removedNonManifoldFaces = result.removedFaces;
+  }
+
+  mesh = orientFacesConsistently(mesh);
+
+  let filledHoles = 0;
+  if (request.options.fillHoles && computeStats(mesh).watertight === false) {
+    const fillResult = fillSingleTriangleAndQuadHoles(mesh);
+    mesh = orientFacesConsistently(fillResult.mesh);
+    filledHoles = fillResult.filledHoles;
+  }
+
   let baseInfo: RepairReport['baseInfo'];
   if (request.options.addBase) {
     const result = addCylinderBase(mesh);
-    mesh = result.mesh;
+    mesh = orientFacesConsistently(result.mesh);
     baseInfo = result.baseInfo;
   }
 
-  mesh = cleanupMesh(mesh, 0).mesh;
   const final = computeStats(mesh);
   const notes: string[] = [];
 
   if (!final.watertight) {
-    notes.push('结果仍存在边界边或非流形边，适合作为轻量修复结果，不等价于工业级自动修复。');
+    notes.push('结果仍非完全水密；这与 Python 脚本一致，fill_holes 仅能补小三角/四边孔，复杂坏面需要复检。');
+  } else {
+    notes.push('当前边界/非流形边检测为水密。');
   }
   if (simplify.simplified && final.faces > request.options.targetFaces) {
     notes.push('降面器受拓扑限制，最终面数可能高于目标值。');
+  }
+  if (removedPostSimplifyFragments > 0) {
+    notes.push(`降面后剔除了 ${removedPostSimplifyFragments} 个非流形小片，以保留最大主体。`);
+  }
+  if (removedNonManifoldFaces > 0) {
+    notes.push(`降面后移除了 ${removedNonManifoldFaces} 个非流形面，并通过小孔补面恢复闭合。`);
   }
   if (request.options.addBase) {
     notes.push('圆形底座按模型当前坐标比例生成，STL 本身不携带单位信息。');
@@ -608,6 +912,8 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
       skippedDegenerateFaces: cleanup.skippedDegenerateFaces,
       skippedDuplicateFaces: cleanup.skippedDuplicateFaces,
       removedFragments,
+      removedPostSimplifyFragments,
+      removedNonManifoldFaces,
       filledHoles,
       addedBase: request.options.addBase,
       baseInfo,

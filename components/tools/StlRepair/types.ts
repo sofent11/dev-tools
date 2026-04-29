@@ -32,7 +32,6 @@ export interface RepairOptions {
   decimate: boolean;
   keepLargest: boolean;
   fillHoles: boolean;
-  holeEdgeLimit: number;
   addBase: boolean;
 }
 
@@ -44,6 +43,8 @@ export interface RepairReport {
   skippedDegenerateFaces: number;
   skippedDuplicateFaces: number;
   removedFragments: number;
+  removedPostSimplifyFragments: number;
+  removedNonManifoldFaces: number;
   filledHoles: number;
   addedBase: boolean;
   baseInfo?: {

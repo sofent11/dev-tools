@@ -40,12 +40,11 @@ import type {
 
 const defaultOptions: RepairOptions = {
   targetFaces: 150000,
-  weldTolerance: 0.0001,
+  weldTolerance: 0,
   targetError: 0.01,
   decimate: true,
   keepLargest: true,
   fillHoles: true,
-  holeEdgeLimit: 64,
   addBase: false,
 };
 
@@ -161,7 +160,8 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
 
     const renderer = new WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(container.clientWidth || 640, container.clientHeight || 420, false);
+    renderer.setSize(container.clientWidth || 640, container.clientHeight || 420, true);
+    renderer.domElement.className = 'absolute inset-0 h-full w-full';
     container.appendChild(renderer.domElement);
 
     const camera = new PerspectiveCamera(45, 1, 0.01, 100000);
@@ -194,7 +194,7 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
       const height = Math.max(container.clientHeight, 1);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
-      renderer.setSize(width, height, false);
+      renderer.setSize(width, height, true);
     };
 
     const resizeObserver = new ResizeObserver(resize);
@@ -268,12 +268,13 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
     const size = bounds.getSize(new Vector3());
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     const distance = maxDim * 2.2;
+    object.position.set(-center.x, -center.y, -center.z);
     camera.near = Math.max(distance / 1000, 0.01);
     camera.far = distance * 20;
-    camera.position.set(center.x + distance, center.y - distance * 1.25, center.z + distance * 0.8);
-    camera.lookAt(center);
+    camera.position.set(distance, -distance * 1.25, distance * 0.8);
+    camera.lookAt(0, 0, 0);
     camera.updateProjectionMatrix();
-    controls.target.copy(center);
+    controls.target.set(0, 0, 0);
     controls.update();
   }, [mesh]);
 
@@ -327,7 +328,9 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
               {report.final.watertight ? '当前拓扑检测为水密' : '仍检测到边界边或非流形边'}
             </div>
             <div className="mt-1 text-xs leading-5">
-              这是浏览器端轻量修复结果，适合快速清理和降面；复杂坏面模型仍建议进入专业修复软件复检。
+              {report.final.watertight
+                ? '已按 Python 脚本语义完成清理、降面、法线修正和小孔补面；打印前仍建议在切片软件中复检尺寸与朝向。'
+                : '已按 Python 脚本语义处理；脚本同样可能输出非完全水密模型，复杂坏面需要复检。'}
             </div>
           </div>
         </div>
@@ -345,7 +348,10 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
           <div>删除退化面：{formatNumber(report.skippedDegenerateFaces)}</div>
           <div>删除重复面：{formatNumber(report.skippedDuplicateFaces)}</div>
           <div>移除碎片：{formatNumber(report.removedFragments)}</div>
+          <div>降面小片：{formatNumber(report.removedPostSimplifyFragments)}</div>
+          <div>非流形面：{formatNumber(report.removedNonManifoldFaces)}</div>
           <div>降面执行：{report.simplified ? '是' : '否'}</div>
+          <div>补洞范围：单三角孔 / 单四边孔</div>
           <div>
             降面误差：{report.simplifyError === null ? '-' : report.simplifyError.toPrecision(3)}
           </div>
@@ -463,7 +469,7 @@ export const StlRepairTool: React.FC = () => {
   };
 
   const statusText = useMemo(() => {
-    if (processing) return '正在清理网格、诊断拓扑并导出 STL';
+    if (processing) return '正在按 Python 脚本语义清理、降面并导出 STL';
     if (report) return report.final.watertight ? '处理完成，拓扑检测为水密' : '处理完成，仍建议复检';
     if (file) return '已选择文件，等待处理';
     return '选择 STL 文件开始';
@@ -504,7 +510,7 @@ export const StlRepairTool: React.FC = () => {
 
           <div className="grid gap-3">
             <div>
-              <FieldLabel hint={`${formatNumber(options.targetFaces)} 面`}>目标三角面上限</FieldLabel>
+              <FieldLabel hint={`${formatNumber(options.targetFaces)} 面`}>目标三角面数上限</FieldLabel>
               <Input
                 type="number"
                 min={1000}
@@ -515,7 +521,7 @@ export const StlRepairTool: React.FC = () => {
               />
             </div>
             <div>
-              <FieldLabel hint="顶点坐标容差">焊接容差</FieldLabel>
+              <FieldLabel hint="0 为脚本同款精确去重">焊接容差</FieldLabel>
               <Input
                 type="number"
                 min={0}
@@ -536,18 +542,6 @@ export const StlRepairTool: React.FC = () => {
                 onChange={event => updateOption('targetError', Math.max(0.0001, Number(event.target.value) || 0.01))}
               />
             </div>
-            <div>
-              <FieldLabel hint={`${options.holeEdgeLimit} 条边以内`}>小孔补面上限</FieldLabel>
-              <Input
-                type="number"
-                min={3}
-                max={256}
-                step={1}
-                disabled={!options.fillHoles}
-                value={options.holeEdgeLimit}
-                onChange={event => updateOption('holeEdgeLimit', Math.max(3, Number(event.target.value) || 3))}
-              />
-            </div>
           </div>
 
           <div className="grid gap-2">
@@ -566,7 +560,7 @@ export const StlRepairTool: React.FC = () => {
             <CheckboxRow
               checked={options.fillHoles}
               label="尝试补小孔"
-              hint="仅对简单边界环做三角扇补面，不承诺工业级修复。"
+              hint="对齐 Trimesh fill_holes 的轻量范围，仅补单三角孔和单四边孔。"
               onChange={checked => updateOption('fillHoles', checked)}
             />
             <CheckboxRow
