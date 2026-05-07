@@ -5,6 +5,7 @@ import {
   Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
   Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
   Type, UserRoundCog, WalletCards,
+  FileVideo,
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
@@ -35,6 +36,7 @@ const DeviceInfoTool = lazyNamed(() => import('./WebTools'), 'DeviceInfoTool');
 const ChmodTool = lazyNamed(() => import('./DevOpsTools'), 'ChmodTool');
 const StringEscaper = lazyNamed(() => import('./StringEscaper'), 'StringEscaper');
 const UrlParser = lazyNamed(() => import('./UrlParser'), 'UrlParser');
+const VideoDownloader = lazyNamed(() => import('./VideoDownloader'), 'VideoDownloader');
 const DiffViewer = lazyNamed(() => import('./DiffViewer'), 'DiffViewer');
 const XmlTool = lazyNamed(() => import('./FormatTools'), 'XmlTool');
 const YamlTool = lazyNamed(() => import('./FormatTools'), 'YamlTool');
@@ -99,6 +101,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'world-clock', name: '世界时间', description: '常用时区时间', icon: Globe, category: Category.TIME, component: WorldClockTool },
 
   { id: 'http', name: 'HTTP 请求', description: '简易 HTTP Client', icon: Send, category: Category.NETWORK, component: HttpBuilderTool },
+  { id: 'video-download', name: '视频下载解析', description: '解析视频直链 / HLS', icon: FileVideo, category: Category.NETWORK, component: VideoDownloader },
   { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, category: Category.NETWORK, component: UrlParser },
   { id: 'useragent', name: 'User Agent', description: 'UA 解析', icon: Monitor, category: Category.NETWORK, component: UserAgentTool },
   { id: 'ip', name: 'IP 信息', description: '本机 IP 查询', icon: Globe, category: Category.NETWORK, component: IpInfoTool },
