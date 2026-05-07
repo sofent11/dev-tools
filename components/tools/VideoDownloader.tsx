@@ -136,6 +136,8 @@ const platformHints: Record<Platform, string> = {
 };
 
 const sampleUrl = 'https://vimeo.com/76979871';
+const WORKER_ENDPOINT_STORAGE_KEY = 'video-catch-worker-endpoint';
+const DEFAULT_WORKER_ENDPOINT = 'https://api-dev.sopace.top';
 
 const decodeHtml = (value: string) => {
   const textarea = document.createElement('textarea');
@@ -200,6 +202,8 @@ const uniqueFormats = (formats: VideoFormat[]) => {
     return true;
   });
 };
+
+const normalizeWorkerEndpoint = (value: string) => value.trim().replace(/\/+$/, '');
 
 const guessQuality = (url: string, index: number) => {
   const decoded = decodeURIComponent(url);
@@ -407,6 +411,47 @@ const parseFromSource = (source: string, pageUrl: string, platform: Platform): P
   };
 };
 
+const parseWithWorker = async (endpoint: string, url: string): Promise<ParseResult> => {
+  const apiUrl = `${normalizeWorkerEndpoint(endpoint)}/api/extract`;
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ url }),
+  });
+  const payload = await response.json().catch(() => null);
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(payload?.error || `Worker HTTP ${response.status}`);
+  }
+
+  const resultPlatform = (payload.platform || detectPlatform(url)) as Platform;
+  const formats = uniqueFormats((payload.formats || []).map((format: Partial<VideoFormat>, index: number) => {
+    const formatUrl = format.url || '';
+    return {
+      id: `worker-${index}-${formatUrl.slice(-12)}`,
+      quality: format.quality || guessQuality(formatUrl, index),
+      format: format.format || getExtension(formatUrl),
+      resolution: format.resolution,
+      fileSize: format.fileSize,
+      url: formatUrl,
+      source: format.source || 'Cloudflare Worker',
+      referer: format.referer,
+    };
+  }));
+
+  return {
+    title: payload.title || '视频',
+    platform: resultPlatform,
+    thumbnail: payload.thumbnail || undefined,
+    author: payload.author || undefined,
+    duration: payload.duration || undefined,
+    formats,
+    warnings: payload.warnings || [],
+  };
+};
+
 const buildCommand = (format: VideoFormat) => {
   const output = `video.${format.format === 'm3u8' || format.format === 'mpd' ? 'mp4' : format.format}`;
   const header = format.referer ? ` -H "Referer: ${format.referer}"` : '';
@@ -422,6 +467,7 @@ const getBlockedWarning = (platform: Platform) =>
 export const VideoDownloader: React.FC = () => {
   const [mode, setMode] = useState<ParseMode>('url');
   const [input, setInput] = useState(sampleUrl);
+  const [workerEndpoint, setWorkerEndpoint] = useState(() => localStorage.getItem(WORKER_ENDPOINT_STORAGE_KEY) || DEFAULT_WORKER_ENDPOINT);
   const [source, setSource] = useState('');
   const [status, setStatus] = useState<ParseStatus>('idle');
   const [message, setMessage] = useState('');
@@ -440,6 +486,16 @@ export const VideoDownloader: React.FC = () => {
     window.setTimeout(() => setCopiedId(current => (current === id ? null : current)), 1200);
   };
 
+  const handleWorkerEndpointChange = (value: string) => {
+    setWorkerEndpoint(value);
+    const normalized = normalizeWorkerEndpoint(value);
+    if (normalized) {
+      localStorage.setItem(WORKER_ENDPOINT_STORAGE_KEY, normalized);
+    } else {
+      localStorage.removeItem(WORKER_ENDPOINT_STORAGE_KEY);
+    }
+  };
+
   const parse = async () => {
     setStatus('parsing');
     setMessage('');
@@ -451,6 +507,8 @@ export const VideoDownloader: React.FC = () => {
 
       if (mode === 'source') {
         nextResult = parseFromSource(source, targetUrl, nextPlatform);
+      } else if (normalizeWorkerEndpoint(workerEndpoint)) {
+        nextResult = await parseWithWorker(workerEndpoint, targetUrl);
       } else if (nextPlatform === 'direct') {
         nextResult = parseDirect(targetUrl);
       } else if (nextPlatform === 'vimeo') {
@@ -472,12 +530,12 @@ export const VideoDownloader: React.FC = () => {
     } catch (error) {
       const nextPlatform = detectPlatform(input);
       setStatus('warning');
-      setMessage(`${getBlockedWarning(nextPlatform)}（${error instanceof Error ? error.message : '解析失败'}）`);
+      setMessage(`${normalizeWorkerEndpoint(workerEndpoint) ? 'Worker 解析失败' : getBlockedWarning(nextPlatform)}（${error instanceof Error ? error.message : '解析失败'}）`);
       setResult({
-        title: '解析受限',
+        title: normalizeWorkerEndpoint(workerEndpoint) ? 'Worker 解析失败' : '解析受限',
         platform: nextPlatform,
         formats: [],
-        warnings: [getBlockedWarning(nextPlatform)],
+        warnings: [normalizeWorkerEndpoint(workerEndpoint) ? '请确认 Worker 已部署、域名正确，并允许 CORS。' : getBlockedWarning(nextPlatform)],
       });
     }
   };
@@ -527,6 +585,16 @@ export const VideoDownloader: React.FC = () => {
                 />
               </div>
 
+              <div>
+                <FieldLabel hint={workerEndpoint ? '优先使用' : '可选'}>Cloudflare Worker API</FieldLabel>
+                <Input
+                  value={workerEndpoint}
+                  onChange={event => handleWorkerEndpointChange(event.target.value)}
+                  placeholder="https://your-worker.your-name.workers.dev"
+                  className="font-mono"
+                />
+              </div>
+
               {mode === 'source' && (
                 <div>
                   <FieldLabel hint="跨域失败时使用">页面源码 / JSON 配置</FieldLabel>
@@ -554,7 +622,7 @@ export const VideoDownloader: React.FC = () => {
                   纯前端限制
                 </div>
                 <p className="text-sm leading-6 text-slate-600">
-                  解析完全在浏览器里运行，不会经过本项目后端。平台如果要求 Cookie、Referer、签名、地区网络或禁止跨域访问，浏览器会拦截请求；此时可改用源码解析或复制命令到终端下载。
+                  填入 Worker 域名后会优先调用 Worker 的 /api/extract 解析平台链接。未配置 Worker 时，仅使用浏览器本地直链和源码扫描能力。
                 </p>
               </div>
 
