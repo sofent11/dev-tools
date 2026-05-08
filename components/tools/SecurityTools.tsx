@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { RefreshCcw, Copy, Check } from 'lucide-react';
+import md5 from 'blueimp-md5';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
@@ -102,11 +103,20 @@ export const JwtTool: React.FC = () => {
 export const UuidTool: React.FC = () => {
   // Lazy init to avoid useEffect
   const [count, setCount] = useState(5);
+  const [uppercase, setUppercase] = useState(false);
+  const [hyphenated, setHyphenated] = useState(true);
   const [uuids, setUuids] = useState<string[]>(() => Array.from({ length: 5 }, () => crypto.randomUUID()));
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
+  const formatUuid = useCallback((uuid: string) => {
+    const next = hyphenated ? uuid : uuid.replace(/-/g, '');
+    return uppercase ? next.toUpperCase() : next.toLowerCase();
+  }, [hyphenated, uppercase]);
+
   const generate = () => {
-    const newUuids = Array.from({ length: count }, () => crypto.randomUUID());
+    const safeCount = Math.min(100, Math.max(1, Number.isFinite(count) ? count : 1));
+    setCount(safeCount);
+    const newUuids = Array.from({ length: safeCount }, () => crypto.randomUUID());
     setUuids(newUuids);
   };
 
@@ -126,7 +136,7 @@ export const UuidTool: React.FC = () => {
         }
       />
       <CardContent className="flex-1 overflow-auto space-y-4">
-        <div className="flex items-center gap-4 mb-4">
+        <div className="tool-panel flex flex-wrap items-center gap-4 p-4">
             <label className="text-sm font-medium text-slate-700">数量:</label>
             <input 
               type="number" 
@@ -136,15 +146,23 @@ export const UuidTool: React.FC = () => {
               onChange={(e) => setCount(Number(e.target.value))}
               className="w-20 p-2 text-sm border border-slate-200 rounded-md"
             />
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={hyphenated} onChange={event => setHyphenated(event.target.checked)} />
+              带连字符
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={uppercase} onChange={event => setUppercase(event.target.checked)} />
+              大写
+            </label>
         </div>
         <div className="space-y-2">
           {uuids.map((uuid, idx) => (
             <div key={idx} className="tool-panel group flex items-center gap-2 p-3 transition-colors hover:border-primary-200">
-              <code className="flex-1 font-mono text-slate-700">{uuid}</code>
+              <code className="flex-1 break-all font-mono text-slate-700">{formatUuid(uuid)}</code>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => copyToClipboard(uuid, idx)}
+                onClick={() => copyToClipboard(formatUuid(uuid), idx)}
                 className="opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 {copiedIndex === idx ? <Check className="w-4 h-4 text-green-600"/> : <Copy className="w-4 h-4"/>}
@@ -160,12 +178,12 @@ export const UuidTool: React.FC = () => {
 // --- Hash Tool ---
 export const HashTool: React.FC = () => {
   const [input, setInput] = useState('');
-  const [hashes, setHashes] = useState({ md5: '', sha1: '', sha256: '' });
+  const [hashes, setHashes] = useState({ md5: '', sha1: '', sha256: '', sha512: '' });
 
   useEffect(() => {
     const generateHashes = async () => {
       if (!input) {
-        setHashes({ md5: '', sha1: '', sha256: '' });
+        setHashes({ md5: '', sha1: '', sha256: '', sha512: '' });
         return;
       }
       const msgBuffer = new TextEncoder().encode(input);
@@ -178,12 +196,11 @@ export const HashTool: React.FC = () => {
       const hashArraySHA256 = Array.from(new Uint8Array(hashBufferSHA256));
       const hashHexSHA256 = hashArraySHA256.map(b => b.toString(16).padStart(2, '0')).join('');
 
-      // Using SHA-512 instead of MD5 for better security practice availability
       const hashBufferSHA512 = await crypto.subtle.digest('SHA-512', msgBuffer);
       const hashArraySHA512 = Array.from(new Uint8Array(hashBufferSHA512));
       const hashHexSHA512 = hashArraySHA512.map(b => b.toString(16).padStart(2, '0')).join('');
 
-      setHashes({ md5: hashHexSHA512, sha1: hashHexSHA1, sha256: hashHexSHA256 });
+      setHashes({ md5: md5(input), sha1: hashHexSHA1, sha256: hashHexSHA256, sha512: hashHexSHA512 });
     };
 
     generateHashes();
@@ -213,7 +230,7 @@ export const HashTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="Hash 生成器" description="生成文本的 SHA1, SHA256, SHA512 哈希值。" />
+      <CardHeader title="Hash 生成器" description="生成文本的 MD5、SHA1、SHA256、SHA512 哈希值。" />
       <CardContent className="flex-1 overflow-auto space-y-6">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">输入文本</label>
@@ -224,10 +241,14 @@ export const HashTool: React.FC = () => {
             onChange={(e) => setInput(e.target.value)}
           />
         </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          MD5 仅适合兼容校验场景，不应用于密码存储或安全签名。
+        </div>
         <div className="space-y-4">
+            <CopyRow label="MD5" val={hashes.md5} />
             <CopyRow label="SHA-1" val={hashes.sha1} />
             <CopyRow label="SHA-256" val={hashes.sha256} />
-            <CopyRow label="SHA-512" val={hashes.md5} />
+            <CopyRow label="SHA-512" val={hashes.sha512} />
         </div>
       </CardContent>
     </Card>

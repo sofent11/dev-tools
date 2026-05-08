@@ -5,7 +5,7 @@ import {
   Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
   Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
   Type, UserRoundCog, WalletCards,
-  FileVideo,
+  FileVideo, GitCompareArrows, Paintbrush, Wand2,
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
@@ -34,6 +34,7 @@ const ColorConverterTool = lazyNamed(() => import('./WebTools'), 'ColorConverter
 const QrCodeTool = lazyNamed(() => import('./WebTools'), 'QrCodeTool');
 const DeviceInfoTool = lazyNamed(() => import('./WebTools'), 'DeviceInfoTool');
 const ChmodTool = lazyNamed(() => import('./DevOpsTools'), 'ChmodTool');
+const CronTool = lazyNamed(() => import('./DevOpsTools'), 'CronTool');
 const StringEscaper = lazyNamed(() => import('./StringEscaper'), 'StringEscaper');
 const UrlParser = lazyNamed(() => import('./UrlParser'), 'UrlParser');
 const VideoDownloader = lazyNamed(() => import('./VideoDownloader'), 'VideoDownloader');
@@ -71,9 +72,14 @@ const ImageToBase64Tool = lazyNamed(() => import('./images'), 'ImageToBase64Tool
 const ImageWatermarkTool = lazyNamed(() => import('./images'), 'ImageWatermarkTool');
 const MimeTypeTool = lazyNamed(() => import('./frontend'), 'MimeTypeTool');
 const SvgToCssTool = lazyNamed(() => import('./frontend'), 'SvgToCssTool');
+const CssGeneratorTool = lazyNamed(() => import('./frontend'), 'CssGeneratorTool');
+const SvgOptimizerTool = lazyNamed(() => import('./frontend'), 'SvgOptimizerTool');
 const BasicAuthTool = lazyNamed(() => import('./security'), 'BasicAuthTool');
 const CertificateParserTool = lazyNamed(() => import('./security'), 'CertificateParserTool');
 const RandomNumberTool = lazyNamed(() => import('./generators'), 'RandomNumberTool');
+const LoremIpsumTool = lazyNamed(() => import('./generators'), 'LoremIpsumTool');
+const JsonDiffTool = lazyNamed(() => import('./DataTools'), 'JsonDiffTool');
+const SqlFormatterTool = lazyNamed(() => import('./DataTools'), 'SqlFormatterTool');
 
 export const TOOLS: ToolDef[] = [
   { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.TEXT, component: JsonTool },
@@ -116,8 +122,10 @@ export const TOOLS: ToolDef[] = [
 
   { id: 'pxrem', name: 'PX/REM 转换', description: 'CSS 单位计算', icon: ArrowRightLeft, category: Category.FRONTEND, component: PxRemTool },
   { id: 'color', name: '颜色转换', description: 'Hex / RGB / HSL', icon: Palette, category: Category.FRONTEND, component: ColorConverterTool },
+  { id: 'css-generator', name: 'CSS 可视化生成器', description: '阴影/渐变/圆角/毛玻璃', icon: Paintbrush, category: Category.FRONTEND, component: CssGeneratorTool },
   { id: 'mime', name: 'MIME 类型', description: '扩展名与 MIME 查询', icon: FileSearch, category: Category.FRONTEND, component: MimeTypeTool },
   { id: 'svg-css', name: 'SVG 转 CSS', description: 'SVG Data URL', icon: BadgeCent, category: Category.FRONTEND, component: SvgToCssTool },
+  { id: 'svg-optimizer', name: 'SVG 优化压缩', description: 'SVGO 本地压缩', icon: BadgeCent, category: Category.FRONTEND, component: SvgOptimizerTool },
   { id: 'qrcode', name: '二维码生成', description: '文本/WiFi/名片/事件', icon: QrCode, category: Category.FRONTEND, component: QrCodeTool },
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, category: Category.FRONTEND, component: ImageTools },
   { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, category: Category.FRONTEND, component: ImageToBase64Tool },
@@ -129,12 +137,16 @@ export const TOOLS: ToolDef[] = [
 
   { id: 'file-info', name: '文件信息', description: '大小/类型/哈希', icon: FileSearch, category: Category.DATA, component: FileInfoTool },
   { id: 'filename', name: '文件名提取', description: '路径与 URL 提取', icon: FileText, category: Category.DATA, component: FileNameExtractorTool },
+  { id: 'json-diff', name: 'JSON 结构化对比', description: '树状增删改对比', icon: GitCompareArrows, category: Category.DATA, component: JsonDiffTool },
+  { id: 'sql-format', name: 'SQL 格式化', description: '方言格式化 / 压缩', icon: Database, category: Category.DATA, component: SqlFormatterTool },
 
   { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, category: Category.DEVOPS, component: ChmodTool },
+  { id: 'cron', name: 'Cron 表达式', description: '生成 / 解析 / 预览', icon: CalendarClock, category: Category.DEVOPS, component: CronTool },
 
   { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, category: Category.GENERATORS, component: UuidTool },
   { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, category: Category.GENERATORS, component: RandomStringTool },
   { id: 'random-number', name: '随机数生成器', description: '范围随机整数', icon: Binary, category: Category.GENERATORS, component: RandomNumberTool },
+  { id: 'lorem', name: '假文生成器', description: '中英文占位文案', icon: Wand2, category: Category.GENERATORS, component: LoremIpsumTool },
 
   { id: 'rmb-uppercase', name: '人民币大写', description: '金额转中文大写', icon: WalletCards, category: Category.I18N, component: RmbUppercaseTool },
 

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { ArrowRightLeft, QrCode } from 'lucide-react';
+import { ArrowRightLeft, Check, Copy, QrCode, Upload } from 'lucide-react';
 import QRCode from 'qrcode';
+import jsQR from 'jsqr';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 
@@ -74,6 +75,8 @@ export const PxRemTool: React.FC = () => {
 export const ColorConverterTool: React.FC = () => {
     const [hex, setHex] = useState('#3b82f6');
     const [rgb, setRgb] = useState({ r: 59, g: 130, b: 246 });
+    const [alpha, setAlpha] = useState(1);
+    const [copied, setCopied] = useState(false);
 
     const hsl = useMemo(() => {
         const r = rgb.r / 255;
@@ -131,19 +134,54 @@ export const ColorConverterTool: React.FC = () => {
         setHex("#" + toHex(newRgb.r) + toHex(newRgb.g) + toHex(newRgb.b));
     }
 
+    const hsv = useMemo(() => {
+        const r = rgb.r / 255;
+        const g = rgb.g / 255;
+        const b = rgb.b / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const d = max - min;
+        let h = 0;
+        if (d) {
+            if (max === r) h = ((g - b) / d) % 6;
+            else if (max === g) h = (b - r) / d + 2;
+            else h = (r - g) / d + 4;
+            h *= 60;
+            if (h < 0) h += 360;
+        }
+        return {
+            h: Math.round(h),
+            s: Math.round((max === 0 ? 0 : d / max) * 100),
+            v: Math.round(max * 100),
+        };
+    }, [rgb]);
+
+    const rgbaText = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha.toFixed(2)})`;
+    const cssText = `${hex.toUpperCase()}\n${rgbaText}\nhsl(${hsl.h} ${hsl.s}% ${hsl.l}% / ${Math.round(alpha * 100)}%)\nhsv(${hsv.h} ${hsv.s}% ${hsv.v}%)`;
+    const copyCss = async () => {
+        await navigator.clipboard.writeText(cssText);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1500);
+    };
+
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="颜色转换器" description="Hex 与 RGB 格式互转及预览。" />
+            <CardHeader
+              title="颜色转换器"
+              description="HEX、RGB/RGBA、HSL、HSV 实时互转及预览。"
+              actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制颜色值</Button>}
+            />
             <CardContent className="flex-1 flex flex-col items-center justify-center space-y-8">
                  <div 
                     className="h-32 w-32 rounded-full border-4 border-white shadow-sm ring-1 ring-slate-200 transition-colors duration-300"
-                    style={{ backgroundColor: hex }}
+                    style={{ backgroundColor: rgbaText }}
                  />
                  
-                 <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-3 gap-6">
+                 <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HEX Color</label>
                         <div className="flex items-center gap-2">
+                            <input type="color" value={hex} onChange={e => handleHexChange(e.target.value)} className="h-9 w-10 rounded border border-slate-200 bg-white" />
                             <span className="text-slate-400 text-lg">#</span>
                             <input 
                                 value={hex.replace('#', '')}
@@ -183,8 +221,16 @@ export const ColorConverterTool: React.FC = () => {
                     <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HSL Color</label>
                         <div className="space-y-2 font-mono text-sm text-slate-800">
-                            <div>hsl({hsl.h} {hsl.s}% {hsl.l}%)</div>
+                            <div>hsl({hsl.h} {hsl.s}% {hsl.l}% / {Math.round(alpha * 100)}%)</div>
                             <div className="text-xs text-slate-500">H {hsl.h} / S {hsl.s}% / L {hsl.l}%</div>
+                        </div>
+                    </div>
+                    <div className="tool-panel p-4">
+                        <label className="block text-xs uppercase text-slate-500 font-bold mb-2">Alpha / HSV</label>
+                        <input type="range" min="0" max="1" step="0.01" value={alpha} onChange={e => setAlpha(Number(e.target.value))} className="w-full accent-primary-600" />
+                        <div className="mt-3 space-y-1 font-mono text-sm text-slate-800">
+                          <div>{rgbaText}</div>
+                          <div>hsv({hsv.h} {hsv.s}% {hsv.v}%)</div>
                         </div>
                     </div>
                  </div>
@@ -195,6 +241,7 @@ export const ColorConverterTool: React.FC = () => {
 
 // --- QR Code Tool ---
 export const QrCodeTool: React.FC = () => {
+    const [tab, setTab] = useState<'generate' | 'decode'>('generate');
     const [mode, setMode] = useState<'text' | 'wifi' | 'vcard' | 'event'>('text');
     const [text, setText] = useState('https://example.com');
     const [wifi, setWifi] = useState({ ssid: 'MyWifi', password: 'password', encryption: 'WPA' });
@@ -202,6 +249,8 @@ export const QrCodeTool: React.FC = () => {
     const [event, setEvent] = useState({ title: 'Demo Event', start: '20260428T090000', end: '20260428T100000' });
     const [size, setSize] = useState(200);
     const [qrDataUrl, setQrDataUrl] = useState('');
+    const [decodedText, setDecodedText] = useState('');
+    const [decodeError, setDecodeError] = useState('');
 
     const content = useMemo(() => {
         if (mode === 'wifi') return `WIFI:T:${wifi.encryption};S:${wifi.ssid};P:${wifi.password};;`;
@@ -227,9 +276,46 @@ export const QrCodeTool: React.FC = () => {
         };
     }, [content, size]);
 
+    const decodeFile = (file: File) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.naturalWidth;
+            canvas.height = image.naturalHeight;
+            const context = canvas.getContext('2d', { willReadFrequently: true });
+            if (!context) {
+                setDecodeError('当前浏览器无法读取图片像素。');
+                URL.revokeObjectURL(url);
+                return;
+            }
+            context.drawImage(image, 0, 0);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height);
+            if (code) {
+                setDecodedText(code.data);
+                setDecodeError('');
+            } else {
+                setDecodedText('');
+                setDecodeError('未识别到二维码，请尝试更清晰的图片。');
+            }
+            URL.revokeObjectURL(url);
+        };
+        image.onerror = () => {
+            setDecodeError('图片加载失败。');
+            URL.revokeObjectURL(url);
+        };
+        image.src = url;
+    };
+
     return (
         <Card className="h-full flex flex-col">
             <CardHeader title="二维码生成器" description="本地生成文本、WiFi、名片和事件二维码。" />
+            <div className="flex gap-1 border-b border-slate-100 px-5">
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'generate' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('generate')}>生成</button>
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>解析</button>
+            </div>
+            {tab === 'generate' ? (
             <CardContent className="flex-1 flex flex-col md:flex-row gap-8 p-6">
                 <div className="flex-1 space-y-4">
                     <div className="flex flex-wrap gap-2">
@@ -300,6 +386,22 @@ export const QrCodeTool: React.FC = () => {
                     )}
                 </div>
             </CardContent>
+            ) : (
+            <CardContent className="flex-1 grid gap-6 p-6 md:grid-cols-2">
+                <label className="tool-upload flex min-h-[300px] cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center">
+                    <Upload className="h-10 w-10 text-slate-400" />
+                    <div className="text-sm font-medium text-slate-700">上传二维码图片</div>
+                    <div className="text-xs text-slate-500">PNG、JPG、WebP 均可，本地 Canvas 解析</div>
+                    <input type="file" accept="image/*" className="hidden" onChange={event => event.target.files?.[0] && decodeFile(event.target.files[0])} />
+                </label>
+                <div className="tool-panel flex min-h-[300px] flex-col gap-3 p-4">
+                    <div className="text-sm font-semibold text-slate-700">解析结果</div>
+                    {decodeError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{decodeError}</div>}
+                    <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder="解析出的文本会显示在这里" />
+                    <Button variant="secondary" disabled={!decodedText} onClick={() => navigator.clipboard.writeText(decodedText)}>复制结果</Button>
+                </div>
+            </CardContent>
+            )}
         </Card>
     )
 }
