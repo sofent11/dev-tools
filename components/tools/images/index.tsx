@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, ImagePlus, Palette, Upload } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
@@ -9,6 +9,24 @@ import { useCopyToClipboard } from '../shared/useCopyToClipboard';
 interface Swatch {
   hex: string;
   count: number;
+}
+
+interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface PaletteEntry {
+  color: RgbColor;
+  hex: string;
+  count: number;
+}
+
+interface BeadPatternResult {
+  size: number;
+  palette: PaletteEntry[];
+  matrix: number[][];
 }
 
 const rgbToHex = (r: number, g: number, b: number) =>
@@ -48,6 +66,392 @@ const getPalette = async (src: string): Promise<Swatch[]> => {
     .map(([hex, count]) => ({ hex, count }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 12);
+};
+
+const clampNumber = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const getDistanceSquared = (first: RgbColor, second: RgbColor) => {
+  const red = first.r - second.r;
+  const green = first.g - second.g;
+  const blue = first.b - second.b;
+  return red * red + green * green + blue * blue;
+};
+
+const averageColors = (colors: RgbColor[]): RgbColor => {
+  if (!colors.length) return { r: 255, g: 255, b: 255 };
+
+  const total = colors.reduce(
+    (acc, color) => ({
+      r: acc.r + color.r,
+      g: acc.g + color.g,
+      b: acc.b + color.b,
+    }),
+    { r: 0, g: 0, b: 0 },
+  );
+
+  return {
+    r: Math.round(total.r / colors.length),
+    g: Math.round(total.g / colors.length),
+    b: Math.round(total.b / colors.length),
+  };
+};
+
+const getBucketRange = (colors: RgbColor[]) => {
+  const range = colors.reduce(
+    (acc, color) => ({
+      minR: Math.min(acc.minR, color.r),
+      maxR: Math.max(acc.maxR, color.r),
+      minG: Math.min(acc.minG, color.g),
+      maxG: Math.max(acc.maxG, color.g),
+      minB: Math.min(acc.minB, color.b),
+      maxB: Math.max(acc.maxB, color.b),
+    }),
+    {
+      minR: 255,
+      maxR: 0,
+      minG: 255,
+      maxG: 0,
+      minB: 255,
+      maxB: 0,
+    },
+  );
+
+  const red = range.maxR - range.minR;
+  const green = range.maxG - range.minG;
+  const blue = range.maxB - range.minB;
+  const channel = red >= green && red >= blue ? 'r' : green >= blue ? 'g' : 'b';
+
+  return {
+    channel,
+    spread: Math.max(red, green, blue),
+  };
+};
+
+const quantizeMedianCut = (pixels: RgbColor[], maxColors: number) => {
+  const buckets: RgbColor[][] = [pixels.slice()];
+
+  while (buckets.length < maxColors) {
+    let splitIndex = -1;
+    let splitScore = -1;
+    let splitChannel: keyof RgbColor = 'r';
+
+    buckets.forEach((bucket, index) => {
+      if (bucket.length < 2) return;
+      const range = getBucketRange(bucket);
+      const score = range.spread * bucket.length;
+
+      if (score > splitScore) {
+        splitIndex = index;
+        splitScore = score;
+        splitChannel = range.channel as keyof RgbColor;
+      }
+    });
+
+    if (splitIndex < 0) break;
+
+    const sorted = buckets[splitIndex].slice().sort((a, b) => a[splitChannel] - b[splitChannel]);
+    const middle = Math.floor(sorted.length / 2);
+    const first = sorted.slice(0, middle);
+    const second = sorted.slice(middle);
+
+    if (!first.length || !second.length) break;
+    buckets.splice(splitIndex, 1, first, second);
+  }
+
+  return buckets.map(averageColors);
+};
+
+const getNearestPaletteIndex = (color: RgbColor, palette: RgbColor[]) => {
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  palette.forEach((paletteColor, index) => {
+    const distance = getDistanceSquared(color, paletteColor);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+};
+
+const getSquareSamplePixels = async (src: string, size: number) => {
+  const image = await loadImage(src);
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+
+  if (!context) {
+    throw new Error('当前浏览器无法创建 Canvas。');
+  }
+
+  const sourceWidth = image.naturalWidth || image.width;
+  const sourceHeight = image.naturalHeight || image.height;
+  const sourceSize = Math.min(sourceWidth, sourceHeight);
+  const sourceX = Math.max(0, (sourceWidth - sourceSize) / 2);
+  const sourceY = Math.max(0, (sourceHeight - sourceSize) / 2);
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, size, size);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(image, sourceX, sourceY, sourceSize, sourceSize, 0, 0, size, size);
+
+  const { data } = context.getImageData(0, 0, size, size);
+  const pixels: RgbColor[] = [];
+
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = data[index + 3] / 255;
+    pixels.push({
+      r: Math.round(data[index] * alpha + 255 * (1 - alpha)),
+      g: Math.round(data[index + 1] * alpha + 255 * (1 - alpha)),
+      b: Math.round(data[index + 2] * alpha + 255 * (1 - alpha)),
+    });
+  }
+
+  return pixels;
+};
+
+const buildBeadPattern = async (src: string, size: number, maxColors: number): Promise<BeadPatternResult> => {
+  const pixels = await getSquareSamplePixels(src, size);
+  const palette = quantizeMedianCut(pixels, maxColors);
+  const rawIndexes = pixels.map(pixel => getNearestPaletteIndex(pixel, palette));
+  const counts = new Array(palette.length).fill(0) as number[];
+  rawIndexes.forEach(index => {
+    counts[index] += 1;
+  });
+
+  const sortedEntries = palette
+    .map((color, index) => ({
+      color,
+      count: counts[index],
+      originalIndex: index,
+    }))
+    .filter(entry => entry.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const indexMap = new Map<number, number>();
+  sortedEntries.forEach((entry, index) => indexMap.set(entry.originalIndex, index));
+
+  return {
+    size,
+    palette: sortedEntries.map(entry => ({
+      color: entry.color,
+      hex: rgbToHex(entry.color.r, entry.color.g, entry.color.b),
+      count: entry.count,
+    })),
+    matrix: Array.from({ length: size }, (_, row) =>
+      Array.from({ length: size }, (_, column) => indexMap.get(rawIndexes[row * size + column]) ?? 0),
+    ),
+  };
+};
+
+const drawRoundedRect = (
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+) => {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+};
+
+const drawDimensionLine = (
+  context: CanvasRenderingContext2D,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  label: string,
+  vertical = false,
+) => {
+  context.save();
+  context.strokeStyle = '#123f91';
+  context.fillStyle = '#123f91';
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(fromX, fromY);
+  context.lineTo(toX, toY);
+  context.stroke();
+
+  const tick = 16;
+  if (vertical) {
+    context.beginPath();
+    context.moveTo(fromX - tick / 2, fromY);
+    context.lineTo(fromX + tick / 2, fromY);
+    context.moveTo(toX - tick / 2, toY);
+    context.lineTo(toX + tick / 2, toY);
+    context.stroke();
+    context.translate(fromX, (fromY + toY) / 2);
+    context.rotate(-Math.PI / 2);
+    context.font = '700 28px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, 0, -12);
+  } else {
+    context.beginPath();
+    context.moveTo(fromX, fromY - tick / 2);
+    context.lineTo(fromX, fromY + tick / 2);
+    context.moveTo(toX, toY - tick / 2);
+    context.lineTo(toX, toY + tick / 2);
+    context.stroke();
+    context.font = '700 28px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, (fromX + toX) / 2, fromY - 2);
+  }
+
+  context.restore();
+};
+
+const getGridMarkers = (size: number) => {
+  const markers = new Set([1, size]);
+  for (let value = 5; value <= size; value += 5) {
+    markers.add(value);
+  }
+  return Array.from(markers).sort((a, b) => a - b);
+};
+
+const drawBeadChart = (canvas: HTMLCanvasElement, result: BeadPatternResult) => {
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('当前浏览器无法绘制 Canvas。');
+  }
+
+  const cellSize = clampNumber(Math.floor(860 / result.size), 8, 20);
+  const gridSize = cellSize * result.size;
+  const panelWidth = 260;
+  const gap = 54;
+  const gridX = panelWidth + gap;
+  const gridY = 112;
+  const rightMargin = 94;
+  const bottomMargin = 86;
+  const width = gridX + gridSize + rightMargin;
+  const height = Math.max(gridY + gridSize + bottomMargin, 960);
+
+  canvas.width = width;
+  canvas.height = height;
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+
+  context.strokeStyle = '#123f91';
+  context.lineWidth = 3;
+  drawRoundedRect(context, 18, 18, panelWidth - 26, height - 36, 14);
+  context.stroke();
+
+  context.fillStyle = '#123f91';
+  context.font = '700 24px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText('◆ 色板 / 图例 ◆', panelWidth / 2, 72);
+
+  const metaHeight = 126;
+  const paletteTop = 120;
+  const paletteBottom = height - metaHeight - 42;
+  const rowHeight = clampNumber(Math.floor((paletteBottom - paletteTop) / Math.max(result.palette.length, 1)), 32, 76);
+  const swatchSize = clampNumber(rowHeight - 14, 22, 54);
+
+  result.palette.forEach((entry, index) => {
+    const y = paletteTop + index * rowHeight;
+    const swatchX = 42;
+    const swatchY = y + Math.max(5, (rowHeight - swatchSize) / 2);
+
+    context.fillStyle = entry.hex;
+    drawRoundedRect(context, swatchX, swatchY, swatchSize, swatchSize, 5);
+    context.fill();
+    context.strokeStyle = '#1f2937';
+    context.lineWidth = 1.5;
+    context.stroke();
+
+    context.fillStyle = '#0f172a';
+    context.textAlign = 'left';
+    context.textBaseline = 'alphabetic';
+    context.font = rowHeight < 42 ? '700 15px sans-serif' : '700 22px sans-serif';
+    context.fillText(`#${String(index + 1).padStart(2, '0')}`, swatchX + swatchSize + 18, swatchY + swatchSize * 0.48);
+    context.font = rowHeight < 42 ? '500 11px sans-serif' : '500 16px sans-serif';
+    context.fillText(`${entry.hex.toUpperCase()} · ${entry.count} 颗`, swatchX + swatchSize + 18, swatchY + swatchSize * 0.84);
+  });
+
+  const metaX = 30;
+  const metaY = height - metaHeight - 28;
+  context.setLineDash([8, 7]);
+  context.strokeStyle = '#123f91';
+  context.lineWidth = 2;
+  drawRoundedRect(context, metaX, metaY, panelWidth - 50, metaHeight, 12);
+  context.stroke();
+  context.setLineDash([]);
+
+  context.fillStyle = '#123f91';
+  context.font = '700 16px sans-serif';
+  context.textAlign = 'left';
+  context.textBaseline = 'alphabetic';
+  context.fillText(`图案尺寸： ${result.size} x ${result.size}`, metaX + 16, metaY + 36);
+  context.fillText('拼豆直径： 5mm', metaX + 16, metaY + 70);
+  context.fillText('建议底板： 方形拼豆板', metaX + 16, metaY + 104);
+
+  drawDimensionLine(context, gridX + 12, 56, gridX + gridSize - 12, 56, String(result.size));
+  drawDimensionLine(context, gridX + gridSize + 44, gridY, gridX + gridSize + 44, gridY + gridSize, String(result.size), true);
+
+  const markers = getGridMarkers(result.size);
+  context.fillStyle = '#123f91';
+  context.font = '700 16px sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  markers.forEach(marker => {
+    const position = gridX + (marker - 0.5) * cellSize;
+    context.fillText(String(marker), position, gridY - 18);
+    context.fillText(String(marker), position, gridY + gridSize + 20);
+  });
+  context.textAlign = 'right';
+  markers.forEach(marker => {
+    const position = gridY + (marker - 0.5) * cellSize;
+    context.fillText(String(marker), gridX - 16, position);
+  });
+
+  result.matrix.forEach((row, rowIndex) => {
+    row.forEach((paletteIndex, columnIndex) => {
+      const entry = result.palette[paletteIndex];
+      context.fillStyle = entry?.hex || '#ffffff';
+      context.fillRect(gridX + columnIndex * cellSize, gridY + rowIndex * cellSize, cellSize, cellSize);
+    });
+  });
+
+  context.strokeStyle = '#71717a';
+  context.lineWidth = 1;
+  for (let index = 0; index <= result.size; index += 1) {
+    const position = gridX + index * cellSize + 0.5;
+    context.beginPath();
+    context.moveTo(position, gridY);
+    context.lineTo(position, gridY + gridSize);
+    context.stroke();
+  }
+  for (let index = 0; index <= result.size; index += 1) {
+    const position = gridY + index * cellSize + 0.5;
+    context.beginPath();
+    context.moveTo(gridX, position);
+    context.lineTo(gridX + gridSize, position);
+    context.stroke();
+  }
+
+  context.strokeStyle = '#1f2937';
+  context.lineWidth = 2;
+  context.strokeRect(gridX, gridY, gridSize, gridSize);
 };
 
 export const ImageColorExtractTool: React.FC = () => {
@@ -193,6 +597,231 @@ export const ImageWatermarkTool: React.FC = () => {
         <div className="overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
           <canvas ref={canvasRef} className="max-h-[70vh] max-w-full" />
           {!imageUrl && <div className="flex h-64 items-center justify-center gap-2 text-slate-400"><Palette className="h-5 w-5" />等待图片</div>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+export const PerlerBeadTool: React.FC = () => {
+  const [imageUrl, setImageUrl] = useState('');
+  const [sourceName, setSourceName] = useState('');
+  const [pixelSize, setPixelSize] = useState(45);
+  const [maxColors, setMaxColors] = useState(8);
+  const [result, setResult] = useState<BeadPatternResult | null>(null);
+  const [error, setError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!imageUrl) {
+      setResult(null);
+      setError('');
+      return;
+    }
+
+    let isCancelled = false;
+    setIsProcessing(true);
+    setError('');
+
+    buildBeadPattern(imageUrl, pixelSize, maxColors)
+      .then(nextResult => {
+        if (isCancelled) return;
+        setResult(nextResult);
+      })
+      .catch((reason: unknown) => {
+        if (isCancelled) return;
+        setResult(null);
+        setError(reason instanceof Error ? reason.message : '拼豆图纸生成失败。');
+      })
+      .finally(() => {
+        if (!isCancelled) setIsProcessing(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [imageUrl, maxColors, pixelSize]);
+
+  useEffect(() => {
+    if (!result || !canvasRef.current) return;
+
+    try {
+      drawBeadChart(canvasRef.current, result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '图纸预览绘制失败。');
+    }
+  }, [result]);
+
+  const handleFile = async (file?: File) => {
+    if (!file) return;
+
+    try {
+      setSourceName(file.name);
+      setImageUrl(await readFileAsDataUrl(file));
+    } catch (reason) {
+      setResult(null);
+      setImageUrl('');
+      setError(reason instanceof Error ? reason.message : '图片读取失败。');
+    }
+  };
+
+  const updatePixelSize = (value: number) => {
+    setPixelSize(clampNumber(Math.round(value || 16), 16, 96));
+  };
+
+  const updateMaxColors = (value: number) => {
+    setMaxColors(clampNumber(Math.round(value || 2), 2, 24));
+  };
+
+  const download = () => {
+    if (!result || !canvasRef.current) return;
+
+    try {
+      drawBeadChart(canvasRef.current, result);
+      canvasRef.current.toBlob(blob => {
+        if (blob) downloadBlob(blob, `perler-beads-${result.size}x${result.size}.png`);
+      }, 'image/png');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '图纸导出失败。');
+    }
+  };
+
+  return (
+    <Card className="h-full flex flex-col">
+      <CardHeader
+        title="拼豆图纸生成"
+        description="上传图片，本地生成方形拼豆网格、色板图例与可下载图纸。"
+        actions={
+          <Button
+            size="sm"
+            icon={<Download className="h-4 w-4" />}
+            onClick={download}
+            disabled={!result || isProcessing}
+          >
+            下载图纸
+          </Button>
+        }
+      />
+      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="flex min-h-0 flex-col gap-4">
+          <UploadPanel className="min-h-[9rem]">
+            <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
+              <ImagePlus className="h-8 w-8 text-primary-600" />
+              <span className="text-sm font-medium text-slate-700">选择拼豆参考图</span>
+              <span className="text-xs text-slate-400">JPG / PNG / WebP，本地处理不上传</span>
+              <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
+            </label>
+          </UploadPanel>
+
+          <div className="tool-section space-y-4 p-4">
+            <div>
+              <FieldLabel hint={`${pixelSize} x ${pixelSize}`}>像素数</FieldLabel>
+              <div className="grid grid-cols-[1fr_5.5rem] items-center gap-3">
+                <input
+                  type="range"
+                  min="16"
+                  max="96"
+                  step="1"
+                  value={pixelSize}
+                  onChange={event => updatePixelSize(Number(event.target.value))}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="16"
+                  max="96"
+                  value={pixelSize}
+                  onChange={event => updatePixelSize(Number(event.target.value))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel hint={`最多 ${maxColors} 色`}>最大颜色数</FieldLabel>
+              <div className="grid grid-cols-[1fr_5.5rem] items-center gap-3">
+                <input
+                  type="range"
+                  min="2"
+                  max="24"
+                  step="1"
+                  value={maxColors}
+                  onChange={event => updateMaxColors(Number(event.target.value))}
+                  className="w-full"
+                />
+                <Input
+                  type="number"
+                  min="2"
+                  max="24"
+                  value={maxColors}
+                  onChange={event => updateMaxColors(Number(event.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="tool-panel overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <div className="truncate text-sm font-semibold text-slate-800">{sourceName || '源图预览'}</div>
+              <div className="mt-1 text-xs text-slate-500">按中心方形裁切生成图案</div>
+            </div>
+            <div className="flex min-h-48 items-center justify-center bg-white p-3">
+              {imageUrl ? (
+                <img src={imageUrl} alt="拼豆源图" className="max-h-64 w-full rounded-lg object-contain" />
+              ) : (
+                <div className="flex h-48 items-center justify-center text-sm text-slate-400">等待上传图片</div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-col gap-4">
+          {error && <div className="status-error px-4 py-3 text-sm">{error}</div>}
+
+          <div className="tool-section flex flex-none flex-col overflow-hidden">
+            <div className="flex flex-none flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-800">图纸预览</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {result ? `${result.size * result.size} 颗 · ${result.palette.length} 色` : '生成后可下载完整 PNG'}
+                </div>
+              </div>
+              {isProcessing && <div className="text-xs font-medium text-primary-700">正在生成...</div>}
+            </div>
+            <div className="flex min-h-[24rem] items-center justify-center overflow-hidden bg-slate-50 p-4" style={{ height: 'min(68vh, 48rem)' }}>
+              <canvas
+                ref={canvasRef}
+                className={result ? 'h-full w-full rounded-lg border border-slate-200 bg-white object-contain shadow-sm' : 'hidden'}
+              />
+              {!result && (
+                <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-sm text-slate-400">
+                  上传图片后生成拼豆图纸
+                </div>
+              )}
+            </div>
+          </div>
+
+          {result && (
+            <div className="tool-panel flex-none overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
+                <div className="text-xs font-semibold text-slate-700">颜色清单</div>
+                <div className="text-xs text-slate-500">{result.palette.length} 色</div>
+              </div>
+              <div className="app-scrollbar grid max-h-24 gap-2 overflow-auto p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {result.palette.map((entry, index) => (
+                  <div key={`${entry.hex}-${index}`} className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+                    <div className="h-6 w-6 flex-none rounded-md border border-slate-200" style={{ backgroundColor: entry.hex }} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-semibold text-slate-800">
+                        #{String(index + 1).padStart(2, '0')} <span className="font-mono font-medium text-slate-500">{entry.hex.toUpperCase()}</span>
+                      </div>
+                      <div className="text-[11px] leading-4 text-slate-500">{entry.count} 颗</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

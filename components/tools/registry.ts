@@ -5,7 +5,7 @@ import {
   Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
   Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
   Type, UserRoundCog, WalletCards,
-  FileVideo, GitCompareArrows, Paintbrush, Wand2,
+  FileVideo, GitCompareArrows, Grid3X3, Paintbrush, Wand2,
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
@@ -70,6 +70,7 @@ const FileNameExtractorTool = lazyNamed(() => import('./files'), 'FileNameExtrac
 const ImageColorExtractTool = lazyNamed(() => import('./images'), 'ImageColorExtractTool');
 const ImageToBase64Tool = lazyNamed(() => import('./images'), 'ImageToBase64Tool');
 const ImageWatermarkTool = lazyNamed(() => import('./images'), 'ImageWatermarkTool');
+const PerlerBeadTool = lazyNamed(() => import('./images'), 'PerlerBeadTool');
 const MimeTypeTool = lazyNamed(() => import('./frontend'), 'MimeTypeTool');
 const SvgToCssTool = lazyNamed(() => import('./frontend'), 'SvgToCssTool');
 const CssGeneratorTool = lazyNamed(() => import('./frontend'), 'CssGeneratorTool');
@@ -131,6 +132,7 @@ export const TOOLS: ToolDef[] = [
   { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, category: Category.FRONTEND, component: ImageToBase64Tool },
   { id: 'image-colors', name: '图片颜色提取', description: '主色与色板', icon: Palette, category: Category.FRONTEND, component: ImageColorExtractTool },
   { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, category: Category.FRONTEND, component: ImageWatermarkTool },
+  { id: 'perler-beads', name: '拼豆图纸生成', description: '图片转拼豆网格', icon: Grid3X3, category: Category.FRONTEND, component: PerlerBeadTool },
   { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, category: Category.FRONTEND, component: HeadshotExtractor },
   { id: 'pdf', name: 'PDF 工具箱', description: '合并 / 转图片', icon: Files, category: Category.FRONTEND, component: PdfTools },
   { id: 'faceswap', name: 'AI 换脸', description: '本地 WebGL 换脸', icon: UserRoundCog, category: Category.FRONTEND, component: FaceSwapTool },
