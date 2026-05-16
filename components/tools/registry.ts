@@ -1,7 +1,7 @@
 import { lazy, type ElementType } from 'react';
 import {
   AlignLeft, ArrowRightLeft, BadgeCent, Binary, Braces, CalendarClock, CaseUpper, Clock,
-  Box, Code, Database, FileArchive, FileCode, FileJson, FileSearch, FileSpreadsheet, FileText,
+  Box, Boxes, Code, Database, FileArchive, FileCode, FileJson, FileSearch, FileSpreadsheet, FileText,
   Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
   Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
   Type, UserRoundCog, WalletCards,
@@ -59,6 +59,7 @@ const JewelryCustomizer = lazyDefault(() => import('./JewelryCustomizer'));
 const FaceSwapTool = lazyNamed(() => import('./FaceSwapTool'), 'FaceSwapTool');
 const SmartGeometryTool = lazyDefault(() => import('./SmartGeometry'));
 const StlRepairTool = lazyDefault(() => import('./StlRepair'));
+const VoronoiLatticeTool = lazyDefault(() => import('./VoronoiLattice'));
 const HtmlToMarkdownTool = lazyNamed(() => import('./text'), 'HtmlToMarkdownTool');
 const HtmlFormatTool = lazyNamed(() => import('./text'), 'HtmlFormatTool');
 const RmbUppercaseTool = lazyNamed(() => import('./text'), 'RmbUppercaseTool');
@@ -154,6 +155,7 @@ export const TOOLS: ToolDef[] = [
 
   { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器', icon: Gem, category: Category.CUSTOM, component: JewelryCustomizer },
   { id: 'stl-repair', name: 'STL 修复/降面', description: '本地清理 / 降面 / 导出', icon: Box, category: Category.CUSTOM, component: StlRepairTool },
+  { id: 'stl-voronoi', name: 'STL 镂空/Voronoi', description: '本地蜂窝镂空 / STL 导出', icon: Boxes, category: Category.CUSTOM, component: VoronoiLatticeTool },
   { id: 'smart-geometry', name: '小学几何解题', description: '加载 JSON 交互讲解', icon: Ruler, category: Category.CUSTOM, component: SmartGeometryTool },
 
   { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.AI, component: AiAssistant },
