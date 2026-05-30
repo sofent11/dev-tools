@@ -2,7 +2,10 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clipboard,
+  Cpu,
   Copy,
   Download,
   ExternalLink,
@@ -10,12 +13,12 @@ import {
   Link2,
   Loader2,
   PlayCircle,
-  ShieldAlert,
   Terminal,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { CodePanel, FieldLabel, Input, Textarea } from '../ui/ToolUi';
+import { videoCatchWorkerCode } from './videoCatchWorkerCode';
 
 type Platform = 'direct' | 'bilibili' | 'douyin' | 'xiaohongshu' | 'pinterest' | 'vimeo' | 'twitter' | 'generic';
 type ParseMode = 'url' | 'source';
@@ -473,6 +476,14 @@ export const VideoDownloader: React.FC = () => {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [showWorkerInfo, setShowWorkerInfo] = useState(false);
+  const [workerScriptCopied, setWorkerScriptCopied] = useState(false);
+
+  const copyWorkerScript = async () => {
+    await navigator.clipboard.writeText(videoCatchWorkerCode);
+    setWorkerScriptCopied(true);
+    window.setTimeout(() => setWorkerScriptCopied(false), 2000);
+  };
 
   const targetUrl = useMemo(() => extractFirstUrl(input), [input]);
   const platform = useMemo(() => detectPlatform(input), [input]);
@@ -616,14 +627,70 @@ export const VideoDownloader: React.FC = () => {
                 开始解析
               </Button>
 
-              <div className="tool-section p-4">
-                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
-                  <ShieldAlert className="h-4 w-4 text-amber-600" />
-                  纯前端限制
-                </div>
-                <p className="text-sm leading-6 text-slate-600">
-                  填入 Worker 域名后会优先调用 Worker 的 /api/extract 解析平台链接。未配置 Worker 时，仅使用浏览器本地直链和源码扫描能力。
-                </p>
+              <div className="tool-section overflow-hidden rounded-xl border border-slate-200/80 bg-white/50 p-4 shadow-sm backdrop-blur-sm transition-all duration-300">
+                <button
+                  type="button"
+                  onClick={() => setShowWorkerInfo(!showWorkerInfo)}
+                  className="flex w-full items-center justify-between text-left text-sm font-semibold text-slate-800 hover:text-slate-900"
+                >
+                  <span className="flex items-center gap-2">
+                    <Cpu className={`h-4 w-4 transition-transform duration-500 ${showWorkerInfo ? 'text-indigo-600 rotate-180' : 'text-slate-500'}`} />
+                    部署私有解析 Worker (推荐)
+                  </span>
+                  {showWorkerInfo ? (
+                    <ChevronUp className="h-4 w-4 text-slate-500 transition-transform duration-300" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-500 transition-transform duration-300" />
+                  )}
+                </button>
+                
+                {showWorkerInfo ? (
+                  <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
+                    <p className="text-slate-500">
+                      大多数视频平台（如 Bilibili、抖音等）存在严格的跨域安全限制（CORS）。部署免费的 Cloudflare Worker 代理即可绕过限制，完美解锁全部解析功能。
+                    </p>
+                    <div className="rounded-lg bg-slate-50 p-2.5">
+                      <div className="mb-1 font-semibold text-slate-800">极速部署步骤：</div>
+                      <ol className="list-decimal pl-4 space-y-1 text-slate-600">
+                        <li>
+                          登录 <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline hover:text-indigo-700">Cloudflare 仪表盘</a>，创建一个新的 Workers。
+                        </li>
+                        <li>
+                          复制下方完整的解析脚本代码。
+                        </li>
+                        <li>
+                          在 Cloudflare 网页编辑器中清空原有内容，粘贴脚本并点击「Deploy」。
+                        </li>
+                        <li>
+                          复制部署成功后的 API 域名，填入上方的「Cloudflare Worker API」框中。
+                        </li>
+                      </ol>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Button
+                        size="sm"
+                        variant={workerScriptCopied ? 'secondary' : 'primary'}
+                        icon={workerScriptCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        onClick={copyWorkerScript}
+                        className="w-full justify-center py-2"
+                      >
+                        {workerScriptCopied ? '已复制 Worker 脚本！' : '一键复制 Worker 脚本'}
+                      </Button>
+                      <div className="relative">
+                        <div className="absolute right-2 top-2 z-10 rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-white">
+                          PREVIEW
+                        </div>
+                        <CodePanel muted className="max-h-36 overflow-y-auto font-mono text-[10px] leading-4 scrollbar-thin scrollbar-thumb-slate-300">
+                          {videoCatchWorkerCode}
+                        </CodePanel>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    填入 Worker 域名后优先调用远程 API。未配置时仅使用浏览器本地能力，部分平台将受限于跨域报错。
+                  </p>
+                )}
               </div>
 
               <div className="tool-panel p-4">
