@@ -1283,15 +1283,15 @@ export const generateGeometry = (
     };
 
     if (config.loopType === 'top') {
-      addLoopAt((boundsForLoops.left + boundsForLoops.right) / 2, boundsForLoops.top - loopOuterR * 0.4);
+      addLoopAt((boundsForLoops.left + boundsForLoops.right) / 2, boundsForLoops.top + loopOuterR * 0.25);
     } else if (config.loopType === 'double_side') {
-      addLoopAt(boundsForLoops.left - loopOuterR * 0.4, lCenterY);
-      addLoopAt(boundsForLoops.right + loopOuterR * 0.4, lCenterY);
+      addLoopAt(boundsForLoops.left + loopOuterR * 0.25, lCenterY);
+      addLoopAt(boundsForLoops.right - loopOuterR * 0.25, lCenterY);
     } else if (config.loopType === 'double_top') {
       const x1 = boundsForLoops.left + lWidth * 0.15;
       const x2 = boundsForLoops.right - lWidth * 0.15;
-      addLoopAt(x1, boundsForLoops.top - loopOuterR * 0.4);
-      addLoopAt(x2, boundsForLoops.top - loopOuterR * 0.4);
+      addLoopAt(x1, boundsForLoops.top + loopOuterR * 0.25);
+      addLoopAt(x2, boundsForLoops.top + loopOuterR * 0.25);
     }
   }
 
