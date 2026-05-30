@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS } from './components/tools/registry';
@@ -41,6 +41,18 @@ export default function App() {
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
@@ -237,10 +249,19 @@ export default function App() {
               <p className="mt-0.5 truncate text-sm text-slate-500">{activeTool.description}</p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 text-xs font-medium text-slate-400 md:flex">
-            <span>Workspace</span>
-            <span className="h-1 w-1 rounded-full bg-slate-300" />
-            <span>{new Date().getFullYear()}</span>
+          <div className="flex items-center gap-4 ml-auto md:ml-0">
+            <button
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+              title={isDarkMode ? "切换到浅色模式" : "切换到深色模式"}
+            >
+              {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400" />}
+            </button>
+            <div className="hidden items-center gap-2 text-xs font-medium text-slate-400 md:flex">
+              <span>Workspace</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>{new Date().getFullYear()}</span>
+            </div>
           </div>
         </header>
 

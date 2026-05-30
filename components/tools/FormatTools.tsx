@@ -254,6 +254,40 @@ export const CsvTool: React.FC = () => {
 
 
 // --- Markdown -> HTML Tool ---
+const sanitizeHtml = (htmlStr: string): string => {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlStr, 'text/html');
+    
+    // Remove dangerous tags
+    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'style', 'meta', 'base'];
+    dangerousTags.forEach(tag => {
+      doc.querySelectorAll(tag).forEach(el => el.remove());
+    });
+    
+    // Clean up all elements
+    const allElements = doc.querySelectorAll('*');
+    allElements.forEach(el => {
+      // Remove on* attributes (onclick, onload, etc.)
+      const attrs = Array.from(el.attributes);
+      attrs.forEach(attr => {
+        if (attr.name.startsWith('on')) {
+          el.removeAttribute(attr.name);
+        }
+        // Remove javascript: URLs from href, src, etc.
+        if (attr.value.trim().toLowerCase().startsWith('javascript:')) {
+          el.setAttribute(attr.name, '#');
+        }
+      });
+    });
+    
+    return doc.body.innerHTML;
+  } catch (e) {
+    console.error('HTML Sanitization failed, returning empty', e);
+    return '';
+  }
+};
+
 export const MarkdownTool: React.FC = () => {
     const [input, setInput] = useState('# Hello World\n\n- Item 1\n- Item 2');
     const [html, setHtml] = useState('');
@@ -263,7 +297,7 @@ export const MarkdownTool: React.FC = () => {
         // Simple async wrapper for marked
         const parse = async () => {
             const res = await marked.parse(input);
-            setHtml(res);
+            setHtml(sanitizeHtml(res));
         }
         parse();
     }, [input]);
