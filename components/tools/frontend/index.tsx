@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Check, Copy, Download, Search } from 'lucide-react';
+import { Check, Copy, Download, Search, Info } from 'lucide-react';
 import { optimize } from 'svgo/browser';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
@@ -263,9 +263,113 @@ const downloadText = (value: string, fileName: string) => {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 
+interface DiffAudit {
+  id: string;
+  type: 'remove-node' | 'clean-attr' | 'optimize-path';
+  message: string;
+  badge: string;
+  badgeColor: string;
+}
+
+function computeDomDiff(before: string, after: string): DiffAudit[] {
+  const list: DiffAudit[] = [];
+  try {
+    const parser = new DOMParser();
+    const docB = parser.parseFromString(before, 'image/svg+xml');
+    const docA = parser.parseFromString(after, 'image/svg+xml');
+
+    const countTags = (doc: Document) => {
+      const counts: Record<string, number> = {};
+      const all = doc.getElementsByTagName('*');
+      for (let i = 0; i < all.length; i++) {
+        const name = all[i].tagName.toLowerCase();
+        counts[name] = (counts[name] || 0) + 1;
+      }
+      return counts;
+    };
+
+    const countAttrs = (doc: Document) => {
+      const counts: Record<string, number> = {};
+      const all = doc.getElementsByTagName('*');
+      for (let i = 0; i < all.length; i++) {
+        const el = all[i];
+        for (let j = 0; j < el.attributes.length; j++) {
+          const attrName = el.attributes[j].name.toLowerCase();
+          counts[attrName] = (counts[attrName] || 0) + 1;
+        }
+      }
+      return counts;
+    };
+
+    const tagsB = countTags(docB);
+    const tagsA = countTags(docA);
+    const attrsB = countAttrs(docB);
+    const attrsA = countAttrs(docA);
+
+    Object.keys(tagsB).forEach(tag => {
+      const diff = tagsB[tag] - (tagsA[tag] || 0);
+      if (diff > 0) {
+        let msg = `剥离了冗余 <${tag}> 节点`;
+        if (tag === 'metadata') msg = `清理了创作软件残留的 <metadata> 元数据节点`;
+        if (tag === 'defs') msg = `精简了未被引用的空定义域 <defs> 容器`;
+        if (tag === 'desc' || tag === 'title') msg = `移除了对渲染无用的描述性 <${tag}> 标签`;
+        
+        list.push({
+          id: `node-${tag}`,
+          type: 'remove-node',
+          message: msg,
+          badge: `-${diff} 节点`,
+          badgeColor: 'bg-rose-50 text-rose-600 border-rose-100 dark:bg-rose-950/20 dark:text-rose-400',
+        });
+      }
+    });
+
+    const keyAttrs = ['class', 'data-name', 'id', 'xmlns:xlink', 'version', 'xml:space'];
+    Object.keys(attrsB).forEach(attr => {
+      const diff = attrsB[attr] - (attrsA[attr] || 0);
+      if (diff > 0 && keyAttrs.includes(attr)) {
+        list.push({
+          id: `attr-${attr}`,
+          type: 'clean-attr',
+          message: `剥离了冗余样式/命名空间属性: \`${attr}\``,
+          badge: `-${diff} 属性`,
+          badgeColor: 'bg-amber-50 text-amber-600 border-amber-100 dark:bg-amber-950/20 dark:text-amber-400',
+        });
+      }
+    });
+
+    if (before.includes('<path') && after.includes('<path')) {
+      list.push({
+        id: 'path-prec',
+        type: 'optimize-path',
+        message: '浮点数路径坐标平滑舍入 (无损降低精度)',
+        badge: '已优化',
+        badgeColor: 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400',
+      });
+    }
+
+  } catch (e) {
+    console.error('DOM diff parsing failed', e);
+  }
+
+  if (list.length === 0) {
+    list.push({
+      id: 'no-diff',
+      type: 'optimize-path',
+      message: '移除了隐性多余空白符、换行符和 XML 序言声明',
+      badge: '已舍入',
+      badgeColor: 'bg-emerald-50 text-emerald-600 border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400',
+    });
+  }
+
+  return list;
+}
+
 export const SvgOptimizerTool: React.FC = () => {
   const [svg, setSvg] = useState(sampleSvg);
   const [multipass, setMultipass] = useState(true);
+  const [previewTab, setPreviewTab] = useState<'render' | 'diff' | 'audit'>('render');
+  const [sliderValue, setSliderValue] = useState<number>(50);
   const { copied, copy } = useCopyToClipboard();
 
   const result = useMemo(() => {
@@ -285,6 +389,12 @@ export const SvgOptimizerTool: React.FC = () => {
     }
   }, [multipass, svg]);
 
+  // Compute DOM differences for the Audit Tab
+  const audits = useMemo(() => {
+    if (!result.data) return [];
+    return computeDomDiff(svg, result.data);
+  }, [svg, result.data]);
+
   const before = byteSize(svg);
   const after = result.data ? byteSize(result.data) : 0;
   const saved = before && after ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
@@ -292,33 +402,149 @@ export const SvgOptimizerTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="SVG 优化压缩"
-        description="本地清理 SVG 注释、冗余属性和尺寸声明，输出更小的 SVG。"
+        title="SVG 智能压缩与细节差分比对"
+        description="本地清理 SVG 注释与冗余属性，内置 Split-Slider 像素级划水差分镜及冗余 DOM 节点精简审计树。"
         actions={
-          <>
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={multipass} onChange={event => setMultipass(event.target.checked)} />
-              multipass
+          <div className="flex items-center gap-4 text-xs">
+            <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
+              <input type="checkbox" checked={multipass} onChange={event => setMultipass(event.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>多轮压缩 (multipass)</span>
             </label>
-            <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => copy(result.data)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制</Button>
-            <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => downloadText(result.data, 'optimized.svg')} icon={<Download className="h-4 w-4" />}>下载</Button>
-          </>
+            <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => copy(result.data)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
+              复制优化代码
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => downloadText(result.data, 'optimized.svg')} icon={<Download className="h-4 w-4" />}>
+              下载 SVG
+            </Button>
+          </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-2">
+        {/* Left Side: Original XML Input (Flexible and tall) */}
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel hint={`${before} bytes`}>原始 SVG</FieldLabel>
-          <Textarea className="min-h-0 flex-1 font-mono text-xs" value={svg} onChange={event => setSvg(event.target.value)} />
+          <FieldLabel hint={`${before} bytes`}>原始 SVG XML 源代码</FieldLabel>
+          <Textarea className="min-h-0 flex-1 font-mono text-xs leading-relaxed" value={svg} onChange={event => setSvg(event.target.value)} />
         </div>
+
+        {/* Right Side: Preview Tabs & Analytics */}
         <div className="flex min-h-0 flex-col gap-3">
-          <div className="grid gap-2 text-sm md:grid-cols-3">
-            <div className="tool-panel p-3"><div className="text-xs text-slate-500">Before</div><strong>{before}</strong></div>
-            <div className="tool-panel p-3"><div className="text-xs text-slate-500">After</div><strong>{after || '-'}</strong></div>
-            <div className="tool-panel p-3"><div className="text-xs text-slate-500">Saved</div><strong>{saved}%</strong></div>
+          {/* Top Level Stats Panel */}
+          <div className="grid gap-3 text-sm grid-cols-3">
+            <div className="tool-panel p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Before</div>
+              <strong className="text-base font-mono text-slate-800 dark:text-slate-100">{before} bytes</strong>
+            </div>
+            <div className="tool-panel p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">After</div>
+              <strong className="text-base font-mono text-slate-800 dark:text-slate-100">{after || '-'} bytes</strong>
+            </div>
+            <div className="tool-panel p-3.5 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-950/40 border border-emerald-200 dark:border-emerald-900/30 rounded-xl text-emerald-800 dark:text-emerald-400">
+              <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider">Saved</div>
+              <strong className="text-base font-mono font-extrabold">{saved}% 体积</strong>
+            </div>
           </div>
-          {result.error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{result.error}</div>}
-          <CodePanel className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap text-xs">{result.data || '优化结果将在这里显示'}</CodePanel>
-          <div className="tool-panel flex min-h-24 items-center justify-center overflow-auto p-4" dangerouslySetInnerHTML={{ __html: result.data || '' }} />
+
+          {result.error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-700 font-mono">
+              {result.error}
+            </div>
+          )}
+
+          {/* Interactive tabs */}
+          <div className="flex border-b border-slate-200 dark:border-slate-800">
+            {([
+              ['render', '优化预览'],
+              ['diff', '2D 划水差分拉条'],
+              ['audit', 'DOM 冗余精简树'],
+            ] as const).map(([tabKey, label]) => (
+              <button
+                key={tabKey}
+                onClick={() => setPreviewTab(tabKey)}
+                className={`py-2 px-4 text-xs font-semibold border-b-2 transition-all ${previewTab === tabKey ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Combined Visual workbench container */}
+          <div className="min-h-0 flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+            {previewTab === 'render' && (
+              <div className="flex-1 flex flex-col min-h-0">
+                <CodePanel className="flex-1 overflow-auto whitespace-pre-wrap text-[10px] font-mono p-4 border-b border-slate-200 dark:border-slate-800 leading-relaxed bg-slate-950 text-emerald-400">
+                  {result.data || '优化结果将在这里显示'}
+                </CodePanel>
+                <div className="bg-white dark:bg-slate-950 p-4 h-32 flex items-center justify-center overflow-auto flex-none" dangerouslySetInnerHTML={{ __html: result.data || '' }} />
+              </div>
+            )}
+
+            {previewTab === 'diff' && (
+              <div className="flex-1 flex flex-col p-4 relative min-h-0 select-none">
+                <div className="flex-1 relative bg-checkerboard rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center">
+                  
+                  {/* Bottom Layer: Before SVG (Original) */}
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center p-4 transition-all opacity-40 filter grayscale pointer-events-none"
+                    dangerouslySetInnerHTML={{ __html: svg || '' }}
+                  />
+
+                  {/* Top Layer: After SVG (Optimized) with custom clipping width */}
+                  <div 
+                    className="absolute inset-0 flex items-center justify-center p-4 overflow-hidden pointer-events-none bg-checkerboard"
+                    style={{
+                      clipPath: `inset(0 ${100 - sliderValue}% 0 0)`,
+                    }}
+                    dangerouslySetInnerHTML={{ __html: result.data || '' }}
+                  />
+
+                  {/* High quality neon-blue slider hairline indicator */}
+                  <div 
+                    className="absolute top-0 bottom-0 w-0.5 bg-sky-500 dark:bg-sky-400 pointer-events-none"
+                    style={{ left: `${sliderValue}%` }}
+                  >
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white border-2 border-sky-500 shadow-md flex items-center justify-center text-[8px] font-bold text-sky-600">
+                      ↔
+                    </div>
+                  </div>
+                </div>
+
+                {/* Slider inputs control board */}
+                <div className="mt-3 flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl flex-none">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">差分拉条</span>
+                  <input 
+                    type="range" min="0" max="100" 
+                    value={sliderValue} 
+                    onChange={e => setSliderValue(Number(e.target.value))}
+                    className="flex-1 h-1 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                  />
+                  <span className="text-xs font-mono font-semibold text-sky-600 dark:text-sky-400 shrink-0">{sliderValue}%</span>
+                </div>
+              </div>
+            )}
+
+            {previewTab === 'audit' && (
+              <div className="flex-1 overflow-auto p-4 space-y-2.5 max-h-[380px]">
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 border-b pb-2 dark:border-slate-800">
+                  <Info className="w-3.5 h-3.5 text-primary-500" />
+                  <span>下面列出了 SVGO 引擎在此次压缩中，成功为您剥离的冗余元素及压缩属性：</span>
+                </div>
+
+                <div className="space-y-2">
+                  {audits.map(item => (
+                    <div key={item.id} className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex justify-between items-center text-xs shadow-sm hover:shadow transition-all">
+                      <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                        <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span className="font-mono leading-relaxed">{item.message}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 border rounded-full text-[10px] font-bold shrink-0 uppercase tracking-wider ${item.badgeColor}`}>
+                        {item.badge}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

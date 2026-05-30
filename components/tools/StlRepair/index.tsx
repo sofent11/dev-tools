@@ -23,11 +23,13 @@ import {
   Scene,
   Vector3,
   WebGLRenderer,
+  LineSegments,
+  LineBasicMaterial,
 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
-import { FieldLabel, Input, UploadPanel } from '../../ui/ToolUi';
+import { FieldLabel, Input, Select, UploadPanel } from '../../ui/ToolUi';
 import { formatBytes } from '../shared/fileUtils';
 import { useMeshStore } from '../shared/meshStore';
 import type {
@@ -144,13 +146,19 @@ const StatsGrid: React.FC<{ title: string; stats: MeshStats }> = ({ title, stats
   </div>
 );
 
-const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolean }> = ({ mesh, isProcessing }) => {
+const MeshPreview: React.FC<{
+  mesh: MeshPreviewData | null;
+  isProcessing: boolean;
+  materialType: 'default' | 'gold' | 'silver' | 'jade' | 'glass';
+  showDiagnostics: boolean;
+}> = ({ mesh, isProcessing, materialType, showDiagnostics }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
   const cameraRef = useRef<PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const meshRef = useRef<Mesh | null>(null);
+  const lineRef = useRef<LineSegments | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -226,6 +234,16 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
           }
         }
       });
+        if (lineRef.current) {
+          scene.remove(lineRef.current);
+          lineRef.current.geometry.dispose();
+          if (Array.isArray(lineRef.current.material)) {
+            lineRef.current.material.forEach(m => m.dispose());
+          } else {
+            lineRef.current.material.dispose();
+          }
+          lineRef.current = null;
+        }
       renderer.domElement.remove();
     };
   }, []);
@@ -247,6 +265,17 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
       meshRef.current = null;
     }
 
+    if (lineRef.current) {
+      scene.remove(lineRef.current);
+      lineRef.current.geometry.dispose();
+      if (Array.isArray(lineRef.current.material)) {
+        lineRef.current.material.forEach(m => m.dispose());
+      } else {
+        lineRef.current.material.dispose();
+      }
+      lineRef.current = null;
+    }
+
     if (!mesh) return;
 
     const geometry = new BufferGeometry();
@@ -255,12 +284,48 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
 
-    const material = new MeshStandardMaterial({
-      color: 0xd8f3dc,
-      roughness: 0.72,
-      metalness: 0.05,
-      flatShading: false,
-    });
+    let material: MeshStandardMaterial;
+    if (materialType === 'gold') {
+      material = new MeshStandardMaterial({
+        color: 0xffd700,
+        roughness: 0.12,
+        metalness: 0.96,
+        flatShading: false,
+      });
+    } else if (materialType === 'silver') {
+      material = new MeshStandardMaterial({
+        color: 0xe5e7eb,
+        roughness: 0.15,
+        metalness: 0.90,
+        flatShading: false,
+      });
+    } else if (materialType === 'jade') {
+      material = new MeshStandardMaterial({
+        color: 0x34d399,
+        roughness: 0.22,
+        metalness: 0.05,
+        emissive: 0x064e3b,
+        emissiveIntensity: 0.12,
+        flatShading: false,
+      });
+    } else if (materialType === 'glass') {
+      material = new MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.05,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.35,
+        flatShading: false,
+      });
+    } else {
+      material = new MeshStandardMaterial({
+        color: 0xd8f3dc,
+        roughness: 0.72,
+        metalness: 0.05,
+        flatShading: false,
+      });
+    }
+
     const object = new Mesh(geometry, material);
     meshRef.current = object;
     scene.add(object);
@@ -271,6 +336,60 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     const distance = maxDim * 2.2;
     object.position.set(-center.x, -center.y, -center.z);
+
+    if (showDiagnostics) {
+      const boundaryIndices: number[] = [];
+      const edgeCounts = new Map<string, number>();
+      const edgeVertices = new Map<string, [number, number]>();
+      const ind = mesh.indices;
+      const pos = mesh.positions;
+      
+      for (let i = 0; i < ind.length; i += 3) {
+        const ia = ind[i];
+        const ib = ind[i + 1];
+        const ic = ind[i + 2];
+        const pairs = [[ia, ib], [ib, ic], [ic, ia]];
+        for (const [v0, v1] of pairs) {
+          const key = v0 < v1 ? `${v0}_${v1}` : `${v1}_${v0}`;
+          edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
+          edgeVertices.set(key, [v0, v1]);
+        }
+      }
+      
+      for (const [key, count] of edgeCounts.entries()) {
+        if (count === 1 || count >= 3) {
+          const [v0, v1] = edgeVertices.get(key)!;
+          boundaryIndices.push(v0, v1);
+        }
+      }
+      
+      if (boundaryIndices.length > 0) {
+        const boundaryPositions = new Float32Array(boundaryIndices.length * 3);
+        for (let i = 0; i < boundaryIndices.length; i++) {
+          const vIdx = boundaryIndices[i];
+          boundaryPositions[i * 3] = pos[vIdx * 3];
+          boundaryPositions[i * 3 + 1] = pos[vIdx * 3 + 1];
+          boundaryPositions[i * 3 + 2] = pos[vIdx * 3 + 2];
+        }
+        
+        const lineGeo = new BufferGeometry();
+        lineGeo.setAttribute('position', new BufferAttribute(boundaryPositions, 3));
+        const lineMat = new LineBasicMaterial({
+          color: 0xff0055,
+          linewidth: 2,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.95
+        });
+        const lineSegs = new LineSegments(lineGeo, lineMat);
+        lineSegs.renderOrder = 999;
+        lineSegs.position.set(-center.x, -center.y, -center.z);
+        
+        scene.add(lineSegs);
+        lineRef.current = lineSegs;
+      }
+    }
+
     camera.near = Math.max(distance / 1000, 0.01);
     camera.far = distance * 20;
     camera.position.set(distance, -distance * 1.25, distance * 0.8);
@@ -278,7 +397,7 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
     camera.updateProjectionMatrix();
     controls.target.set(0, 0, 0);
     controls.update();
-  }, [mesh]);
+  }, [mesh, materialType, showDiagnostics]);
 
   return (
     <div ref={containerRef} className="relative min-h-[360px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
@@ -389,6 +508,8 @@ export const StlRepairTool: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [progressText, setProgressText] = useState('');
+  const [materialType, setMaterialType] = useState<'default' | 'gold' | 'silver' | 'jade' | 'glass'>('default');
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -600,6 +721,25 @@ export const StlRepairTool: React.FC = () => {
             />
           </div>
 
+          <div className="grid gap-3 border-t border-slate-200 pt-3">
+            <div>
+              <FieldLabel>预览渲染材质</FieldLabel>
+              <Select value={materialType} onChange={event => setMaterialType(event.target.value as any)}>
+                <option value="default">默认 (Matte Green)</option>
+                <option value="gold">🏆 皇家黄金 (Gold PBR)</option>
+                <option value="silver">🥈 抛光白银 (Silver PBR)</option>
+                <option value="jade">🍀 冰种温润翡翠 (Jade SSS)</option>
+                <option value="glass">💎 钢化玻璃 (Glass Refract)</option>
+              </Select>
+            </div>
+            <CheckboxRow
+              checked={showDiagnostics}
+              label="开启坏面霓虹诊断模式"
+              hint="自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。"
+              onChange={checked => setShowDiagnostics(checked)}
+            />
+          </div>
+
           {error && <div className="status-error p-3 text-sm">{error}</div>}
 
           <div className="flex flex-wrap gap-2">
@@ -631,7 +771,7 @@ export const StlRepairTool: React.FC = () => {
           }
         />
         <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-          <MeshPreview mesh={mesh} isProcessing={processing} />
+          <MeshPreview mesh={mesh} isProcessing={processing} materialType={materialType} showDiagnostics={showDiagnostics} />
           <ReportSummary report={report} outputSize={outputSize} />
         </CardContent>
       </Card>

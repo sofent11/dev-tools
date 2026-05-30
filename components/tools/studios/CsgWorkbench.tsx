@@ -84,6 +84,7 @@ export const CsgWorkbench: React.FC = () => {
   const [opType, setOpType] = useState<'union' | 'subtract' | 'intersect' | null>(null);
   const [showWireframe, setShowWireframe] = useState(false);
   const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
+  const [materialType, setMaterialType] = useState<'default' | 'gold' | 'silver' | 'jade' | 'glass'>('default');
 
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -649,13 +650,53 @@ export const CsgWorkbench: React.FC = () => {
     if (resultGeometry) {
       if (transformControlsRef.current) transformControlsRef.current.detach();
       
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0xcbd5e1,
-        roughness: 0.15,
-        metalness: 0.85,
-        wireframe: showWireframe,
-        side: THREE.DoubleSide
-      });
+      let mat: THREE.MeshStandardMaterial;
+      if (materialType === 'gold') {
+        mat = new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          roughness: 0.12,
+          metalness: 0.96,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+      } else if (materialType === 'silver') {
+        mat = new THREE.MeshStandardMaterial({
+          color: 0xe5e7eb,
+          roughness: 0.15,
+          metalness: 0.90,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+      } else if (materialType === 'jade') {
+        mat = new THREE.MeshStandardMaterial({
+          color: 0x34d399,
+          roughness: 0.22,
+          metalness: 0.05,
+          emissive: 0x064e3b,
+          emissiveIntensity: 0.12,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+      } else if (materialType === 'glass') {
+        mat = new THREE.MeshStandardMaterial({
+          color: 0xffffff,
+          roughness: 0.05,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 0.35,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+      } else {
+        mat = new THREE.MeshStandardMaterial({
+          color: 0xcbd5e1,
+          roughness: 0.15,
+          metalness: 0.85,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+      }
+
       const mesh = new THREE.Mesh(resultGeometry, mat);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -692,9 +733,45 @@ export const CsgWorkbench: React.FC = () => {
         
         // Highlight selected mesh with standard color opacity
         const mat = mesh.material as THREE.MeshStandardMaterial;
-        mat.color.set(shape.color);
-        mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
         mat.wireframe = showWireframe;
+        
+        if (materialType === 'gold') {
+          mat.color.set(shape.color);
+          mat.roughness = 0.12;
+          mat.metalness = 0.96;
+          mat.emissive.setHex(0x000000);
+          mat.transparent = true;
+          mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        } else if (materialType === 'silver') {
+          mat.color.set(shape.color);
+          mat.roughness = 0.15;
+          mat.metalness = 0.90;
+          mat.emissive.setHex(0x000000);
+          mat.transparent = true;
+          mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        } else if (materialType === 'jade') {
+          mat.color.set(shape.color);
+          mat.roughness = 0.22;
+          mat.metalness = 0.05;
+          mat.emissive.set(shape.color).multiplyScalar(0.2);
+          mat.emissiveIntensity = 0.12;
+          mat.transparent = true;
+          mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        } else if (materialType === 'glass') {
+          mat.color.set(shape.color);
+          mat.roughness = 0.05;
+          mat.metalness = 0.1;
+          mat.emissive.setHex(0x000000);
+          mat.transparent = true;
+          mat.opacity = shape.id === selectedShapeId ? 0.35 : 0.15;
+        } else {
+          mat.color.set(shape.color);
+          mat.roughness = 0.4;
+          mat.metalness = 0.2;
+          mat.emissive.setHex(0x000000);
+          mat.transparent = true;
+          mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        }
 
         // Bounding Box outline highlight
         let helper = boxHelpersMapRef.current.get(shape.id);
@@ -712,12 +789,39 @@ export const CsgWorkbench: React.FC = () => {
         }
       } else {
         const geo = buildGeometry(shape);
+        
+        let roughness = 0.4;
+        let metalness = 0.2;
+        let opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        const transparent = true;
+        let emissiveColor = new THREE.Color(0x000000);
+        let emissiveIntensity = 0;
+        
+        if (materialType === 'gold') {
+          roughness = 0.12;
+          metalness = 0.96;
+        } else if (materialType === 'silver') {
+          roughness = 0.15;
+          metalness = 0.90;
+        } else if (materialType === 'jade') {
+          roughness = 0.22;
+          metalness = 0.05;
+          emissiveColor = new THREE.Color(shape.color).multiplyScalar(0.2);
+          emissiveIntensity = 0.12;
+        } else if (materialType === 'glass') {
+          roughness = 0.05;
+          metalness = 0.1;
+          opacity = shape.id === selectedShapeId ? 0.35 : 0.15;
+        }
+
         const mat = new THREE.MeshStandardMaterial({
           color: shape.color,
-          opacity: shape.id === selectedShapeId ? 0.85 : 0.45,
-          transparent: true,
-          roughness: 0.4,
-          metalness: 0.2,
+          opacity: opacity,
+          transparent: transparent,
+          roughness: roughness,
+          metalness: metalness,
+          emissive: emissiveColor,
+          emissiveIntensity: emissiveIntensity,
           wireframe: showWireframe,
           side: THREE.DoubleSide
         });
@@ -790,8 +894,22 @@ export const CsgWorkbench: React.FC = () => {
           </div>
         )}
 
-        <div className="absolute top-4 left-4 flex items-center gap-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
-          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">材质：</span>
+        <div className="absolute top-4 left-4 flex items-center gap-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">样式：</span>
+            <select
+              value={materialType}
+              onChange={event => setMaterialType(event.target.value as any)}
+              className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-700 dark:text-slate-200 focus:outline-none"
+            >
+              <option value="default">默认风格</option>
+              <option value="gold">🏆 皇家黄金</option>
+              <option value="silver">🥈 抛光白银</option>
+              <option value="jade">🍀 温润翡翠</option>
+              <option value="glass">💎 高透玻璃</option>
+            </select>
+          </div>
+          <div className="h-4 w-px bg-slate-350 dark:bg-slate-700" />
           <button
             onClick={() => setShowWireframe(!showWireframe)}
             className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors cursor-pointer ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}

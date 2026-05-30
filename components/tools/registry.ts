@@ -53,6 +53,7 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'password': { studioId: 'crypto-studio', subToolId: 'password' },
   'basic-auth': { studioId: 'crypto-studio', subToolId: 'basic-auth' },
   'cert-parser': { studioId: 'crypto-studio', subToolId: 'cert-parser' },
+  'asymmetric-key': { studioId: 'crypto-studio', subToolId: 'asymmetric-key' },
 
   // Text & Diff Suite
   'case': { studioId: 'text-studio', subToolId: 'case' },
