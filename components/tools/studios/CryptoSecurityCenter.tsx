@@ -1,11 +1,6 @@
-import React, { lazy } from 'react';
+import React from 'react';
 import { Shield, Hash, KeyRound } from 'lucide-react';
-import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
-
-const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
-  loader: () => Promise<T>,
-  exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] }));
+import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const JwtTool = lazyNamed(() => import('../SecurityTools'), 'JwtTool');
 const HashTool = lazyNamed(() => import('../SecurityTools'), 'HashTool');

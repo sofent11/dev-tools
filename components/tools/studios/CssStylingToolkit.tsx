@@ -1,11 +1,6 @@
-import React, { lazy } from 'react';
+import React from 'react';
 import { ArrowRightLeft, Palette, Paintbrush, BadgeCent } from 'lucide-react';
-import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
-
-const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
-  loader: () => Promise<T>,
-  exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] }));
+import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const PxRemTool = lazyNamed(() => import('../WebTools'), 'PxRemTool');
 const ColorConverterTool = lazyNamed(() => import('../WebTools'), 'ColorConverterTool');

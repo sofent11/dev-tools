@@ -4,10 +4,10 @@ import {
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
-const lazyNamed = <T extends Record<string, ElementType>, K extends keyof T>(
+const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
   loader: () => Promise<T>,
   exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] }));
+) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<any> }));
 
 // Import consolidated Studios
 const JsonFormatStudio = lazyNamed(() => import('./studios/JsonFormatStudio'), 'JsonFormatStudio');

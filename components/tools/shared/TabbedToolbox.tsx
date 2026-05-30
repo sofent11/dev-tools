@@ -1,13 +1,18 @@
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+
+export const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
+  loader: () => Promise<T>,
+  exportName: K,
+) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<any> }));
 
 export interface SubTool {
   id: string;
   name: string;
   description?: string;
   icon: LucideIcon;
-  component: React.ComponentType<Record<string, unknown>>;
+  component: React.ComponentType<any>;
 }
 
 interface TabbedToolboxProps {

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Check, Copy, RefreshCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
-import { FieldLabel, Input, Select, Textarea } from '../../ui/ToolUi';
+import { FieldLabel, Input } from '../../ui/ToolUi';
 
 const randomInt = (min: number, max: number) => {
   const lower = Math.ceil(min);
@@ -81,147 +81,341 @@ const generateUuid = () => {
 
 const eNames = ['Alice', 'Bob', 'Charlie', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack', 'Kate', 'Leo'];
 const mailDomains = ['gmail.com', 'outlook.com', 'qq.com', '163.com', 'example.com'];
-const products = ['智能手机 X12', '无线降噪耳机', '机械键盘 Pro', '电竞显示器 4K', '多功能笔记本', '超长续航移动电源', '人体工学椅', '扫地机器人', '智能手环 8', '高速 SSD 1TB'];
-const categories = ['电子产品', '办公外设', '影音娱乐', '生活家居'];
-const logMsgs = ['User login successful', 'Database connection timeout', 'Failed to compile chunk', 'API request throttled', 'Cache refreshed successfully', 'Payment transaction completed'];
-const logLevels = ['INFO', 'WARNING', 'ERROR', 'DEBUG'];
-const logPaths = ['/api/v1/auth', '/api/v2/users', '/api/v1/payment', '/api/v3/orders', '/api/v1/health'];
 
-const generateMockData = (template: 'users' | 'products' | 'logs', count: number) => {
-  return Array.from({ length: count }, (_, index) => {
-    if (template === 'users') {
-      const name = randomChoice(eNames);
-      return {
-        id: generateUuid(),
-        name,
-        email: `${name.toLowerCase()}${randomInt(10, 99)}@${randomChoice(mailDomains)}`,
-        phone: `13${randomInt(0, 9)}${String(crypto.getRandomValues(new Uint32Array(1))[0]).slice(-8)}`,
-        role: randomChoice(['admin', 'editor', 'user']),
-        status: randomChoice(['active', 'inactive', 'pending']),
-        createdAt: new Date(Date.now() - randomInt(0, 30) * 86400000).toISOString(),
-      };
-    } else if (template === 'products') {
-      return {
-        id: 1000 + index + 1,
-        title: randomChoice(products),
-        category: randomChoice(categories),
-        price: parseFloat((randomInt(99, 8999) + randomInt(0, 99) / 100).toFixed(2)),
-        stock: randomInt(0, 450),
-        rating: parseFloat((randomInt(35, 50) / 10).toFixed(1)),
-        inStock: randomInt(0, 100) > 10,
-      };
-    } else {
-      return {
-        timestamp: new Date(Date.now() - randomInt(0, 3600) * 1000).toISOString(),
-        level: randomChoice(logLevels),
-        message: randomChoice(logMsgs),
-        path: randomChoice(logPaths),
-        latencyMs: randomChoice([randomInt(5, 50), randomInt(50, 500), randomInt(500, 2500)]),
-        clientIp: `${randomInt(1, 254)}.${randomInt(1, 254)}.${randomInt(1, 254)}.${randomInt(1, 254)}`,
-      };
-    }
-  });
+import { Plus, Trash2, FileJson, Table, Database, Download } from 'lucide-react';
+
+interface SchemaField {
+  id: string;
+  name: string;
+  type: 'id' | 'uuid' | 'name' | 'phone' | 'email' | 'number' | 'text' | 'enum';
+  min?: number;
+  max?: number;
+  options?: string;
+}
+
+const cSurnames = ['赵', '钱', '孙', '李', '周', '吴', '郑', '王', '冯', '陈', '褚', '卫', '蒋', '沈', '韩', '杨', '朱', '秦', '尤', '许', '何', '吕', '施', '张', '孔', '曹', '严', '华'];
+const cNames = ['伟', '芳', '娜', '敏', '静', '丽', '强', '磊', '洋', '勇', '艳', '杰', '娟', '涛', '明', '超', '秀兰', '建国', '宇', '欣', '晨', '悦', '浩', '轩', '雨', '子', '涵'];
+
+const generateChineseName = () => {
+  const surname = randomChoice(cSurnames);
+  const name = randomChoice(cNames);
+  // 50% probability of double name
+  const name2 = randomInt(0, 1) === 1 ? randomChoice(cNames) : '';
+  return surname + name + name2;
 };
 
 export const LoremIpsumTool: React.FC = () => {
-  const [language, setLanguage] = useState<'en' | 'zh'>('zh');
-  const [unit, setUnit] = useState<'paragraphs' | 'sentences' | 'list' | 'mock_json'>('paragraphs');
-  const [template, setTemplate] = useState<'users' | 'products' | 'logs'>('users');
-  const [count, setCount] = useState(3);
-  const [output, setOutput] = useState('');
+  const [fields, setFields] = useState<SchemaField[]>([
+    { id: 'f-1', name: 'id', type: 'id' },
+    { id: 'f-2', name: 'name', type: 'name' },
+    { id: 'f-3', name: 'email', type: 'email' },
+    { id: 'f-4', name: 'age', type: 'number', min: 18, max: 65 },
+    { id: 'f-5', name: 'role', type: 'enum', options: 'admin,editor,user' }
+  ]);
+  
+  const [count, setCount] = useState<number>(20);
+  const [sqlTableName, setSqlTableName] = useState<string>('tb_users');
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'sql'>('json');
+  
+  const [output, setOutput] = useState<string>('');
   const [copied, setCopied] = useState(false);
 
-  const generate = () => {
-    const safeCount = Math.min(100, Math.max(1, count));
-    if (unit === 'mock_json') {
-      const mockList = generateMockData(template, safeCount);
-      setOutput(JSON.stringify(mockList, null, 2));
-      return;
-    }
-
-    const sentences = Array.from({ length: safeCount }, () => buildSentence(language, language === 'zh' ? 14 : 12));
-    if (unit === 'sentences') {
-      setOutput(sentences.join(language === 'zh' ? '' : ' '));
-      return;
-    }
-    if (unit === 'list') {
-      setOutput(sentences.map(item => `- ${item}`).join('\n'));
-      return;
-    }
-    setOutput(sentences.map((_, index) =>
-      Array.from({ length: 3 }, (__, sentenceIndex) => buildSentence(language, 10 + ((index + sentenceIndex) % 6))).join(language === 'zh' ? '' : ' '),
-    ).join('\n\n'));
+  const addField = () => {
+    const newField: SchemaField = {
+      id: Date.now().toString(),
+      name: `field_${fields.length + 1}`,
+      type: 'text'
+    };
+    setFields([...fields, newField]);
   };
 
-  const copy = async () => {
+  const deleteField = (id: string) => {
+    setFields(fields.filter(f => f.id !== id));
+  };
+
+  const updateField = (id: string, updates: Partial<SchemaField>) => {
+    setFields(fields.map(f => f.id === id ? { ...f, ...updates } : f));
+  };
+
+  const handleGenerate = () => {
+    const safeCount = Math.min(500, Math.max(1, count));
+    const rawData: Record<string, any>[] = [];
+
+    // 1. Core Generator Engine
+    for (let index = 0; index < safeCount; index++) {
+      const row: Record<string, any> = {};
+      fields.forEach(field => {
+        if (!field.name) return;
+        
+        switch (field.type) {
+          case 'id':
+            row[field.name] = index + 1;
+            break;
+          case 'uuid':
+            row[field.name] = generateUuid();
+            break;
+          case 'name':
+            row[field.name] = generateChineseName();
+            break;
+          case 'phone':
+            row[field.name] = `13${randomInt(0, 9)}${String(crypto.getRandomValues(new Uint32Array(1))[0]).slice(-8)}`;
+            break;
+          case 'email': {
+            const randomEngName = randomChoice(eNames).toLowerCase();
+            row[field.name] = `${randomEngName}${randomInt(10, 99)}@${randomChoice(mailDomains)}`;
+            break;
+          }
+          case 'number': {
+            const min = field.min ?? 0;
+            const max = field.max ?? 100;
+            row[field.name] = randomInt(min, max);
+            break;
+          }
+          case 'enum': {
+            const opts = (field.options || 'value1,value2').split(',').map(s => s.trim()).filter(Boolean);
+            row[field.name] = randomChoice(opts.length > 0 ? opts : ['value1', 'value2']);
+            break;
+          }
+          case 'text':
+          default:
+            row[field.name] = buildSentence('zh', randomInt(6, 12));
+            break;
+        }
+      });
+      rawData.push(row);
+    }
+
+    // 2. Export Compiler Engine
+    if (exportFormat === 'json') {
+      setOutput(JSON.stringify(rawData, null, 2));
+    } else if (exportFormat === 'csv') {
+      if (rawData.length === 0) {
+        setOutput('');
+        return;
+      }
+      const headers = Object.keys(rawData[0]).join(',');
+      const rows = rawData.map(row => 
+        Object.values(row).map(val => {
+          const s = String(val);
+          // Escape quotes and wrap in double quotes if special chars exist
+          if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+            return `"${s.replace(/"/g, '""')}"`;
+          }
+          return s;
+        }).join(',')
+      );
+      setOutput([headers, ...rows].join('\n'));
+    } else if (exportFormat === 'sql') {
+      if (rawData.length === 0) {
+        setOutput('');
+        return;
+      }
+      const tName = sqlTableName.trim() || 'tb_users';
+      const keys = Object.keys(rawData[0]).join(', ');
+      
+      const statements = rawData.map(row => {
+        const values = Object.values(row).map(val => {
+          if (typeof val === 'number') return val;
+          return `'${String(val).replace(/'/g, "''")}'`;
+        }).join(', ');
+        return `INSERT INTO ${tName} (${keys}) VALUES (${values});`;
+      });
+      setOutput(statements.join('\n'));
+    }
+  };
+
+  const handleCopy = async () => {
     await navigator.clipboard.writeText(output);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
   };
 
-  const download = () => {
+  const handleDownload = () => {
     if (!output) return;
-    const blob = new Blob([output], { type: 'application/json' });
+    const isJson = exportFormat === 'json';
+    const isCsv = exportFormat === 'csv';
+    const ext = isJson ? 'json' : isCsv ? 'csv' : 'sql';
+    const mime = isJson ? 'application/json' : 'text/plain';
+    
+    const blob = new Blob([output], { type: mime });
     const url = URL.createObjectURL(blob);
+    aElementClick(url, `mock_data_${Date.now()}.${ext}`);
+  };
+
+  const aElementClick = (url: string, fileName: string) => {
     const link = document.createElement('a');
     link.href = url;
-    link.download = `mock_data_${template}.json`;
+    link.download = fileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="假文与 Mock 数据生成器"
-        description="生成中英文段落、句子、列表或结构化 API Mock 数据，用于开发和占位测试。"
+        title="可视化 Schema 数据 Mock 发生器"
+        description="支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV 及 SQL INSERT Statements 压测脚本。"
         actions={
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" disabled={!output} onClick={copy} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制</Button>
-            {unit === 'mock_json' && (
-              <Button size="sm" variant="secondary" disabled={!output} onClick={download}>下载 JSON</Button>
-            )}
-            <Button size="sm" onClick={generate} icon={<RefreshCcw className="h-4 w-4" />}>生成</Button>
+            <Button size="sm" variant="secondary" disabled={!output} onClick={handleCopy} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
+              一键复制
+            </Button>
+            <Button size="sm" variant="secondary" disabled={!output} onClick={handleDownload} icon={<Download className="h-4 w-4" />}>
+              导出文件
+            </Button>
+            <Button size="sm" onClick={handleGenerate} icon={<RefreshCcw className="h-4 w-4" />}>
+              生成数据
+            </Button>
           </div>
         }
       />
-      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <div className="space-y-4">
-          <div>
-            <FieldLabel>生成类型</FieldLabel>
-            <Select value={unit} onChange={event => setUnit(event.target.value as typeof unit)}>
-              <option value="paragraphs">占位段落</option>
-              <option value="sentences">占位句子</option>
-              <option value="list">占位列表</option>
-              <option value="mock_json">API Mock JSON</option>
-            </Select>
+      <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-12">
+        
+        {/* Left Side: Schema Builder (5 cols equivalent) */}
+        <div className="lg:col-span-5 flex flex-col gap-4 min-h-0 border-r border-slate-100 dark:border-slate-800 pr-3">
+          <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
+            <span className="text-xs font-bold text-slate-500 uppercase">Schema 字段配置</span>
+            <button 
+              onClick={addField}
+              className="flex items-center gap-1 py-1 px-2.5 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 text-[10px] font-bold transition-all dark:bg-primary-950/20"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>添加字段</span>
+            </button>
           </div>
-          {unit !== 'mock_json' ? (
+
+          {/* Fields list */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[220px]">
+            {fields.map(field => (
+              <div 
+                key={field.id}
+                className="p-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20 text-xs space-y-2.5 relative group shadow-inner"
+              >
+                <div className="flex gap-2 items-center">
+                  <input 
+                    className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
+                    value={field.name}
+                    onChange={e => updateField(field.id, { name: e.target.value })}
+                    placeholder="字段名 (key)"
+                  />
+                  <button 
+                    onClick={() => deleteField(field.id)}
+                    className="text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <span className="text-slate-400 block mb-0.5">类型</span>
+                    <select
+                      value={field.type}
+                      onChange={e => updateField(field.id, { type: e.target.value as any })}
+                      className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-semibold"
+                    >
+                      <option value="id">自增 ID</option>
+                      <option value="uuid">随机 UUID</option>
+                      <option value="name">逼真中文姓名</option>
+                      <option value="phone">中国手机号</option>
+                      <option value="email">电子邮箱</option>
+                      <option value="number">数值区间</option>
+                      <option value="enum">固定枚举</option>
+                      <option value="text">随机段落文本</option>
+                    </select>
+                  </div>
+
+                  {field.type === 'number' && (
+                    <div className="flex gap-1 items-end">
+                      <input 
+                        type="number" placeholder="min" className="w-full p-1 border rounded text-center"
+                        value={field.min ?? 0}
+                        onChange={e => updateField(field.id, { min: Number(e.target.value) })}
+                      />
+                      <span className="text-slate-300 select-none">-</span>
+                      <input 
+                        type="number" placeholder="max" className="w-full p-1 border rounded text-center"
+                        value={field.max ?? 100}
+                        onChange={e => updateField(field.id, { max: Number(e.target.value) })}
+                      />
+                    </div>
+                  )}
+
+                  {field.type === 'enum' && (
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block mb-0.5">枚举选项 (逗号隔开)</span>
+                      <input 
+                        className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-mono text-[9px]"
+                        value={field.options || ''}
+                        onChange={e => updateField(field.id, { options: e.target.value })}
+                        placeholder="e.g. active, inactive, pending"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Export config bar */}
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3.5 flex-none">
             <div>
-              <FieldLabel>语言</FieldLabel>
-              <Select value={language} onChange={event => setLanguage(event.target.value as typeof language)}>
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </Select>
+              <FieldLabel>输出目标格式</FieldLabel>
+              <div className="grid grid-cols-3 gap-2 mt-1">
+                {(['json', 'csv', 'sql'] as const).map(fmt => (
+                  <button
+                    key={fmt}
+                    onClick={() => setExportFormat(fmt)}
+                    className={`py-1.5 rounded-lg border text-xs font-semibold uppercase flex items-center justify-center gap-1 transition-all ${exportFormat === fmt ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-800'}`}
+                  >
+                    {fmt === 'json' ? <FileJson className="w-3.5 h-3.5" /> : fmt === 'csv' ? <Table className="w-3.5 h-3.5" /> : <Database className="w-3.5 h-3.5" />}
+                    <span>{fmt}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
+
+            {exportFormat === 'sql' && (
+              <div className="animate-in fade-in duration-300">
+                <FieldLabel>SQL 导出表名</FieldLabel>
+                <Input 
+                  className="font-mono text-xs font-bold mt-1"
+                  value={sqlTableName}
+                  onChange={e => setSqlTableName(e.target.value)}
+                  placeholder="e.g. tb_users"
+                />
+              </div>
+            )}
+
             <div>
-              <FieldLabel>数据模版</FieldLabel>
-              <Select value={template} onChange={event => setTemplate(event.target.value as typeof template)}>
-                <option value="users">用户列表 (User Profiles)</option>
-                <option value="products">商品目录 (E-commerce Products)</option>
-                <option value="logs">系统日志 (System Logs)</option>
-              </Select>
+              <FieldLabel>生成记录条数</FieldLabel>
+              <Input 
+                type="number" min={1} max={500}
+                className="mt-1"
+                value={count} 
+                onChange={e => setCount(Math.min(500, Math.max(1, Number(e.target.value))))} 
+              />
             </div>
-          )}
-          <div>
-            <FieldLabel>{unit === 'mock_json' ? '生成记录数' : '数量'}</FieldLabel>
-            <Input type="number" min={1} max={unit === 'mock_json' ? 100 : 50} value={count} onChange={event => setCount(Number(event.target.value))} />
           </div>
         </div>
-        <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono text-xs leading-6" value={output || (unit === 'mock_json' ? '点击生成后显示 API Mock JSON 数据' : '点击生成后显示假文')} />
+
+        {/* Right Side: Output area (7 cols equivalent) */}
+        <div className="lg:col-span-7 flex flex-col min-h-0 bg-slate-950 rounded-xl overflow-hidden min-h-[300px]">
+          <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex items-center justify-between flex-none">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Output Data Dashboard
+            </span>
+          </div>
+          <textarea
+            readOnly
+            className="flex-1 w-full h-full p-4 font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
+            value={output || '在左侧配置 Schema 字段，点击上方“生成数据”按钮查看结果...'}
+            placeholder="生成的假数据在此处呈现"
+          />
+        </div>
+
       </CardContent>
     </Card>
   );

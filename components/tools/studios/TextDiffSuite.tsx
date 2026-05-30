@@ -1,11 +1,6 @@
-import React, { lazy } from 'react';
+import React from 'react';
 import { CaseUpper, Scissors, Link, AlignLeft, Regex, ArrowRightLeft } from 'lucide-react';
-import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
-
-const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
-  loader: () => Promise<T>,
-  exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] }));
+import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const CaseConverterTool = lazyNamed(() => import('../TextTools'), 'CaseConverterTool');
 const StringManipulatorTool = lazyNamed(() => import('../StringTools'), 'StringManipulatorTool');

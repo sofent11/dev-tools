@@ -1,20 +1,12 @@
 import React, { lazy } from 'react';
 import { Gem, Box, Boxes, Ruler, Layers } from 'lucide-react';
-import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
+import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
-const lazyDefault = <T extends { default: React.ElementType }>(loader: () => Promise<T>) =>
-  lazy(async () => ({ default: (await loader()).default }));
-
-const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
-  loader: () => Promise<T>,
-  exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] }));
-
-const JewelryCustomizer = lazyDefault(() => import('../JewelryCustomizer'));
-const StlRepairTool = lazyDefault(() => import('../StlRepair'));
-const VoronoiLatticeTool = lazyDefault(() => import('../VoronoiLattice'));
+const JewelryCustomizer = lazy(() => import('../JewelryCustomizer'));
+const StlRepairTool = lazy(() => import('../StlRepair'));
+const VoronoiLatticeTool = lazy(() => import('../VoronoiLattice'));
 const CsgWorkbench = lazyNamed(() => import('./CsgWorkbench'), 'CsgWorkbench');
-const SmartGeometryTool = lazyDefault(() => import('../SmartGeometry'));
+const SmartGeometryTool = lazy(() => import('../SmartGeometry'));
 
 const subTools: SubTool[] = [
   { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器与 3D PBR 实时预览及 DXF/STL 导出', icon: Gem, component: JewelryCustomizer },

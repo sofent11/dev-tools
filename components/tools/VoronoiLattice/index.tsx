@@ -623,7 +623,7 @@ export const VoronoiLatticeTool: React.FC = () => {
               label="预览"
               value={viewMode}
               options={viewModeOptions}
-              onChange={setViewMode}
+              onChange={value => setViewMode(value as any)}
             />
           </div>
 
