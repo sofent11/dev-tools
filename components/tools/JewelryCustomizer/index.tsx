@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { CanvasStage } from './CanvasStage';
+import { ThreeStage } from './ThreeStage';
 import { ControlPanel } from './ControlPanel';
 import { generateGeometry, loadFont, GeometryResult } from './utils/geometry';
+import { generateDxf } from './utils/dxf';
+import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
+import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
+import * as THREE from 'three';
 import opentype from 'opentype.js';
 
 // NOTE: gstatic direct TTF URLs are versioned and may 404.
@@ -85,6 +90,11 @@ export const JewelryCustomizer: React.FC = () => {
   const [processing, setProcessing] = useState(false);
   const [fontError, setFontError] = useState<string | null>(null);
 
+  // 3D parameters and mode
+  const [previewMode, setPreviewMode] = useState<'2d' | '3d'>('2d');
+  const [extrusionThicknessMm, setExtrusionThicknessMm] = useState(2);
+  const [metalMaterial, setMetalMaterial] = useState<'gold' | 'platinum' | 'rose_gold' | 'silver'>('gold');
+
   // Load Font
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +153,7 @@ export const JewelryCustomizer: React.FC = () => {
     return () => clearTimeout(timer);
   }, [text, fontSize, offsetMm, letterSpacingMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, autoTighten, autoTightenMaxMm, unitsPerMm, font]);
 
-  const handleExport = () => {
+  const handleExportSvg = () => {
     if (!geometry) return;
 
     const polys = geometry.polygons;
@@ -179,6 +189,67 @@ export const JewelryCustomizer: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportDxf = () => {
+    if (!geometry) return;
+    try {
+      const dxfString = generateDxf(geometry.polygons, unitsPerMm);
+      const blob = new Blob([dxfString], { type: 'application/dxf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jewelry_design_${Date.now()}.dxf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Failed to export DXF:', e);
+    }
+  };
+
+  const handleExportStl = () => {
+    if (!geometry) return;
+    try {
+      // 1. Convert path to 3D Shapes
+      const shapes = SVGLoader.createShapes(geometry.processedPath);
+      const depth = extrusionThicknessMm * unitsPerMm;
+      const extrudeSettings: THREE.ExtrudeGeometryOptions = {
+        depth: depth,
+        bevelEnabled: true,
+        bevelSegments: 4,
+        steps: 1,
+        bevelSize: 0.03 * unitsPerMm,
+        bevelThickness: 0.05 * unitsPerMm,
+      };
+
+      const extrudeGeo = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+
+      // Scale to exact millimeter units for standard production/3D printing
+      extrudeGeo.scale(1 / unitsPerMm, -1 / unitsPerMm, -1 / unitsPerMm);
+
+      const tempMesh = new THREE.Mesh(extrudeGeo);
+
+      // 2. Export using STLExporter (binary is standard and extremely lightweight)
+      const exporter = new STLExporter();
+      const result = exporter.parse(tempMesh, { binary: true }) as DataView;
+
+      const blob = new Blob([result], { type: 'application/octet-stream' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `jewelry_design_3d_${Date.now()}.stl`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      // 3. Clean up memory immediately
+      extrudeGeo.dispose();
+    } catch (e) {
+      console.error('Failed to export STL:', e);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
@@ -205,7 +276,18 @@ export const JewelryCustomizer: React.FC = () => {
             setAutoTightenMaxMm={setAutoTightenMaxMm}
             unitsPerMm={unitsPerMm}
             setUnitsPerMm={setUnitsPerMm}
-            onExport={handleExport}
+            
+            previewMode={previewMode}
+            setPreviewMode={setPreviewMode}
+            extrusionThicknessMm={extrusionThicknessMm}
+            setExtrusionThicknessMm={setExtrusionThicknessMm}
+            metalMaterial={metalMaterial}
+            setMetalMaterial={setMetalMaterial}
+            
+            onExportSvg={handleExportSvg}
+            onExportDxf={handleExportDxf}
+            onExportStl={handleExportStl}
+            
             availableFonts={AVAILABLE_FONTS}
             selectedFont={selectedFont}
             setSelectedFont={setSelectedFont}
@@ -214,9 +296,9 @@ export const JewelryCustomizer: React.FC = () => {
           />
         </div>
 
-        {/* Right: Canvas */}
+        {/* Right: Canvas / 3D Stage */}
         <div className="tool-section flex min-h-[400px] flex-1 flex-col p-4">
-          <div className="flex-1 relative">
+          <div className="flex-1 relative flex items-center justify-center">
             {loading ? (
               <div className="absolute inset-0 flex items-center justify-center text-slate-400">
                 Loading resources...
@@ -227,10 +309,19 @@ export const JewelryCustomizer: React.FC = () => {
                 <div className="text-xs">{fontError}</div>
                 <div className="text-xs text-slate-400">生产预览需要可解析的 TTF/OTF 字体文件。</div>
               </div>
+            ) : previewMode === '3d' ? (
+              <ThreeStage
+                width={700}
+                height={550}
+                geometry={geometry}
+                thicknessMm={extrusionThicknessMm}
+                unitsPerMm={unitsPerMm}
+                materialType={metalMaterial}
+              />
             ) : (
               <CanvasStage
-                width={800} // Ideally dynamic based on container
-                height={600}
+                width={750}
+                height={550}
                 position={position}
                 rotation={rotation}
                 scale={scale}
@@ -244,7 +335,7 @@ export const JewelryCustomizer: React.FC = () => {
             )}
           </div>
           <div className="mt-2 text-xs text-slate-400 text-center">
-            最终预览 • 可拖拽 • 滚轮缩放
+            {previewMode === '3d' ? '3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放' : '2D 矢量平面预览 • 可拖拽 • 滚轮缩放'}
           </div>
         </div>
       </div>
