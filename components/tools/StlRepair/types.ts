@@ -73,6 +73,12 @@ export type RepairWorkerResponse =
     }
   | {
       id: number;
+      type: 'progress';
+      status: string;
+      progress: number;
+    }
+  | {
+      id: number;
       type: 'error';
       error: string;
     };

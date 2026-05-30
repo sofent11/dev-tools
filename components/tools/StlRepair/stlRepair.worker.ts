@@ -816,7 +816,12 @@ const serializeBinaryStl = (mesh: MeshData, fileName: string) => {
   return buffer;
 };
 
+const reportProgress = (id: number, status: string, progress: number) => {
+  ctx.postMessage({ id, type: 'progress', status, progress } satisfies RepairWorkerResponse);
+};
+
 const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerResponse> => {
+  reportProgress(request.id, '正在解析并载入 STL 顶点数据...', 10);
   const parsed = indexVertices(parseStl(request.buffer), 0);
   if (!parsed.indices.length) {
     throw new Error('STL 没有可处理的三角面');
@@ -826,23 +831,35 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
   let removedFragments = 0;
 
   if (request.options.keepLargest) {
+    reportProgress(request.id, '正在移除孤立小拓扑碎片...', 25);
     const result = keepLargestComponent(mesh);
     mesh = result.mesh;
     removedFragments = result.removedFragments;
   }
 
+  reportProgress(request.id, '正在统计几何特性并构建拓扑索引...', 35);
   const initial = computeStats(mesh);
+  
+  reportProgress(request.id, '正在执行三维顶点焊接与去重...', 45);
   const cleanup = cleanupMesh(mesh, request.options.weldTolerance);
   mesh = cleanup.mesh;
   const afterCleanup = computeStats(mesh);
 
-  const simplify = request.options.decimate
-    ? await simplifyMesh(mesh, request.options.targetFaces, request.options.targetError)
-    : { mesh, simplified: false, simplifyError: null };
-  mesh = simplify.mesh;
+  let simplified = false;
+  let simplifyError: number | null = null;
+  if (request.options.decimate) {
+    reportProgress(request.id, '正在进行三维面数降面处理 (Mesh Simplification)...', 60);
+    const simplifyResult = await simplifyMesh(mesh, request.options.targetFaces, request.options.targetError);
+    mesh = simplifyResult.mesh;
+    simplified = simplifyResult.simplified;
+    simplifyError = simplifyResult.simplifyError;
+  }
+
+  const simplify = { mesh, simplified, simplifyError };
 
   let removedPostSimplifyFragments = 0;
   if (request.options.keepLargest && simplify.simplified) {
+    reportProgress(request.id, '正在对降面后模型剔除小碎片...', 70);
     const simplifiedStats = computeStats(mesh);
     if (!simplifiedStats.watertight && simplifiedStats.components > 1) {
       const result = keepLargestComponent(mesh);
@@ -853,15 +870,18 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
 
   let removedNonManifoldFaces = 0;
   if (computeStats(mesh).nonManifoldEdges > 0) {
+    reportProgress(request.id, '正在定位并移除边界非流形面...', 75);
     const result = removeExtraNonManifoldFaces(mesh);
     mesh = result.mesh;
     removedNonManifoldFaces = result.removedFaces;
   }
 
+  reportProgress(request.id, '正在规范法线朝向与几何水密性...', 80);
   mesh = orientFacesConsistently(mesh);
 
   let filledHoles = 0;
   if (request.options.fillHoles && computeStats(mesh).watertight === false) {
+    reportProgress(request.id, '正在执行小孔补面算法 (填补单三角及四边形孔)...', 88);
     const fillResult = fillSingleTriangleAndQuadHoles(mesh);
     mesh = orientFacesConsistently(fillResult.mesh);
     filledHoles = fillResult.filledHoles;
@@ -869,11 +889,13 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
 
   let baseInfo: RepairReport['baseInfo'];
   if (request.options.addBase) {
+    reportProgress(request.id, '正在构造圆形切片底座并与 STL 合并...', 93);
     const result = addCylinderBase(mesh);
     mesh = orientFacesConsistently(result.mesh);
     baseInfo = result.baseInfo;
   }
 
+  reportProgress(request.id, '正在序列化为二进制 STL 二进制数组并优化显存传输...', 98);
   const final = computeStats(mesh);
   const notes: string[] = [];
 

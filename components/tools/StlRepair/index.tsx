@@ -213,6 +213,7 @@ const MeshPreview: React.FC<{ mesh: MeshPreviewData | null; isProcessing: boolea
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       controls.dispose();
+      renderer.forceContextLoss();
       renderer.dispose();
       scene.traverse(object => {
         if (object instanceof Mesh) {
@@ -385,6 +386,8 @@ export const StlRepairTool: React.FC = () => {
   const [stlBuffer, setStlBuffer] = useState<ArrayBuffer | null>(null);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [progressText, setProgressText] = useState('');
 
   useEffect(() => {
     return () => {
@@ -422,6 +425,8 @@ export const StlRepairTool: React.FC = () => {
     setError('');
     setReport(null);
     setStlBuffer(null);
+    setProgressPercent(0);
+    setProgressText('已启动 Web Worker 线程...');
 
     const id = requestIdRef.current + 1;
     requestIdRef.current = id;
@@ -430,6 +435,12 @@ export const StlRepairTool: React.FC = () => {
 
     worker.onmessage = (event: MessageEvent<RepairWorkerResponse>) => {
       if (event.data.id !== requestIdRef.current) return;
+
+      if (event.data.type === 'progress') {
+        setProgressPercent(event.data.progress);
+        setProgressText(event.data.status);
+        return;
+      }
 
       setProcessing(false);
       if (event.data.type === 'error') {
@@ -504,8 +515,16 @@ export const StlRepairTool: React.FC = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
             <div className="flex items-center gap-2 font-medium text-slate-800">
               {processing ? <Loader2 className="h-4 w-4 animate-spin text-primary-700" /> : <RefreshCw className="h-4 w-4 text-primary-700" />}
-              {statusText}
+              {processing && progressText ? progressText : statusText}
             </div>
+            {processing && (
+              <div className="mt-2.5 h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
+                <div
+                  className="h-full bg-primary-600 transition-all duration-300 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3">

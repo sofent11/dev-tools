@@ -276,6 +276,7 @@ const MeshPreview: React.FC<{
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
       controls.dispose();
+      renderer.forceContextLoss();
       renderer.dispose();
       scene.traverse(object => {
         if (object instanceof Mesh) {
