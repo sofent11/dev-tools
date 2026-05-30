@@ -20,12 +20,25 @@ export interface ProcessingConfig {
   autoTighten: boolean;
   autoTightenMaxMm: number;
   forceBridgeIfStillDisconnected?: boolean;
+
+  // Hanging Loops (mm)
+  loopType?: 'none' | 'top' | 'double_side' | 'double_top';
+  loopOuterDiameterMm?: number;
+  loopInnerDiameterMm?: number;
+
+  // Backdrop Frame (mm)
+  frameStyle?: 'none' | 'contour' | 'bar' | 'heart' | 'oval';
+  framePaddingMm?: number;
 }
 
 export interface GeometryResult {
   originalPath: string; // SVG Path data
-  processedPath: string; // SVG Path data after union/offset
-  polygons: number[][][]; // Raw polygons for debugging/export
+  processedPath: string; // SVG Path data after union/offset (combined for 2D view)
+  polygons: number[][][]; // Combined polygons
+  textPath: string; // Text-only SVG path
+  framePath: string; // Frame-only SVG path
+  textPolygons: number[][][]; // Text-only polygons
+  framePolygons: number[][][]; // Frame-only polygons
   diagnostics: {
     componentsBeforeRepair: number;
     componentsAfterRepair: number;
@@ -62,6 +75,95 @@ export const loadFont = async (url: string): Promise<opentype.Font> => {
 };
 
 type IntPoint = { X: number; Y: number };
+
+const makeCirclePath = (cx: number, cy: number, r: number, segments: number = 32): IntPoint[] => {
+  const points: IntPoint[] = [];
+  for (let i = 0; i < segments; i++) {
+    const angle = (i * 2 * Math.PI) / segments;
+    points.push({
+      X: Math.round(cx + r * Math.cos(angle)),
+      Y: Math.round(cy + r * Math.sin(angle)),
+    });
+  }
+  return points;
+};
+
+const makeRoundedRectPath = (left: number, top: number, right: number, bottom: number, r: number, segments: number = 8): IntPoint[] => {
+  const points: IntPoint[] = [];
+  const w = right - left;
+  const h = bottom - top;
+  const radius = Math.max(0, Math.min(r, w / 2, h / 2));
+  
+  if (radius <= 0) {
+    return [
+      { X: left, Y: top },
+      { X: right, Y: top },
+      { X: right, Y: bottom },
+      { X: left, Y: bottom }
+    ];
+  }
+
+  // Top-Right corner
+  for (let i = 0; i <= segments; i++) {
+    const angle = -Math.PI / 2 + (i * Math.PI) / (2 * segments);
+    points.push({
+      X: Math.round(right - radius + radius * Math.cos(angle)),
+      Y: Math.round(top + radius + radius * Math.sin(angle)),
+    });
+  }
+  // Bottom-Right corner
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i * Math.PI) / (2 * segments);
+    points.push({
+      X: Math.round(right - radius + radius * Math.cos(angle)),
+      Y: Math.round(bottom - radius + radius * Math.sin(angle)),
+    });
+  }
+  // Bottom-Left corner
+  for (let i = 0; i <= segments; i++) {
+    const angle = Math.PI / 2 + (i * Math.PI) / (2 * segments);
+    points.push({
+      X: Math.round(left + radius + radius * Math.cos(angle)),
+      Y: Math.round(bottom - radius + radius * Math.sin(angle)),
+    });
+  }
+  // Top-Left corner
+  for (let i = 0; i <= segments; i++) {
+    const angle = Math.PI + (i * Math.PI) / (2 * segments);
+    points.push({
+      X: Math.round(left + radius + radius * Math.cos(angle)),
+      Y: Math.round(top + radius + radius * Math.sin(angle)),
+    });
+  }
+
+  return points;
+};
+
+const makeEllipsePath = (cx: number, cy: number, rx: number, ry: number, segments: number = 64): IntPoint[] => {
+  const points: IntPoint[] = [];
+  for (let i = 0; i < segments; i++) {
+    const angle = (i * 2 * Math.PI) / segments;
+    points.push({
+      X: Math.round(cx + rx * Math.cos(angle)),
+      Y: Math.round(cy + ry * Math.sin(angle)),
+    });
+  }
+  return points;
+};
+
+const makeHeartPath = (cx: number, cy: number, rx: number, ry: number, segments: number = 80): IntPoint[] => {
+  const points: IntPoint[] = [];
+  for (let i = 0; i < segments; i++) {
+    const t = (i * 2 * Math.PI) / segments;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+    points.push({
+      X: Math.round(cx + x * (rx / 16)),
+      Y: Math.round(cy + y * (ry / 17)),
+    });
+  }
+  return points;
+};
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -1088,33 +1190,176 @@ export const generateGeometry = (
       console.warn('Offset failed, using original shape:', e);
     }
   }
-
   // If the shape unexpectedly ends up empty, fall back to repaired (merged) before raw.
-  const finalPaths = offsetShape.paths as IntPoint[][];
-  let finalPolygons: number[][][];
-  let processedPath: string;
-  
-  if (finalPaths.length === 0) {
+  const finalTextPaths = offsetShape.paths as IntPoint[][];
+  let textPolygons: number[][][];
+  let textPath: string;
+
+  if (finalTextPaths.length === 0) {
     const repairedPaths = (merged.paths as IntPoint[][]) ?? [];
     if (repairedPaths.length > 0) {
       const result = toSvgPathData(repairedPaths, scaleUp);
-      processedPath = result.d;
-      finalPolygons = result.polygons;
+      textPath = result.d;
+      textPolygons = result.polygons;
     } else {
-      // Last resort: use raw polygons
-      finalPolygons = rawPolys;
-      processedPath = polygonsToPathData(rawPolys, 2);
+      textPolygons = rawPolys;
+      textPath = polygonsToPathData(rawPolys, 2);
     }
   } else {
-    const result = toSvgPathData(finalPaths, scaleUp);
-    processedPath = result.d;
-    finalPolygons = result.polygons;
+    const result = toSvgPathData(finalTextPaths, scaleUp);
+    textPath = result.d;
+    textPolygons = result.polygons;
   }
+
+  // Calculate backdrop frame and loops
+  const textBounds = unionBounds(finalTextPaths.length > 0 ? finalTextPaths : merged.paths as IntPoint[][]) || { left: 0, right: 1000, top: 0, bottom: 1000 };
+  const textWidth = textBounds.right - textBounds.left;
+  const textHeight = textBounds.bottom - textBounds.top;
+  const textCenterX = (textBounds.left + textBounds.right) / 2;
+  const textCenterY = (textBounds.top + textBounds.bottom) / 2;
+
+  let frameShape = new Shape([], true);
+  const framePadding = Math.max(0, config.framePaddingMm ?? 2.0) * unitsPerMm * scaleUp;
+
+  if (config.frameStyle === 'contour') {
+    // Bubble contour
+    try {
+      const baseToContour = finalTextPaths.length > 0 ? offsetShape : merged;
+      const contourResult = baseToContour.offset(framePadding, {
+        jointType: 'jtRound',
+        endType: 'etClosedPolygon',
+        roundPrecision: 0.25 * scaleUp,
+      });
+      if (contourResult.paths.length > 0) {
+        frameShape = safeCleanDedupe(contourResult, frameShape);
+      }
+    } catch (e) {
+      console.warn('Contour framing failed:', e);
+    }
+  } else if (config.frameStyle === 'bar') {
+    // Rounded rectangular plate
+    const barPath = makeRoundedRectPath(
+      textBounds.left - framePadding,
+      textBounds.top - framePadding,
+      textBounds.right + framePadding,
+      textBounds.bottom + framePadding,
+      framePadding * 0.8
+    );
+    frameShape = new Shape([barPath], true);
+  } else if (config.frameStyle === 'oval') {
+    // Oval plate
+    const rx = textWidth / 2 + framePadding;
+    const ry = textHeight / 2 + framePadding;
+    const ovalPath = makeEllipsePath(textCenterX, textCenterY, rx, ry);
+    frameShape = new Shape([ovalPath], true);
+  } else if (config.frameStyle === 'heart') {
+    // Heart plate
+    const rx = textWidth / 2 + framePadding * 1.2;
+    const ry = textHeight / 2 + framePadding * 1.2;
+    const heartPath = makeHeartPath(textCenterX, textCenterY, rx, ry);
+    frameShape = new Shape([heartPath], true);
+  }
+
+  const hasFrame = config.frameStyle !== 'none' && frameShape.paths.length > 0;
+  const baseShapeForLoops = hasFrame ? frameShape : (finalTextPaths.length > 0 ? offsetShape : merged);
+
+  // Generate loops
+  let outerLoopsShape = new Shape([], true);
+  let innerLoopsShape = new Shape([], true);
+
+  if (config.loopType && config.loopType !== 'none') {
+    const loopOuterR = (Math.max(1, config.loopOuterDiameterMm ?? 4.0) / 2) * unitsPerMm * scaleUp;
+    const loopInnerR = (Math.max(0.5, config.loopInnerDiameterMm ?? 2.0) / 2) * unitsPerMm * scaleUp;
+
+    const boundsForLoops = hasFrame ? (frameShape.shapeBounds() as Bounds) : textBounds;
+    const lWidth = boundsForLoops.right - boundsForLoops.left;
+    const lCenterY = (boundsForLoops.top + boundsForLoops.bottom) / 2;
+
+    const addLoopAt = (cx: number, cy: number) => {
+      const outerCircle = makeCirclePath(cx, cy, loopOuterR);
+      const innerCircle = makeCirclePath(cx, cy, loopInnerR);
+      outerLoopsShape = outerLoopsShape.union(new Shape([outerCircle], true));
+      innerLoopsShape = innerLoopsShape.union(new Shape([innerCircle], true));
+    };
+
+    if (config.loopType === 'top') {
+      addLoopAt((boundsForLoops.left + boundsForLoops.right) / 2, boundsForLoops.top - loopOuterR * 0.4);
+    } else if (config.loopType === 'double_side') {
+      addLoopAt(boundsForLoops.left - loopOuterR * 0.4, lCenterY);
+      addLoopAt(boundsForLoops.right + loopOuterR * 0.4, lCenterY);
+    } else if (config.loopType === 'double_top') {
+      const x1 = boundsForLoops.left + lWidth * 0.15;
+      const x2 = boundsForLoops.right - lWidth * 0.15;
+      addLoopAt(x1, boundsForLoops.top - loopOuterR * 0.4);
+      addLoopAt(x2, boundsForLoops.top - loopOuterR * 0.4);
+    }
+  }
+
+  // Weld loops
+  let mergedWithLoops = baseShapeForLoops;
+  if (outerLoopsShape.paths.length > 0) {
+    try {
+      const welded = baseShapeForLoops.union(outerLoopsShape);
+      const punched = welded.difference(innerLoopsShape);
+      if (punched.paths.length > 0) {
+        mergedWithLoops = safeCleanDedupe(punched, baseShapeForLoops);
+      }
+    } catch (e) {
+      console.warn('Weld loops failed:', e);
+    }
+  }
+  if (hasFrame) {
+    frameShape = mergedWithLoops;
+  } else {
+    offsetShape = mergedWithLoops;
+  }
+
+  // 1. Calculate overall combined bounds to find center of the finished piece
+  const finalMergedShape = hasFrame ? frameShape : offsetShape;
+  const finalBounds = unionBounds(finalMergedShape.paths as IntPoint[][]) || { left: 0, right: 1000, top: 0, bottom: 1000 };
+  const finalCenterX = (finalBounds.left + finalBounds.right) / 2;
+  const finalCenterY = (finalBounds.top + finalBounds.bottom) / 2;
+
+  // 2. Define a translation helper
+  const translatePaths = (paths: IntPoint[][], tx: number, ty: number): IntPoint[][] => {
+    return paths.map(path => path.map(pt => ({
+      X: pt.X + tx,
+      Y: pt.Y + ty
+    })));
+  };
+
+  // Center all shapes by translating them so their combined center is at (0, 0)
+  const tx = -finalCenterX;
+  const ty = -finalCenterY;
+
+  const centeredTextPaths = translatePaths(offsetShape.paths as IntPoint[][], tx, ty);
+  const centeredFramePaths = hasFrame ? translatePaths(frameShape.paths as IntPoint[][], tx, ty) : [];
+
+  // 3. Generate SVG path and polygon outputs from centered coordinates
+  const textResult = toSvgPathData(centeredTextPaths, scaleUp);
+  textPath = textResult.d;
+  textPolygons = textResult.polygons;
+
+  let framePath = '';
+  let framePolygons: number[][][] = [];
+  if (hasFrame && centeredFramePaths.length > 0) {
+    const frameResult = toSvgPathData(centeredFramePaths, scaleUp);
+    framePath = frameResult.d;
+    framePolygons = frameResult.polygons;
+  }
+
+  // Combined path and polygons represent both text and backing plate overlays
+  const combinedPolygons = [...framePolygons, ...textPolygons];
+  const combinedPath = [framePath, textPath].filter(Boolean).join(' ');
 
   return {
     originalPath: originalSvg,
-    processedPath,
-    polygons: finalPolygons,
+    processedPath: combinedPath,
+    polygons: combinedPolygons,
+    textPath,
+    framePath,
+    textPolygons,
+    framePolygons,
     diagnostics: {
       componentsBeforeRepair: componentsBefore,
       componentsAfterRepair: textComponentCount(merged),

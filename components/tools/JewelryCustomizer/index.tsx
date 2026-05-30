@@ -9,6 +9,73 @@ import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import * as THREE from 'three';
 import opentype from 'opentype.js';
 
+/**
+ * Converts an SVG path data string into a THREE.ShapePath
+ * suitable for SVGLoader.createShapes().
+ */
+function svgPathToShapePath(d: string): THREE.ShapePath {
+  const shapePath = new THREE.ShapePath();
+  const firstPoint = new THREE.Vector2();
+  const point = new THREE.Vector2();
+  let isFirstPoint = true;
+
+  const commands = d.match(/[a-df-z][^a-df-z]*/ig);
+  if (!commands) return shapePath;
+
+  for (const cmd of commands) {
+    const type = cmd.charAt(0);
+    const data = cmd.slice(1).trim();
+    const nums = [...data.matchAll(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g)].map(m => parseFloat(m[0]));
+
+    switch (type) {
+      case 'M':
+        shapePath.moveTo(nums[0], nums[1]);
+        point.set(nums[0], nums[1]);
+        if (isFirstPoint) {
+          firstPoint.copy(point);
+          isFirstPoint = false;
+        }
+        break;
+      case 'L':
+        for (let j = 0; j < nums.length; j += 2) {
+          shapePath.lineTo(nums[j], nums[j + 1]);
+          point.set(nums[j], nums[j + 1]);
+        }
+        break;
+      case 'H':
+        shapePath.lineTo(nums[0], point.y);
+        point.x = nums[0];
+        break;
+      case 'V':
+        shapePath.lineTo(point.x, nums[0]);
+        point.y = nums[0];
+        break;
+      case 'C':
+        for (let j = 0; j < nums.length; j += 6) {
+          shapePath.bezierCurveTo(nums[j], nums[j + 1], nums[j + 2], nums[j + 3], nums[j + 4], nums[j + 5]);
+          point.set(nums[j + 4], nums[j + 5]);
+        }
+        break;
+      case 'Q':
+        for (let j = 0; j < nums.length; j += 4) {
+          shapePath.quadraticCurveTo(nums[j], nums[j + 1], nums[j + 2], nums[j + 3]);
+          point.set(nums[j + 2], nums[j + 3]);
+        }
+        break;
+      case 'Z':
+      case 'z':
+        if (shapePath.currentPath) {
+          shapePath.currentPath.autoClose = true;
+        }
+        point.copy(firstPoint);
+        isFirstPoint = true;
+        break;
+    }
+  }
+
+  return shapePath;
+}
+
 // NOTE: gstatic direct TTF URLs are versioned and may 404.
 // Use a stable, CORS-enabled raw GitHub URL for opentype.js parsing.
 // The Cute additions come from Google Fonts tag /Expressive/Cute.
@@ -81,7 +148,7 @@ export const JewelryCustomizer: React.FC = () => {
   const [unitsPerMm, setUnitsPerMm] = useState(3.78);
   const [geometry, setGeometry] = useState<GeometryResult | null>(null);
   
-  const [position, setPosition] = useState({ x: 300, y: 300 });
+  const [position, setPosition] = useState({ x: 375, y: 275 });
   const [rotation, setRotation] = useState(0);
   const [scale, setScale] = useState(1);
   
@@ -91,9 +158,17 @@ export const JewelryCustomizer: React.FC = () => {
   const [fontError, setFontError] = useState<string | null>(null);
 
   // 3D parameters and mode
-  const [previewMode, setPreviewMode] = useState<'2d' | '3d'>('2d');
+  const [previewMode, setPreviewMode] = useState<'2d' | '3d' | 'split'>('split');
   const [extrusionThicknessMm, setExtrusionThicknessMm] = useState(2);
   const [metalMaterial, setMetalMaterial] = useState<'gold' | 'platinum' | 'rose_gold' | 'silver'>('gold');
+
+  // Hanging Loops and Backdrop Frames configuration states
+  const [loopType, setLoopType] = useState<'none' | 'top' | 'double_side' | 'double_top'>('none');
+  const [loopOuterDiameterMm, setLoopOuterDiameterMm] = useState(4.0);
+  const [loopInnerDiameterMm, setLoopInnerDiameterMm] = useState(2.0);
+  const [frameStyle, setFrameStyle] = useState<'none' | 'contour' | 'bar' | 'heart' | 'oval'>('none');
+  const [framePaddingMm, setFramePaddingMm] = useState(2.0);
+  const [frameMaterial, setFrameMaterial] = useState<'gold' | 'platinum' | 'rose_gold' | 'silver'>('silver');
 
   // Load Font
   useEffect(() => {
@@ -141,6 +216,11 @@ export const JewelryCustomizer: React.FC = () => {
           letterSpacingMm,
           autoTighten,
           autoTightenMaxMm,
+          loopType,
+          loopOuterDiameterMm,
+          loopInnerDiameterMm,
+          frameStyle,
+          framePaddingMm,
         });
         setGeometry(result);
       } catch (e) {
@@ -151,7 +231,7 @@ export const JewelryCustomizer: React.FC = () => {
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timer);
-  }, [text, fontSize, offsetMm, letterSpacingMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, autoTighten, autoTightenMaxMm, unitsPerMm, font]);
+  }, [text, fontSize, offsetMm, letterSpacingMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, autoTighten, autoTightenMaxMm, unitsPerMm, font, loopType, loopOuterDiameterMm, loopInnerDiameterMm, frameStyle, framePaddingMm]);
 
   const handleExportSvg = () => {
     if (!geometry) return;
@@ -210,28 +290,61 @@ export const JewelryCustomizer: React.FC = () => {
   const handleExportStl = () => {
     if (!geometry) return;
     try {
-      // 1. Convert path to 3D Shapes
-      const shapes = SVGLoader.createShapes(geometry.processedPath);
-      const depth = extrusionThicknessMm * unitsPerMm;
-      const extrudeSettings: THREE.ExtrudeGeometryOptions = {
-        depth: depth,
+      const group = new THREE.Group();
+      
+      const hasFrame = geometry.framePath ? true : false;
+      const frameDepth = hasFrame ? extrusionThicknessMm * 0.4 * unitsPerMm : 0;
+      const textDepth = extrusionThicknessMm * unitsPerMm;
+
+      // 1. Extrude Text
+      const textPathStr = geometry.textPath || geometry.processedPath;
+      if (!textPathStr) return;
+      const textShapes = SVGLoader.createShapes(svgPathToShapePath(textPathStr));
+      const textSettings: THREE.ExtrudeGeometryOptions = {
+        depth: textDepth,
         bevelEnabled: true,
         bevelSegments: 4,
         steps: 1,
         bevelSize: 0.03 * unitsPerMm,
         bevelThickness: 0.05 * unitsPerMm,
       };
+      const textGeo = new THREE.ExtrudeGeometry(textShapes, textSettings);
+      textGeo.center();
+      const textMesh = new THREE.Mesh(textGeo);
+      group.add(textMesh);
 
-      const extrudeGeo = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+      // 2. Extrude Frame
+      let frameGeo: THREE.ExtrudeGeometry | null = null;
+      if (hasFrame && geometry.framePath) {
+        const frameShapes = SVGLoader.createShapes(svgPathToShapePath(geometry.framePath));
+        const frameSettings: THREE.ExtrudeGeometryOptions = {
+          depth: frameDepth,
+          bevelEnabled: true,
+          bevelSegments: 4,
+          steps: 1,
+          bevelSize: 0.03 * unitsPerMm,
+          bevelThickness: 0.05 * unitsPerMm,
+        };
+        frameGeo = new THREE.ExtrudeGeometry(frameShapes, frameSettings);
+        frameGeo.center();
+        const frameMesh = new THREE.Mesh(frameGeo);
+        group.add(frameMesh);
+      }
 
-      // Scale to exact millimeter units for standard production/3D printing
-      extrudeGeo.scale(1 / unitsPerMm, -1 / unitsPerMm, -1 / unitsPerMm);
+      // 3. Align Z positions
+      if (frameGeo && group.children.length >= 2) {
+        group.children[1].position.set(0, 0, -textDepth / 2);
+        group.children[0].position.set(0, 0, frameDepth / 2);
+      } else {
+        group.children[0].position.set(0, 0, 0);
+      }
 
-      const tempMesh = new THREE.Mesh(extrudeGeo);
+      // 4. Scale to exact millimeter units for 3D printing
+      group.scale.set(1 / unitsPerMm, -1 / unitsPerMm, -1 / unitsPerMm);
 
-      // 2. Export using STLExporter (binary is standard and extremely lightweight)
+      // 5. Parse group with STLExporter
       const exporter = new STLExporter();
-      const result = exporter.parse(tempMesh, { binary: true }) as DataView;
+      const result = exporter.parse(group, { binary: true }) as DataView;
 
       const blob = new Blob([result], { type: 'application/octet-stream' });
       const url = URL.createObjectURL(blob);
@@ -243,13 +356,13 @@ export const JewelryCustomizer: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      // 3. Clean up memory immediately
-      extrudeGeo.dispose();
+      // Dispose geometries
+      textGeo.dispose();
+      if (frameGeo) frameGeo.dispose();
     } catch (e) {
       console.error('Failed to export STL:', e);
     }
   };
-
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
@@ -283,6 +396,19 @@ export const JewelryCustomizer: React.FC = () => {
             setExtrusionThicknessMm={setExtrusionThicknessMm}
             metalMaterial={metalMaterial}
             setMetalMaterial={setMetalMaterial}
+
+            loopType={loopType}
+            setLoopType={setLoopType}
+            loopOuterDiameterMm={loopOuterDiameterMm}
+            setLoopOuterDiameterMm={setLoopOuterDiameterMm}
+            loopInnerDiameterMm={loopInnerDiameterMm}
+            setLoopInnerDiameterMm={setLoopInnerDiameterMm}
+            frameStyle={frameStyle}
+            setFrameStyle={setFrameStyle}
+            framePaddingMm={framePaddingMm}
+            setFramePaddingMm={setFramePaddingMm}
+            frameMaterial={frameMaterial}
+            setFrameMaterial={setFrameMaterial}
             
             onExportSvg={handleExportSvg}
             onExportDxf={handleExportDxf}
@@ -309,19 +435,47 @@ export const JewelryCustomizer: React.FC = () => {
                 <div className="text-xs">{fontError}</div>
                 <div className="text-xs text-slate-400">生产预览需要可解析的 TTF/OTF 字体文件。</div>
               </div>
+            ) : previewMode === 'split' ? (
+              <div className="flex flex-col xl:flex-row gap-4 items-center justify-center w-full h-full min-h-0">
+                <div className="flex-1 flex items-center justify-center">
+                  <CanvasStage
+                    width={370}
+                    height={500}
+                    position={{ x: 185, y: 250 }}
+                    rotation={rotation}
+                    scale={0.55}
+                    geometry={geometry}
+                    onTransformChange={(attrs) => {
+                      setRotation(attrs.rotation);
+                    }}
+                  />
+                </div>
+                <div className="flex-1 flex items-center justify-center">
+                  <ThreeStage
+                    width={370}
+                    height={500}
+                    geometry={geometry}
+                    thicknessMm={extrusionThicknessMm}
+                    unitsPerMm={unitsPerMm}
+                    materialType={metalMaterial}
+                    frameMaterialType={frameMaterial}
+                  />
+                </div>
+              </div>
             ) : previewMode === '3d' ? (
               <ThreeStage
-                width={700}
-                height={550}
+                width={750}
+                height={500}
                 geometry={geometry}
                 thicknessMm={extrusionThicknessMm}
                 unitsPerMm={unitsPerMm}
                 materialType={metalMaterial}
+                frameMaterialType={frameMaterial}
               />
             ) : (
               <CanvasStage
                 width={750}
-                height={550}
+                height={500}
                 position={position}
                 rotation={rotation}
                 scale={scale}
@@ -335,7 +489,11 @@ export const JewelryCustomizer: React.FC = () => {
             )}
           </div>
           <div className="mt-2 text-xs text-slate-400 text-center">
-            {previewMode === '3d' ? '3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放' : '2D 矢量平面预览 • 可拖拽 • 滚轮缩放'}
+            {previewMode === 'split' 
+              ? '联动分屏模式 • 左侧 2D 矢量平面 (可拖拽旋转) • 右侧 3D 金属模型 (拖拽旋转)' 
+              : previewMode === '3d' 
+                ? '3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放' 
+                : '2D 矢量平面预览 • 可拖拽 • 滚轮缩放'}
           </div>
         </div>
       </div>

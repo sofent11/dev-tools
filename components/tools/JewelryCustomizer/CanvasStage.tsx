@@ -89,15 +89,36 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           onPointerUp={() => setDragStart(null)}
           onPointerCancel={() => setDragStart(null)}
         >
-          {geometry?.processedPath && (
-            <path
-              d={geometry.processedPath}
-              fill="#e2e8f0"
-              stroke="#ef4444"
-              strokeWidth={2}
-              opacity={0.9}
-              fillRule="evenodd"
-            />
+          {geometry?.framePath ? (
+            <>
+              <path
+                d={geometry.framePath}
+                fill="#cbd5e1"
+                stroke="#64748b"
+                strokeWidth={1.5}
+                opacity={0.7}
+                fillRule="evenodd"
+              />
+              <path
+                d={geometry.textPath}
+                fill="#e2e8f0"
+                stroke="#ef4444"
+                strokeWidth={1.8}
+                opacity={0.95}
+                fillRule="evenodd"
+              />
+            </>
+          ) : (
+            geometry?.processedPath && (
+              <path
+                d={geometry.processedPath}
+                fill="#e2e8f0"
+                stroke="#ef4444"
+                strokeWidth={2}
+                opacity={0.9}
+                fillRule="evenodd"
+              />
+            )
           )}
           <path d="M -5 0 L 5 0 M 0 -5 L 0 5" stroke="#2563eb" strokeWidth={1} opacity={0.55} pointerEvents="none" />
         </g>

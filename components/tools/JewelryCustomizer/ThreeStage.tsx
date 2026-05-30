@@ -4,6 +4,78 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { GeometryResult } from './utils/geometry';
 
+/**
+ * Converts an SVG path data string (the `d` attribute) into a THREE.ShapePath
+ * suitable for SVGLoader.createShapes().
+ *
+ * The generated paths use only M/L/Z commands, but the parser also handles
+ * H, V, C, Q, A for forward compatibility.
+ */
+function svgPathToShapePath(d: string): THREE.ShapePath {
+  const shapePath = new THREE.ShapePath();
+  const firstPoint = new THREE.Vector2();
+  const point = new THREE.Vector2();
+  let isFirstPoint = true;
+
+  // Match SVG path commands: a letter followed by its arguments
+  const commands = d.match(/[a-df-z][^a-df-z]*/ig);
+  if (!commands) return shapePath;
+
+  for (const cmd of commands) {
+    const type = cmd.charAt(0);
+    const data = cmd.slice(1).trim();
+    // Parse all numeric tokens from the argument portion
+    const nums = [...data.matchAll(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g)].map(m => parseFloat(m[0]));
+
+    switch (type) {
+      case 'M':
+        shapePath.moveTo(nums[0], nums[1]);
+        point.set(nums[0], nums[1]);
+        if (isFirstPoint) {
+          firstPoint.copy(point);
+          isFirstPoint = false;
+        }
+        break;
+      case 'L':
+        for (let j = 0; j < nums.length; j += 2) {
+          shapePath.lineTo(nums[j], nums[j + 1]);
+          point.set(nums[j], nums[j + 1]);
+        }
+        break;
+      case 'H':
+        shapePath.lineTo(nums[0], point.y);
+        point.x = nums[0];
+        break;
+      case 'V':
+        shapePath.lineTo(point.x, nums[0]);
+        point.y = nums[0];
+        break;
+      case 'C':
+        for (let j = 0; j < nums.length; j += 6) {
+          shapePath.bezierCurveTo(nums[j], nums[j + 1], nums[j + 2], nums[j + 3], nums[j + 4], nums[j + 5]);
+          point.set(nums[j + 4], nums[j + 5]);
+        }
+        break;
+      case 'Q':
+        for (let j = 0; j < nums.length; j += 4) {
+          shapePath.quadraticCurveTo(nums[j], nums[j + 1], nums[j + 2], nums[j + 3]);
+          point.set(nums[j + 2], nums[j + 3]);
+        }
+        break;
+      case 'Z':
+      case 'z':
+        if (shapePath.currentPath) {
+          shapePath.currentPath.autoClose = true;
+        }
+        point.copy(firstPoint);
+        isFirstPoint = true;
+        break;
+    }
+  }
+
+  return shapePath;
+}
+
 interface ThreeStageProps {
   width: number;
   height: number;
@@ -11,6 +83,7 @@ interface ThreeStageProps {
   thicknessMm: number;
   unitsPerMm: number;
   materialType: 'gold' | 'platinum' | 'rose_gold' | 'silver';
+  frameMaterialType?: 'gold' | 'platinum' | 'rose_gold' | 'silver';
 }
 
 const MATERIAL_PRESETS = {
@@ -51,12 +124,12 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
   thicknessMm,
   unitsPerMm,
   materialType,
+  frameMaterialType,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const meshRef = useRef<THREE.Mesh | null>(null);
-  const materialRef = useRef<THREE.MeshPhysicalMaterial | null>(null);
+  const meshRef = useRef<THREE.Object3D | null>(null);
 
   // Setup scene, camera, lights, controls
   useEffect(() => {
@@ -131,74 +204,138 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
   }, [width, height]);
 
   // Handle Geometry and Material changes
+  // Handle Geometry and Material changes
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !geometry?.processedPath) return;
+    if (!scene) return;
 
-    // Remove existing mesh
+    // Helper to recursively dispose objects
+    const disposeNode = (node: THREE.Object3D) => {
+      if (node instanceof THREE.Mesh) {
+        if (node.geometry) node.geometry.dispose();
+        if (Array.isArray(node.material)) {
+          node.material.forEach((mat: THREE.Material) => mat.dispose());
+        } else if (node.material) {
+          node.material.dispose();
+        }
+      }
+      node.children.forEach(disposeNode);
+    };
+
+    // Remove existing composite mesh/group
     if (meshRef.current) {
       scene.remove(meshRef.current);
-      meshRef.current.geometry.dispose();
+      disposeNode(meshRef.current);
       meshRef.current = null;
     }
 
-    try {
-      // 1. Convert SVG path to 2D Shapes using SVGLoader
-      const shapes = SVGLoader.createShapes(geometry.processedPath);
+    // Ensure we have some text geometry to render
+    const textPathStr = geometry?.textPath || geometry?.processedPath;
+    if (!textPathStr) return;
 
-      // 2. Extrude shapes into 3D geometry
-      // We convert mm thickness to internal units using unitsPerMm
-      const depth = thicknessMm * unitsPerMm;
-      
-      const extrudeSettings: THREE.ExtrudeGeometryOptions = {
-        depth: depth,
+    try {
+      const group = new THREE.Group();
+
+      // Materials
+      const textPreset = MATERIAL_PRESETS[materialType];
+      const textMaterial = new THREE.MeshPhysicalMaterial({
+        color: textPreset.color,
+        metalness: textPreset.metalness,
+        roughness: textPreset.roughness,
+        clearcoat: textPreset.clearcoat,
+        clearcoatRoughness: textPreset.clearcoatRoughness,
+        reflectivity: 0.9,
+        side: THREE.DoubleSide, // Ensure double sided rendering to completely eliminate backface culling issues
+      });
+
+      const framePreset = MATERIAL_PRESETS[frameMaterialType || materialType];
+      const frameMaterial = new THREE.MeshPhysicalMaterial({
+        color: framePreset.color,
+        metalness: framePreset.metalness,
+        roughness: framePreset.roughness,
+        clearcoat: framePreset.clearcoat,
+        clearcoatRoughness: framePreset.clearcoatRoughness,
+        reflectivity: 0.9,
+        side: THREE.DoubleSide,
+      });
+
+      // Z-depth setup
+      const hasFrame = geometry?.framePath ? true : false;
+      const frameDepth = hasFrame ? thicknessMm * 0.4 * unitsPerMm : 0;
+      const textDepth = thicknessMm * unitsPerMm;
+
+      // 1. Text Mesh Extrusion
+      const textShapes = SVGLoader.createShapes(svgPathToShapePath(textPathStr));
+      const textSettings: THREE.ExtrudeGeometryOptions = {
+        depth: textDepth,
         bevelEnabled: true,
         bevelSegments: 4,
         steps: 1,
         bevelSize: 0.03 * unitsPerMm,
         bevelThickness: 0.05 * unitsPerMm,
       };
+      const textGeo = new THREE.ExtrudeGeometry(textShapes, textSettings);
+      textGeo.center(); // centers in X, Y, Z
+      textGeo.scale(1, -1, -1); // Invert Y and Z directly on the geometry vertices
+      
+      const textMesh = new THREE.Mesh(textGeo, textMaterial);
+      group.add(textMesh);
 
-      const extrudeGeo = new THREE.ExtrudeGeometry(shapes, extrudeSettings);
+      // 2. Backing Frame Mesh Extrusion (if framePath exists)
+      let frameMesh: THREE.Mesh | null = null;
+      if (hasFrame && geometry?.framePath) {
+        const frameShapes = SVGLoader.createShapes(svgPathToShapePath(geometry.framePath));
+        const frameSettings: THREE.ExtrudeGeometryOptions = {
+          depth: frameDepth,
+          bevelEnabled: true,
+          bevelSegments: 4,
+          steps: 1,
+          bevelSize: 0.03 * unitsPerMm,
+          bevelThickness: 0.05 * unitsPerMm,
+        };
+        const frameGeo = new THREE.ExtrudeGeometry(frameShapes, frameSettings);
+        frameGeo.center(); // centers in X, Y, Z
+        frameGeo.scale(1, -1, -1); // Invert Y and Z directly on the geometry vertices
+        
+        frameMesh = new THREE.Mesh(frameGeo, frameMaterial);
+        group.add(frameMesh);
+      }
 
-      // Center geometry so it rotates nicely around its local origin
-      extrudeGeo.center();
+      // 3. Align their Z positions so text sits precisely on front face of frame
+      if (frameMesh) {
+        frameMesh.position.set(0, 0, -textDepth / 2);
+        textMesh.position.set(0, 0, frameDepth / 2);
+      } else {
+        textMesh.position.set(0, 0, 0);
+      }
 
-      // Invert Y and Z to orient standard CAD coordinates nicely in front of the camera
-      extrudeGeo.scale(1, -1, -1);
-
-      // 3. Setup premium physical material
-      const preset = MATERIAL_PRESETS[materialType];
-      const material = new THREE.MeshPhysicalMaterial({
-        color: preset.color,
-        metalness: preset.metalness,
-        roughness: preset.roughness,
-        clearcoat: preset.clearcoat,
-        clearcoatRoughness: preset.clearcoatRoughness,
-        reflectivity: 0.9,
-      });
-      materialRef.current = material;
-
-      // 4. Create and add Mesh
-      const mesh = new THREE.Mesh(extrudeGeo, material);
-      scene.add(mesh);
-      meshRef.current = mesh;
+      // 5. Add to scene and save ref
+      scene.add(group);
+      meshRef.current = group;
     } catch (e) {
       console.error('Three.js geometry generation failed:', e);
     }
-  }, [geometry, thicknessMm, unitsPerMm, materialType]);
+  }, [geometry, thicknessMm, unitsPerMm, materialType, frameMaterialType, width, height]);
 
   // Deep cleanup on unmount
   useEffect(() => {
     return () => {
+      const disposeNode = (node: THREE.Object3D) => {
+        if (node instanceof THREE.Mesh) {
+          if (node.geometry) node.geometry.dispose();
+          if (Array.isArray(node.material)) {
+            node.material.forEach((mat: THREE.Material) => mat.dispose());
+          } else if (node.material) {
+            node.material.dispose();
+          }
+        }
+        node.children.forEach(disposeNode);
+      };
+
       if (meshRef.current) {
-        meshRef.current.geometry.dispose();
-      }
-      if (materialRef.current) {
-        materialRef.current.dispose();
+        disposeNode(meshRef.current);
       }
       if (rendererRef.current) {
-        // Deep deallocate context
         rendererRef.current.forceContextLoss();
       }
     };

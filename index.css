@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Use .dark class on <html> for dark mode, not OS prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary-50: #eff6ff;
   --color-primary-100: #dbeafe;
@@ -81,4 +84,32 @@ html.dark .hover\:bg-slate-50:hover {
 
 html.dark .scrollbar-thumb-slate-200 {
   --tw-scrollbar-thumb: #374151 !important;
+}
+
+/* -- Missing overrides for inverted dark mode text/backgrounds -- */
+
+html.dark .text-slate-950 {
+  color: #f8fafc !important; /* slate-50 */
+}
+
+html.dark .text-slate-500 {
+  color: #9ca3af !important; /* gray-400 */
+}
+
+html.dark .bg-white\/90 {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+html.dark .bg-white\/95 {
+  background-color: #111827 !important;
+}
+
+html.dark .bg-white\/80 {
+  background-color: #111827 !important;
+}
+
+html.dark .bg-white\/50 {
+  background-color: #0b0f19 !important;
+  border-color: #1f2937 !important;
 }
