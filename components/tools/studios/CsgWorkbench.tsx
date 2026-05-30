@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
-import { HelpCircle, Layers, Trash2, Download, RefreshCw, Upload, Eye } from 'lucide-react';
+import {
+  HelpCircle, Layers, Trash2, Download, RefreshCw, Upload, Eye, EyeOff, Plus, Settings, Ruler
+} from 'lucide-react';
 import { CSGExporter } from '../shared/csg';
 
 interface ShapeConfig {
+  id: string;
+  name: string;
   type: 'cube' | 'sphere' | 'cylinder' | 'cone' | 'upload';
   posX: number;
   posY: number;
@@ -14,40 +19,89 @@ interface ShapeConfig {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  color: string;
+  visible: boolean;
   uploadedGeo: THREE.BufferGeometry | null;
   uploadedFileName: string;
 }
 
+const PRESET_COLORS = [
+  '#3b82f6', // blue
+  '#f59e0b', // amber
+  '#10b981', // emerald
+  '#6366f1', // indigo
+  '#ec4899', // pink
+  '#14b8a6', // teal
+];
+
 export const CsgWorkbench: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // States
-  const [shapeA, setShapeA] = useState<ShapeConfig>({
-    type: 'cube', posX: 0, posY: 0, posZ: 0, scaleX: 15, scaleY: 15, scaleZ: 15, uploadedGeo: null, uploadedFileName: ''
-  });
-  const [shapeB, setShapeB] = useState<ShapeConfig>({
-    type: 'sphere', posX: 8, posY: 4, posZ: 0, scaleX: 10, scaleY: 10, scaleZ: 10, uploadedGeo: null, uploadedFileName: ''
-  });
+  // Scene objects hierarchy state
+  const [shapes, setShapes] = useState<ShapeConfig[]>([
+    {
+      id: 'shape-1',
+      name: '基准立方体 A',
+      type: 'cube',
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      scaleX: 15,
+      scaleY: 15,
+      scaleZ: 15,
+      color: PRESET_COLORS[0],
+      visible: true,
+      uploadedGeo: null,
+      uploadedFileName: ''
+    },
+    {
+      id: 'shape-2',
+      name: '开孔球体 B',
+      type: 'sphere',
+      posX: 8,
+      posY: 4,
+      posZ: 0,
+      scaleX: 10,
+      scaleY: 10,
+      scaleZ: 10,
+      color: PRESET_COLORS[1],
+      visible: true,
+      uploadedGeo: null,
+      uploadedFileName: ''
+    }
+  ]);
 
-  const [activeEditing, setActiveEditing] = useState<'A' | 'B'>('B');
+  const [selectedShapeId, setSelectedShapeId] = useState<string>('shape-2');
+  const [baseShapeId, setBaseShapeId] = useState<string>('shape-1');
+  const [toolShapeIds, setToolShapeIds] = useState<Record<string, boolean>>({ 'shape-2': true });
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [resultGeometry, setResultGeometry] = useState<THREE.BufferGeometry | null>(null);
   const [resultStats, setResultStats] = useState<{ vertices: number; triangles: number } | null>(null);
   const [opType, setOpType] = useState<'union' | 'subtract' | 'intersect' | null>(null);
   const [showWireframe, setShowWireframe] = useState(false);
+  const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
 
   // WebGL scene refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  
-  // Object meshes inside scene
-  const meshARef = useRef<THREE.Mesh | null>(null);
-  const meshBRef = useRef<THREE.Mesh | null>(null);
+  const transformControlsRef = useRef<TransformControls | null>(null);
+  const isTransformingRef = useRef<boolean>(false);
+
+  // Mesh objects inside scene mapping
+  const meshesMapRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const boxHelpersMapRef = useRef<Map<string, THREE.BoxHelper>>(new Map());
   const resultMeshRef = useRef<THREE.Mesh | null>(null);
 
+  // Sync ref to prevent state-closure stale bugs
+  const shapesRef = useRef<ShapeConfig[]>(shapes);
+  useEffect(() => {
+    shapesRef.current = shapes;
+  }, [shapes]);
+
   // Handle STL uploading
-  const handleStlUpload = (event: React.ChangeEvent<HTMLInputElement>, target: 'A' | 'B') => {
+  const handleStlUpload = (event: React.ChangeEvent<HTMLInputElement>, id: string) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -60,12 +114,16 @@ export const CsgWorkbench: React.FC = () => {
         geometry.computeVertexNormals();
         geometry.center();
 
-        const setter = target === 'A' ? setShapeA : setShapeB;
-        setter(prev => ({
-          ...prev,
-          type: 'upload',
-          uploadedGeo: geometry,
-          uploadedFileName: file.name
+        setShapes(prev => prev.map(s => {
+          if (s.id === id) {
+            return {
+              ...s,
+              type: 'upload',
+              uploadedGeo: geometry,
+              uploadedFileName: file.name
+            };
+          }
+          return s;
         }));
       } catch {
         alert('解析 STL 文件失败，请确保格式正确！');
@@ -74,8 +132,58 @@ export const CsgWorkbench: React.FC = () => {
     reader.readAsArrayBuffer(file);
   };
 
+  // Add new shape to hierarchy
+  const addShape = (type: 'cube' | 'sphere' | 'cylinder' | 'cone') => {
+    const newId = `shape-${Date.now()}`;
+    const color = PRESET_COLORS[shapes.length % PRESET_COLORS.length];
+    const newShape: ShapeConfig = {
+      id: newId,
+      name: `新增实体 ${shapes.length + 1}`,
+      type,
+      posX: 5,
+      posY: 5,
+      posZ: 0,
+      scaleX: 10,
+      scaleY: 10,
+      scaleZ: 10,
+      color,
+      visible: true,
+      uploadedGeo: null,
+      uploadedFileName: ''
+    };
+
+    setShapes(prev => [...prev, newShape]);
+    setSelectedShapeId(newId);
+  };
+
+  const deleteShape = (id: string) => {
+    if (shapes.length <= 1) {
+      alert('场景中必须保留至少一个实体！');
+      return;
+    }
+    setShapes(prev => prev.filter(s => s.id !== id));
+    if (selectedShapeId === id) {
+      const remaining = shapes.filter(s => s.id !== id);
+      setSelectedShapeId(remaining[0]?.id || '');
+    }
+  };
+
+  const toggleVisibility = (id: string) => {
+    setShapes(prev => prev.map(s => {
+      if (s.id === id) return { ...s, visible: !s.visible };
+      return s;
+    }));
+  };
+
+  const renameShape = (id: string, name: string) => {
+    setShapes(prev => prev.map(s => {
+      if (s.id === id) return { ...s, name };
+      return s;
+    }));
+  };
+
   // Build local geometry based on type and scale
-  const buildGeometry = (config: ShapeConfig): THREE.BufferGeometry => {
+  const buildGeometry = useCallback((config: ShapeConfig): THREE.BufferGeometry => {
     if (config.type === 'upload' && config.uploadedGeo) {
       const geo = config.uploadedGeo.clone();
       geo.scale(config.scaleX / 10, config.scaleY / 10, config.scaleZ / 10);
@@ -102,46 +210,68 @@ export const CsgWorkbench: React.FC = () => {
     base.scale(config.scaleX, config.scaleY, config.scaleZ);
     base.computeVertexNormals();
     return base;
-  };
+  }, []);
 
-  // Execute local CSG operations
+  // Execute advanced multiple Boolean CSG calculations
   const executeCsg = (type: 'union' | 'subtract' | 'intersect') => {
     setIsProcessing(true);
     setOpType(type);
 
     setTimeout(() => {
       try {
-        const geoA = buildGeometry(shapeA);
-        const geoB = buildGeometry(shapeB);
-
-        // Apply translation offset to geometries before CSG calculation
-        geoA.translate(shapeA.posX, shapeA.posY, shapeA.posZ);
-        geoB.translate(shapeB.posX, shapeB.posY, shapeB.posZ);
-
-        let resultGeo: THREE.BufferGeometry;
-        if (type === 'union') {
-          resultGeo = CSGExporter.union(geoA, geoB);
-        } else if (type === 'subtract') {
-          resultGeo = CSGExporter.subtract(geoA, geoB);
-        } else {
-          resultGeo = CSGExporter.intersect(geoA, geoB);
+        const baseShape = shapes.find(s => s.id === baseShapeId);
+        if (!baseShape || !baseShape.visible) {
+          alert('请确保已选定并显示基准实体！');
+          setIsProcessing(false);
+          setOpType(null);
+          return;
         }
 
-        // Dispose previous geometries to prevent memory leaks
-        geoA.dispose();
-        geoB.dispose();
+        const activeTools = shapes.filter(s => s.id !== baseShapeId && toolShapeIds[s.id] && s.visible);
+        if (activeTools.length === 0) {
+          alert('请在场景树勾选至少一个工具实体作为布尔计算输入！');
+          setIsProcessing(false);
+          setOpType(null);
+          return;
+        }
 
-        const positionAttr = resultGeo.getAttribute('position');
+        // 1. Prepare Base Geometry
+        const baseGeo = buildGeometry(baseShape);
+        baseGeo.translate(baseShape.posX, baseShape.posY, baseShape.posZ);
+
+        // 2. Perform sequential CSG boolean chain
+        let finalGeo = baseGeo;
+
+        for (const tool of activeTools) {
+          const toolGeo = buildGeometry(tool);
+          toolGeo.translate(tool.posX, tool.posY, tool.posZ);
+
+          let tempGeo: THREE.BufferGeometry;
+          if (type === 'union') {
+            tempGeo = CSGExporter.union(finalGeo, toolGeo);
+          } else if (type === 'subtract') {
+            tempGeo = CSGExporter.subtract(finalGeo, toolGeo);
+          } else {
+            tempGeo = CSGExporter.intersect(finalGeo, toolGeo);
+          }
+
+          // Free intermediate memory
+          if (finalGeo !== baseGeo) finalGeo.dispose();
+          toolGeo.dispose();
+          finalGeo = tempGeo;
+        }
+
+        const positionAttr = finalGeo.getAttribute('position');
         const vCount = positionAttr ? positionAttr.count : 0;
 
-        setResultGeometry(resultGeo);
+        setResultGeometry(finalGeo);
         setResultStats({
           vertices: vCount,
           triangles: Math.floor(vCount / 3)
         });
       } catch (err) {
         console.error(err);
-        alert('布尔运算计算失败，模型网格结构可能存在重叠或不闭合！');
+        alert('空间布尔运算失败，部分模型的网格不闭合或面重合！');
         setOpType(null);
       } finally {
         setIsProcessing(false);
@@ -159,12 +289,115 @@ export const CsgWorkbench: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `csg_result_${opType}.stl`;
+    link.download = `csg_tree_result_${opType}.stl`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  // Mount/Unmount 3D Renderer
+  // Handle parameters updates cleanly
+  const handleParamChange = useCallback(<K extends keyof ShapeConfig>(id: string, key: K, val: ShapeConfig[K]) => {
+    setShapes(prev => prev.map(s => {
+      if (s.id === id) {
+        return { ...s, [key]: val };
+      }
+      return s;
+    }));
+  }, []);
+
+  // Bounding box quick alignment solver (align B relative to A)
+  const alignShape = (type: 'centerX' | 'centerY' | 'centerZ' | 'centerAll' | 'top' | 'bottom' | 'right' | 'left' | 'front' | 'back') => {
+    const baseShape = shapes.find(s => s.id === baseShapeId);
+    const targetShape = shapes.find(s => s.id === selectedShapeId);
+
+    if (!baseShape || !targetShape || baseShape.id === targetShape.id) {
+      alert('请选择一个非基准的工具实体进行对齐！');
+      return;
+    }
+
+    const geoA = buildGeometry(baseShape);
+    const geoB = buildGeometry(targetShape);
+
+    geoA.computeBoundingBox();
+    geoB.computeBoundingBox();
+
+    const boxA = geoA.boundingBox!;
+    const boxB = geoB.boundingBox!;
+
+    // World centers of A
+    const cAx = baseShape.posX + (boxA.min.x + boxA.max.x) / 2;
+    const cAy = baseShape.posY + (boxA.min.y + boxA.max.y) / 2;
+    const cAz = baseShape.posZ + (boxA.min.z + boxA.max.z) / 2;
+
+    // Local center offsets of B
+    const hcBx = (boxB.min.x + boxB.max.x) / 2;
+    const hcBy = (boxB.min.y + boxB.max.y) / 2;
+    const hcBz = (boxB.min.z + boxB.max.z) / 2;
+
+    let newX = targetShape.posX;
+    let newY = targetShape.posY;
+    let newZ = targetShape.posZ;
+
+    switch (type) {
+      case 'centerX':
+        newX = cAx - hcBx;
+        break;
+      case 'centerY':
+        newY = cAy - hcBy;
+        break;
+      case 'centerZ':
+        newZ = cAz - hcBz;
+        break;
+      case 'centerAll':
+        newX = cAx - hcBx;
+        newY = cAy - hcBy;
+        newZ = cAz - hcBz;
+        break;
+      case 'top':
+        newY = baseShape.posY + boxA.max.y - boxB.min.y;
+        break;
+      case 'bottom':
+        newY = baseShape.posY + boxA.min.y - boxB.max.y;
+        break;
+      case 'right':
+        newX = baseShape.posX + boxA.max.x - boxB.min.x;
+        break;
+      case 'left':
+        newX = baseShape.posX + boxA.min.x - boxB.max.x;
+        break;
+      case 'front':
+        newZ = baseShape.posZ + boxA.max.z - boxB.min.z;
+        break;
+      case 'back':
+        newZ = baseShape.posZ + boxA.min.z - boxB.max.z;
+        break;
+    }
+
+    geoA.dispose();
+    geoB.dispose();
+
+    setShapes(prev => prev.map(s => {
+      if (s.id === targetShape.id) {
+        return {
+          ...s,
+          posX: Number(newX.toFixed(2)),
+          posY: Number(newY.toFixed(2)),
+          posZ: Number(newZ.toFixed(2))
+        };
+      }
+      return s;
+    }));
+  };
+
+  const handleReset = () => {
+    if (resultGeometry) {
+      resultGeometry.dispose();
+      setResultGeometry(null);
+    }
+    setResultStats(null);
+    setOpType(null);
+  };
+
+  // Mount/Unmount WebGL Context & Gizmo Controls
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -195,14 +428,53 @@ export const CsgWorkbench: React.FC = () => {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2; // Don't go below floor
+    controls.maxPolarAngle = Math.PI / 2;
     controlsRef.current = controls;
 
-    // Ambient light
+    // Transform controls (3D Gizmo)
+    const tControls = new TransformControls(camera, renderer.domElement);
+    scene.add(tControls);
+    transformControlsRef.current = tControls;
+
+    // Block OrbitControls when dragging gizmo
+    tControls.addEventListener('dragging-changed', (event) => {
+      controls.enabled = !event.value;
+      isTransformingRef.current = event.value;
+      
+      // Update values to React state upon finishing drag
+      if (!event.value && tControls.object) {
+        const obj = tControls.object;
+        const targetId = obj.name; // We mapped mesh.name = config.id
+        
+        setShapes(prev => prev.map(s => {
+          if (s.id === targetId) {
+            return {
+              ...s,
+              posX: Number(obj.position.x.toFixed(2)),
+              posY: Number(obj.position.y.toFixed(2)),
+              posZ: Number(obj.position.z.toFixed(2))
+            };
+          }
+          return s;
+        }));
+      }
+    });
+
+    // Real-time synchronization while dragging
+    tControls.addEventListener('change', () => {
+      if (tControls.object && isTransformingRef.current) {
+        const obj = tControls.object;
+        const targetId = obj.name;
+        // Keep BoxHelper synchronized during translate dragging
+        const helper = boxHelpersMapRef.current.get(targetId);
+        if (helper) helper.update();
+      }
+    });
+
+    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
 
-    // Directional light
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(30, 50, 40);
     dirLight.castShadow = true;
@@ -212,7 +484,7 @@ export const CsgWorkbench: React.FC = () => {
     dirLight2.position.set(-30, -30, -20);
     scene.add(dirLight2);
 
-    // Grid Floor
+    // Floor
     const gridHelper = new THREE.GridHelper(80, 80, 0xcbd5e1, 0xf1f5f9);
     gridHelper.position.y = -10;
     scene.add(gridHelper);
@@ -226,7 +498,7 @@ export const CsgWorkbench: React.FC = () => {
     };
     window.addEventListener('resize', handleResize);
 
-    // Animation Loop
+    // Render loop
     let animId: number;
     const animate = () => {
       animId = requestAnimationFrame(animate);
@@ -241,7 +513,7 @@ export const CsgWorkbench: React.FC = () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       
-      // Clean WebGL resources
+      tControls.dispose();
       if (rendererRef.current) {
         rendererRef.current.forceContextLoss();
         rendererRef.current.dispose();
@@ -252,30 +524,43 @@ export const CsgWorkbench: React.FC = () => {
     };
   }, []);
 
-  // Update Meshes in Realtime based on options
+  // Update gizmo mode in transform controls
+  useEffect(() => {
+    if (transformControlsRef.current) {
+      transformControlsRef.current.setMode(gizmoMode);
+    }
+  }, [gizmoMode]);
+
+  // Synchronize 3D meshes in Scene
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene) return;
 
-    // 1. Remove previous meshes
-    if (meshARef.current) {
-      scene.remove(meshARef.current);
-      meshARef.current.geometry.dispose();
-      meshARef.current = null;
-    }
-    if (meshBRef.current) {
-      scene.remove(meshBRef.current);
-      meshBRef.current.geometry.dispose();
-      meshBRef.current = null;
-    }
+    // 1. Remove obsolete meshes and helpers
+    meshesMapRef.current.forEach((mesh, id) => {
+      if (!shapes.some(s => s.id === id) || resultGeometry) {
+        scene.remove(mesh);
+        mesh.geometry.dispose();
+        meshesMapRef.current.delete(id);
+
+        const helper = boxHelpersMapRef.current.get(id);
+        if (helper) {
+          scene.remove(helper);
+          boxHelpersMapRef.current.delete(id);
+        }
+      }
+    });
+
     if (resultMeshRef.current) {
       scene.remove(resultMeshRef.current);
       resultMeshRef.current.geometry.dispose();
       resultMeshRef.current = null;
     }
 
-    // 2. If result geometry is active, render only result mesh
+    // 2. Render Result Mesh if computing was executed
     if (resultGeometry) {
+      if (transformControlsRef.current) transformControlsRef.current.detach();
+      
       const mat = new THREE.MeshStandardMaterial({
         color: 0xcbd5e1,
         roughness: 0.15,
@@ -291,145 +576,137 @@ export const CsgWorkbench: React.FC = () => {
       return;
     }
 
-    // 3. Otherwise, render Shape A and Shape B with selection halos
-    const geoA = buildGeometry(shapeA);
-    const matA = new THREE.MeshStandardMaterial({
-      color: 0x3b82f6,
-      opacity: activeEditing === 'A' ? 0.8 : 0.4,
-      transparent: true,
-      roughness: 0.4,
-      metalness: 0.2,
-      wireframe: showWireframe,
-      side: THREE.DoubleSide
+    // 3. Render list hierarchy meshes
+    shapes.forEach(shape => {
+      let mesh = meshesMapRef.current.get(shape.id);
+      
+      if (!shape.visible) {
+        if (mesh) {
+          scene.remove(mesh);
+          meshesMapRef.current.delete(shape.id);
+          const helper = boxHelpersMapRef.current.get(shape.id);
+          if (helper) {
+            scene.remove(helper);
+            boxHelpersMapRef.current.delete(shape.id);
+          }
+        }
+        return;
+      }
+
+      // Rebuild or update mesh
+      if (mesh) {
+        // Simple parameter updates
+        mesh.position.set(shape.posX, shape.posY, shape.posZ);
+        
+        // Rebuild geometry to support live scale slider modifications
+        mesh.geometry.dispose();
+        mesh.geometry = buildGeometry(shape);
+        
+        // Highlight selected mesh with standard color opacity
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.color.set(shape.color);
+        mat.opacity = shape.id === selectedShapeId ? 0.85 : 0.45;
+        mat.wireframe = showWireframe;
+
+        // Bounding Box outline highlight
+        let helper = boxHelpersMapRef.current.get(shape.id);
+        if (shape.id === selectedShapeId) {
+          if (!helper) {
+            helper = new THREE.BoxHelper(mesh, new THREE.Color(0x3b82f6));
+            scene.add(helper);
+            boxHelpersMapRef.current.set(shape.id, helper);
+          } else {
+            helper.update();
+          }
+        } else if (helper) {
+          scene.remove(helper);
+          boxHelpersMapRef.current.delete(shape.id);
+        }
+      } else {
+        const geo = buildGeometry(shape);
+        const mat = new THREE.MeshStandardMaterial({
+          color: shape.color,
+          opacity: shape.id === selectedShapeId ? 0.85 : 0.45,
+          transparent: true,
+          roughness: 0.4,
+          metalness: 0.2,
+          wireframe: showWireframe,
+          side: THREE.DoubleSide
+        });
+        mesh = new THREE.Mesh(geo, mat);
+        mesh.name = shape.id;
+        mesh.position.set(shape.posX, shape.posY, shape.posZ);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        meshesMapRef.current.set(shape.id, mesh);
+
+        // Selected highlights
+        if (shape.id === selectedShapeId) {
+          const helper = new THREE.BoxHelper(mesh, new THREE.Color(0x3b82f6));
+          scene.add(helper);
+          boxHelpersMapRef.current.set(shape.id, helper);
+        }
+      }
     });
-    const meshA = new THREE.Mesh(geoA, matA);
-    meshA.position.set(shapeA.posX, shapeA.posY, shapeA.posZ);
-    meshA.castShadow = true;
-    meshA.receiveShadow = true;
-    scene.add(meshA);
-    meshARef.current = meshA;
 
-    const geoB = buildGeometry(shapeB);
-    const matB = new THREE.MeshStandardMaterial({
-      color: 0xf59e0b,
-      opacity: activeEditing === 'B' ? 0.8 : 0.4,
-      transparent: true,
-      roughness: 0.4,
-      metalness: 0.2,
-      wireframe: showWireframe,
-      side: THREE.DoubleSide
-    });
-    const meshB = new THREE.Mesh(geoB, matB);
-    meshB.position.set(shapeB.posX, shapeB.posY, shapeB.posZ);
-    meshB.castShadow = true;
-    meshB.receiveShadow = true;
-    scene.add(meshB);
-    meshBRef.current = meshB;
-
-  }, [shapeA, shapeB, resultGeometry, activeEditing, showWireframe]);
-
-  const activeShape = activeEditing === 'A' ? shapeA : shapeB;
-  const setActiveShape = activeEditing === 'A' ? setShapeA : setShapeB;
-
-  const handleParamChange = <K extends keyof ShapeConfig>(key: K, val: ShapeConfig[K]) => {
-    setActiveShape(prev => ({
-      ...prev,
-      [key]: val
-    }));
-  };
-
-  const alignShape = (type: 'centerX' | 'centerY' | 'centerZ' | 'centerAll' | 'top' | 'bottom' | 'right' | 'left' | 'front' | 'back') => {
-    const geoA = buildGeometry(shapeA);
-    const geoB = buildGeometry(shapeB);
-
-    geoA.computeBoundingBox();
-    geoB.computeBoundingBox();
-
-    const boxA = geoA.boundingBox!;
-    const boxB = geoB.boundingBox!;
-
-    // World centers of A
-    const cAx = shapeA.posX + (boxA.min.x + boxA.max.x) / 2;
-    const cAy = shapeA.posY + (boxA.min.y + boxA.max.y) / 2;
-    const cAz = shapeA.posZ + (boxA.min.z + boxA.max.z) / 2;
-
-    // Local center offsets of B
-    const hcBx = (boxB.min.x + boxB.max.x) / 2;
-    const hcBy = (boxB.min.y + boxB.max.y) / 2;
-    const hcBz = (boxB.min.z + boxB.max.z) / 2;
-
-    let newX = shapeB.posX;
-    let newY = shapeB.posY;
-    let newZ = shapeB.posZ;
-
-    switch (type) {
-      case 'centerX':
-        newX = cAx - hcBx;
-        break;
-      case 'centerY':
-        newY = cAy - hcBy;
-        break;
-      case 'centerZ':
-        newZ = cAz - hcBz;
-        break;
-      case 'centerAll':
-        newX = cAx - hcBx;
-        newY = cAy - hcBy;
-        newZ = cAz - hcBz;
-        break;
-      case 'top':
-        newY = shapeA.posY + boxA.max.y - boxB.min.y;
-        break;
-      case 'bottom':
-        newY = shapeA.posY + boxA.min.y - boxB.max.y;
-        break;
-      case 'right':
-        newX = shapeA.posX + boxA.max.x - boxB.min.x;
-        break;
-      case 'left':
-        newX = shapeA.posX + boxA.min.x - boxB.max.x;
-        break;
-      case 'front':
-        newZ = shapeA.posZ + boxA.max.z - boxB.min.z;
-        break;
-      case 'back':
-        newZ = shapeA.posZ + boxA.min.z - boxB.max.z;
-        break;
+    // 4. Attach transform controls gizmo to selected active mesh
+    const activeMesh = meshesMapRef.current.get(selectedShapeId);
+    if (activeMesh && transformControlsRef.current) {
+      transformControlsRef.current.attach(activeMesh);
+    } else if (transformControlsRef.current) {
+      transformControlsRef.current.detach();
     }
 
-    geoA.dispose();
-    geoB.dispose();
+  }, [shapes, selectedShapeId, resultGeometry, showWireframe, buildGeometry]);
 
-    setShapeB(prev => ({
-      ...prev,
-      posX: Number(newX.toFixed(2)),
-      posY: Number(newY.toFixed(2)),
-      posZ: Number(newZ.toFixed(2))
-    }));
+  const selectedShape = shapes.find(s => s.id === selectedShapeId);
+
+  // Compute precise mm bounding dimensions
+  const getSelectedShapeDimensions = (): { x: number; y: number; z: number } | null => {
+    if (!selectedShape) return null;
+    const geo = buildGeometry(selectedShape);
+    geo.computeBoundingBox();
+    const box = geo.boundingBox!;
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    geo.dispose();
+    return {
+      x: Number(size.x.toFixed(1)),
+      y: Number(size.y.toFixed(1)),
+      z: Number(size.z.toFixed(1))
+    };
   };
 
-  const handleReset = () => {
-    if (resultGeometry) {
-      resultGeometry.dispose();
-      setResultGeometry(null);
-    }
-    setResultStats(null);
-    setOpType(null);
-  };
+  const selectedDim = getSelectedShapeDimensions();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full min-h-[500px]">
       
-      {/* 3D Canvas Viewport */}
+      {/* 3D WebGL Canvas */}
       <div className="lg:col-span-2 relative flex flex-col rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950 overflow-hidden shadow-inner">
         <div ref={containerRef} className="flex-1 w-full h-[400px] lg:h-full" />
         
-        {/* Canvas Toolbar overlay */}
+        {/* Canvas floating gizmo mode controls */}
+        {!resultGeometry && selectedShape && (
+          <div className="absolute bottom-4 left-4 flex gap-1 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-1 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
+            {(['translate', 'rotate', 'scale'] as const).map(mode => (
+              <button
+                key={mode}
+                onClick={() => setGizmoMode(mode)}
+                className={`text-[10px] font-bold px-2 py-1.5 rounded transition-all cursor-pointer capitalize ${gizmoMode === mode ? 'bg-primary-500 text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
+              >
+                {mode === 'translate' ? '移动' : mode === 'rotate' ? '旋转' : '缩放'}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="absolute top-4 left-4 flex items-center gap-2 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">材质：</span>
           <button
             onClick={() => setShowWireframe(!showWireframe)}
-            className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
+            className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors cursor-pointer ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
           >
             <Eye className="w-3.5 h-3.5" />
             <span>网格线</span>
@@ -451,309 +728,386 @@ export const CsgWorkbench: React.FC = () => {
       <div className="flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm max-h-[750px] overflow-y-auto">
         {!resultGeometry ? (
           <>
-            {/* Edit selection toggler */}
-            <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg mb-5 flex-none">
-              <button
-                onClick={() => setActiveEditing('A')}
-                className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${activeEditing === 'A' ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-900' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                编辑实体 A (蓝色)
-              </button>
-              <button
-                onClick={() => setActiveEditing('B')}
-                className={`flex-1 text-xs font-semibold py-2 rounded-md transition-all ${activeEditing === 'B' ? 'bg-white text-amber-600 shadow-sm dark:bg-slate-900' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                编辑实体 B (黄色)
-              </button>
-            </div>
-
-            {/* Shape Customizer */}
-            <div className="flex-1 space-y-5 min-h-0">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">模型基础造型</label>
-                <div className="grid grid-cols-3 gap-1">
+            {/* Multi-mesh hierarchy tree outline list */}
+            <div className="space-y-3.5 flex-none mb-5">
+              <div className="flex justify-between items-center">
+                <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-primary-600" />
+                  <span>3D 实体场景大纲树</span>
+                </h4>
+                <div className="flex gap-1">
                   {(['cube', 'sphere', 'cylinder', 'cone'] as const).map(type => (
                     <button
                       key={type}
-                      onClick={() => handleParamChange('type', type)}
-                      className={`text-xs py-1.5 font-medium border rounded transition-all capitalize ${activeShape.type === type ? 'border-primary-500 bg-primary-50/50 text-primary-600 font-semibold' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
+                      onClick={() => addShape(type)}
+                      className="p-1 rounded bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
+                      title={`添加${type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}`}
                     >
-                      {type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}
+                      <Plus className="w-3 h-3" />
                     </button>
                   ))}
                 </div>
-                
-                {/* STL Upload */}
-                <div className="mt-2.5">
-                  <label className="flex items-center justify-center gap-2 border border-dashed border-slate-300 hover:border-primary-500 rounded-lg py-2 cursor-pointer bg-slate-50 hover:bg-primary-50/20 transition-all dark:bg-slate-800/40 dark:border-slate-700">
-                    <Upload className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                      {activeShape.type === 'upload' ? `已载入: ${activeShape.uploadedFileName.slice(0, 15)}...` : '导入自定义 STL 模型'}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".stl"
-                      className="hidden"
-                      onChange={(e) => handleStlUpload(e, activeEditing)}
-                    />
-                  </label>
-                </div>
               </div>
 
-              {/* Sliders for Position */}
-              <div className="space-y-3.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase">空间坐标位移 (位置)</h4>
-                
-                {/* X */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">位置 X</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.posX}</span>
-                  </div>
-                  <input
-                    type="range" min="-30" max="30" step="0.5"
-                    value={activeShape.posX}
-                    onChange={(e) => handleParamChange('posX', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
+              {/* Hierarchy nodes tree */}
+              <div className="space-y-1.5 border border-slate-100 dark:border-slate-800/80 p-2 rounded-lg max-h-[160px] overflow-y-auto">
+                {shapes.map(s => {
+                  const isSelected = s.id === selectedShapeId;
+                  const isBase = s.id === baseShapeId;
+                  return (
+                    <div
+                      key={s.id}
+                      onClick={() => setSelectedShapeId(s.id)}
+                      className={`group flex items-center justify-between gap-2 p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isSelected ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100/50 dark:bg-primary-950/20 dark:text-primary-400 dark:ring-primary-900/50' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {/* Checkbox for tooling selecting */}
+                        <input
+                          type="checkbox"
+                          checked={isBase ? false : !!toolShapeIds[s.id]}
+                          disabled={isBase}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            setToolShapeIds(prev => ({
+                              ...prev,
+                              [s.id]: e.target.checked
+                            }));
+                          }}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer disabled:cursor-not-allowed"
+                          title={isBase ? '基准实体不可勾选' : '勾选作为布尔工具'}
+                        />
+                        <div
+                          className="w-2.5 h-2.5 rounded-full border border-white"
+                          style={{ backgroundColor: s.color }}
+                        />
+                        <input
+                          type="text"
+                          value={s.name}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => renameShape(s.id, e.target.value)}
+                          className="bg-transparent border-none outline-none font-semibold text-slate-800 dark:text-slate-200 truncate focus:bg-white dark:focus:bg-slate-900 focus:px-1 rounded w-full"
+                        />
+                      </div>
 
-                {/* Y */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">位置 Y</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.posY}</span>
-                  </div>
-                  <input
-                    type="range" min="-30" max="30" step="0.5"
-                    value={activeShape.posY}
-                    onChange={(e) => handleParamChange('posY', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
-
-                {/* Z */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">位置 Z</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.posZ}</span>
-                  </div>
-                  <input
-                    type="range" min="-30" max="30" step="0.5"
-                    value={activeShape.posZ}
-                    onChange={(e) => handleParamChange('posZ', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
-              </div>
-
-              {/* Quick Alignment Actions */}
-              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase">实体快捷对齐 (调整 B 对齐 A)</h4>
-                  <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-600 dark:bg-primary-950/40">高效对齐</span>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => alignShape('centerAll')}
-                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold"
-                    title="将实体 B 的中心完全与实体 A 的中心重合"
-                  >
-                    <span>三轴完全居中</span>
-                  </button>
-                  <button
-                    onClick={() => alignShape('centerX')}
-                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
-                  >
-                    <span>X 轴居中</span>
-                  </button>
-                  <button
-                    onClick={() => alignShape('centerY')}
-                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
-                  >
-                    <span>Y 轴居中</span>
-                  </button>
-                  <button
-                    onClick={() => alignShape('centerZ')}
-                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
-                  >
-                    <span>Z 轴居中</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-3 gap-1.5 pt-1">
-                  <button
-                    onClick={() => alignShape('top')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 叠放在 A 的正上方"
-                  >
-                    叠放上方
-                  </button>
-                  <button
-                    onClick={() => alignShape('bottom')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 贴合在 A 的正下方"
-                  >
-                    贴合下方
-                  </button>
-                  <button
-                    onClick={() => alignShape('right')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 贴合在 A 的右侧"
-                  >
-                    贴合右侧
-                  </button>
-                  <button
-                    onClick={() => alignShape('left')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 贴合在 A 的左侧"
-                  >
-                    贴合左侧
-                  </button>
-                  <button
-                    onClick={() => alignShape('front')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 贴合在 A 的前侧"
-                  >
-                    贴合前侧
-                  </button>
-                  <button
-                    onClick={() => alignShape('back')}
-                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
-                    title="将 B 贴合在 A 的后侧"
-                  >
-                    贴合后侧
-                  </button>
-                </div>
-              </div>
-
-              {/* Sliders for Scales */}
-              <div className="space-y-3.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase">网格比例缩放 (尺寸)</h4>
-                
-                {/* Scale X */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">缩放 X</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.scaleX}</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="30" step="0.5"
-                    value={activeShape.scaleX}
-                    onChange={(e) => handleParamChange('scaleX', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
-
-                {/* Scale Y */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">缩放 Y</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.scaleY}</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="30" step="0.5"
-                    value={activeShape.scaleY}
-                    onChange={(e) => handleParamChange('scaleY', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
-
-                {/* Scale Z */}
-                <div>
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="font-medium text-slate-600 dark:text-slate-400">缩放 Z</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">{activeShape.scaleZ}</span>
-                  </div>
-                  <input
-                    type="range" min="1" max="30" step="0.5"
-                    value={activeShape.scaleZ}
-                    onChange={(e) => handleParamChange('scaleZ', parseFloat(e.target.value))}
-                    className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
-                  />
-                </div>
+                      {/* Icons operations */}
+                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        {/* Base toggle */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setBaseShapeId(s.id);
+                            // Deselect from tool list
+                            setToolShapeIds(prev => ({ ...prev, [s.id]: false }));
+                          }}
+                          className={`px-1 py-0.5 rounded text-[9px] font-bold ${isBase ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800'}`}
+                          title="设为布尔基准实体"
+                        >
+                          基准
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleVisibility(s.id);
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          {s.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteShape(s.id);
+                          }}
+                          className="p-1 rounded text-slate-400 hover:text-red-600"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Boolean Actions */}
-            <div className="pt-5 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2.5">
-              <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">空间布尔实体交切运算</h4>
+            {/* Config Panel for the selected shape */}
+            {selectedShape && (
+              <div className="flex-1 space-y-4 min-h-0">
+                <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between flex-none">
+                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
+                    <Settings className="w-3.5 h-3.5 text-primary-600" />
+                    <span>属性配置 ({selectedShape.name})</span>
+                  </h4>
+                </div>
+
+                {/* Shape selection procedural */}
+                <div>
+                  <div className="grid grid-cols-4 gap-1">
+                    {(['cube', 'sphere', 'cylinder', 'cone'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => handleParamChange(selectedShape.id, 'type', type)}
+                        className={`text-[10px] py-1 font-medium border rounded transition-all capitalize ${selectedShape.type === type ? 'border-primary-500 bg-primary-50/50 text-primary-600 font-semibold' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
+                      >
+                        {type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {/* STL Custom upload */}
+                  <div className="mt-2">
+                    <label className="flex items-center justify-center gap-2 border border-dashed border-slate-300 hover:border-primary-500 rounded-lg py-1.5 cursor-pointer bg-slate-50 hover:bg-primary-50/20 transition-all dark:bg-slate-800/40 dark:border-slate-700">
+                      <Upload className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 truncate">
+                        {selectedShape.type === 'upload' ? `已载入: ${selectedShape.uploadedFileName.slice(0, 15)}...` : '导入自定义 STL 模型'}
+                      </span>
+                      <input
+                        type="file"
+                        accept=".stl"
+                        className="hidden"
+                        onChange={(e) => handleStlUpload(e, selectedShape.id)}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* Real-time Bounding Box dimensions mm measure card */}
+                {selectedDim && (
+                  <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1.5 flex-none">
+                    <h5 className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <Ruler className="w-3 h-3 text-slate-400" />
+                      <span>实体精确量测尺寸 (包围盒 mm)</span>
+                    </h5>
+                    <div className="grid grid-cols-3 gap-2 text-[11px] text-center">
+                      <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 font-semibold">长度 (X)</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.x} mm</span>
+                      </div>
+                      <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 font-semibold">宽度 (Y)</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.y} mm</span>
+                      </div>
+                      <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
+                        <span className="block text-[9px] text-slate-400 font-semibold">高度 (Z)</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.z} mm</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Position parameters */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">空间坐标位移 (位置)</h4>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">位置 X</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posX}</span>
+                    </div>
+                    <input
+                      type="range" min="-30" max="30" step="0.5"
+                      value={selectedShape.posX}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'posX', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">位置 Y</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posY}</span>
+                    </div>
+                    <input
+                      type="range" min="-30" max="30" step="0.5"
+                      value={selectedShape.posY}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'posY', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">位置 Z</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posZ}</span>
+                    </div>
+                    <input
+                      type="range" min="-30" max="30" step="0.5"
+                      value={selectedShape.posZ}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'posZ', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Alignment Actions */}
+                {selectedShape.id !== baseShapeId && (
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase">快速对齐 (调整至基准实体)</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => alignShape('centerAll')}
+                        className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold"
+                        title="完全居中"
+                      >
+                        完全居中对齐
+                      </button>
+                      <button
+                        onClick={() => alignShape('top')}
+                        className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200"
+                        title="叠放上方"
+                      >
+                        叠放在正上方
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <button
+                        onClick={() => alignShape('right')}
+                        className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
+                        title="右贴齐"
+                      >
+                        右侧贴合
+                      </button>
+                      <button
+                        onClick={() => alignShape('left')}
+                        className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
+                        title="左贴齐"
+                      >
+                        左侧贴合
+                      </button>
+                      <button
+                        onClick={() => alignShape('bottom')}
+                        className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
+                        title="底贴齐"
+                      >
+                        底部贴合
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Scale parameters */}
+                <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">网格比例缩放 (尺寸)</h4>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">缩放 X</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleX}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="30" step="0.5"
+                      value={selectedShape.scaleX}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'scaleX', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">缩放 Y</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleY}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="30" step="0.5"
+                      value={selectedShape.scaleY}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'scaleY', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[11px] mb-0.5">
+                      <span className="font-medium text-slate-500">缩放 Z</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleZ}</span>
+                    </div>
+                    <input
+                      type="range" min="1" max="30" step="0.5"
+                      value={selectedShape.scaleZ}
+                      onChange={(e) => handleParamChange(selectedShape.id, 'scaleZ', parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Boolean Actions panel */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2">
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                <Settings className="w-3 h-3 text-slate-400" />
+                <span>场景多物体批量布尔计算</span>
+              </h4>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => executeCsg('union')}
                   disabled={isProcessing}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-1"
+                  className="bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>合并 (Union)</span>
+                  <span>合并</span>
                 </button>
                 <button
                   onClick={() => executeCsg('subtract')}
                   disabled={isProcessing}
-                  className="bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-1"
+                  className="bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+                  title="从选定的基准实体中相减所有勾选的工具实体"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>相减 (A - B)</span>
+                  <span>相减</span>
                 </button>
                 <button
                   onClick={() => executeCsg('intersect')}
                   disabled={isProcessing}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-1"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5" />
-                  <span>相交 (A ∩ B)</span>
+                  <span>相交</span>
                 </button>
               </div>
             </div>
           </>
         ) : (
-          /* Result Export Workbench View */
-          <div className="flex flex-col h-full justify-between">
+          /* Result Export View */
+          <div className="flex flex-col h-full justify-between gap-6">
             <div className="space-y-5">
               <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50 p-4 rounded-xl">
                 <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                  布尔运算执行成功！
+                  批量布尔运算成功！
                 </h4>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-                  网格实体已在本地合成，生成的实体可直接用于 3D 打印！
+                  网格实体已在本地融合成型，生成的实体可完美直接用于 3D 打印！
                 </p>
               </div>
 
-              {/* Mesh Stats */}
+              {/* Bounding Box Stats */}
               <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2.5">
-                <h5 className="text-xs font-bold text-slate-500 uppercase">网格拓扑统计</h5>
+                <h5 className="text-xs font-bold text-slate-500 uppercase">新合成网格拓扑</h5>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">顶点数量</span>
+                  <span className="text-slate-500">总顶点数 (Vertices)</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.vertices}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">三角面数</span>
+                  <span className="text-slate-500">三角面数 (Triangles)</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.triangles}</span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-500">密闭度 (Watetight)</span>
-                  <span className="font-semibold text-emerald-600">100% 密闭</span>
+                  <span className="font-semibold text-emerald-600">100% 水密模型</span>
                 </div>
               </div>
             </div>
 
-            {/* Actions for result */}
+            {/* Actions */}
             <div className="space-y-2 pt-6">
               <button
                 onClick={downloadStl}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>导出 3D STL 文件 (二进制)</span>
               </button>
               <button
                 onClick={handleReset}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>返回修改参数</span>
+                <span>返回场景树大纲继续设计</span>
               </button>
             </div>
           </div>
