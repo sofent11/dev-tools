@@ -38,39 +38,228 @@ export const BasicAuthTool: React.FC = () => {
   );
 };
 
+interface PemParseResult {
+  type: string;
+  algorithm: string;
+  keySize: number;
+  strength: 'strong' | 'medium' | 'weak' | 'n_a';
+  strengthText: string;
+  blocksCount: number;
+  estimatedBytes: number;
+  extraInfo: Record<string, string>;
+}
+
+const parseRsaKeySizeFromDer = (der: Uint8Array): number => {
+  try {
+    let pos = 0;
+    if (der[pos++] !== 0x30) return 0; // Sequence
+    // Skip length
+    const len = der[pos++];
+    if (len & 0x80) {
+      pos += len & 0x7f;
+    }
+    if (der[pos++] !== 0x02) return 0; // Version
+    const verLen = der[pos++];
+    pos += verLen; // Skip version
+    if (der[pos++] !== 0x02) return 0; // Modulus tag
+    let modLen = der[pos++];
+    if (modLen & 0x80) {
+      const bytes = modLen & 0x7f;
+      modLen = 0;
+      for (let i = 0; i < bytes; i++) {
+        modLen = (modLen << 8) | der[pos++];
+      }
+    }
+    let actualBytes = modLen;
+    if (der[pos] === 0x00) {
+      actualBytes--;
+    }
+    return actualBytes * 8;
+  } catch {
+    return 0;
+  }
+};
+
+const parsePem = (pem: string): PemParseResult => {
+  const normalized = pem.trim();
+  const certMatches = normalized.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) || [];
+  const rsaMatches = normalized.match(/-----BEGIN RSA PRIVATE KEY-----[\s\S]+?-----END RSA PRIVATE KEY-----/g) || [];
+  const p8Matches = normalized.match(/-----BEGIN PRIVATE KEY-----[\s\S]+?-----END PRIVATE KEY-----/g) || [];
+  const ecMatches = normalized.match(/-----BEGIN EC PRIVATE KEY-----[\s\S]+?-----END EC PRIVATE KEY-----/g) || [];
+  const csrMatches = normalized.match(/-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----[\s\S]+?-----END (?:NEW )?CERTIFICATE REQUEST-----/g) || [];
+
+  let type = '未识别或无效 PEM 结构';
+  let algorithm = 'N/A';
+  let keySize = 0;
+  let strength: 'strong' | 'medium' | 'weak' | 'n_a' = 'n_a';
+  let strengthText = '无法评估';
+  let blocksCount = 0;
+  let body = '';
+  const extraInfo: Record<string, string> = {};
+
+  if (certMatches.length > 0) {
+    type = certMatches.length > 1 ? 'X.509 证书链 (PEM Chain)' : 'X.509 数字证书';
+    algorithm = 'RSA / ECC 公钥证书';
+    blocksCount = certMatches.length;
+    body = certMatches[0].replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, '');
+    extraInfo['主要用途'] = 'TLS 服务端/客户端身份验证、签名校验';
+  } else if (rsaMatches.length > 0) {
+    type = 'PKCS#1 RSA 私钥';
+    algorithm = 'RSA';
+    blocksCount = rsaMatches.length;
+    body = rsaMatches[0].replace(/-----BEGIN RSA PRIVATE KEY-----|-----END RSA PRIVATE KEY-----|\s/g, '');
+    
+    try {
+      const binary = atob(body);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      keySize = parseRsaKeySizeFromDer(bytes);
+    } catch {
+      keySize = 0;
+    }
+
+    if (keySize === 0) {
+      if (body.length < 500) keySize = 512;
+      else if (body.length < 1000) keySize = 1024;
+      else if (body.length < 2000) keySize = 2048;
+      else keySize = 4096;
+    }
+
+    extraInfo['私钥格式'] = 'PKCS#1 (BEGIN RSA PRIVATE KEY)';
+  } else if (p8Matches.length > 0) {
+    type = 'PKCS#8 未加密私钥';
+    algorithm = 'RSA / EC';
+    blocksCount = p8Matches.length;
+    body = p8Matches[0].replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g, '');
+
+    if (body.length < 400) {
+      algorithm = 'EC (椭圆曲线)';
+      keySize = 256;
+    } else {
+      algorithm = 'RSA';
+      if (body.length < 1100) keySize = 1024;
+      else if (body.length < 2100) keySize = 2048;
+      else keySize = 4096;
+    }
+
+    extraInfo['私钥格式'] = 'PKCS#8 (BEGIN PRIVATE KEY)';
+    extraInfo['推荐用途'] = '现代主流语言加密框架（Java, Go, Node）直接载入入口';
+  } else if (ecMatches.length > 0) {
+    type = 'EC 椭圆曲线私钥';
+    algorithm = 'ECDSA / EC';
+    blocksCount = ecMatches.length;
+    body = ecMatches[0].replace(/-----BEGIN EC PRIVATE KEY-----|-----END EC PRIVATE KEY-----|\s/g, '');
+    
+    keySize = 256;
+    if (body.length > 500) keySize = 384;
+    if (body.length > 800) keySize = 521;
+
+    extraInfo['私钥格式'] = 'SEC1 (BEGIN EC PRIVATE KEY)';
+    extraInfo['曲线特征'] = keySize === 256 ? 'NIST P-256 / secp256r1' : keySize === 384 ? 'NIST P-384' : 'NIST P-521';
+  } else if (csrMatches.length > 0) {
+    type = 'CSR (证书签名请求)';
+    algorithm = 'RSA / EC';
+    blocksCount = csrMatches.length;
+    body = csrMatches[0].replace(/-----BEGIN (?:NEW )?CERTIFICATE REQUEST-----|-----END (?:NEW )?CERTIFICATE REQUEST-----|\s/g, '');
+    extraInfo['请求格式'] = 'PKCS#10 PEM';
+    extraInfo['推荐用途'] = '提交给 CA 证书颁发机构以申请 SSL 证书';
+  } else {
+    if (/^[A-Za-z0-9+/=\s]+$/.test(normalized) && normalized.length > 64) {
+      type = '纯 Base64 编码数据';
+      body = normalized.replace(/\s/g, '');
+    }
+  }
+
+  if (algorithm.includes('RSA')) {
+    if (keySize >= 2048) {
+      strength = 'strong';
+      strengthText = `高安全性 (RSA-${keySize}b) - 符合现代商业标准`;
+    } else if (keySize >= 1024) {
+      strength = 'medium';
+      strengthText = `中等安全 (RSA-${keySize}b) - 容易受到量子计算或超算潜在威胁，不推荐用于新服务`;
+    } else if (keySize > 0) {
+      strength = 'weak';
+      strengthText = `极度危险 (RSA-${keySize}b) - 密钥长度过短，极易在数小时内被暴力破译！`;
+    }
+  } else if (algorithm.includes('EC')) {
+    strength = 'strong';
+    strengthText = `高安全性 (EC-${keySize}b) - 高性能高强度，完美适配现代 TLS 1.3 通信`;
+  }
+
+  const estimatedBytes = body ? Math.floor((body.length * 3) / 4) : 0;
+
+  return {
+    type,
+    algorithm,
+    keySize,
+    strength,
+    strengthText,
+    blocksCount,
+    estimatedBytes,
+    extraInfo,
+  };
+};
+
 export const CertificateParserTool: React.FC = () => {
   const [pem, setPem] = useState('-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----');
-
-  const info = useMemo(() => {
-    const normalized = pem.trim();
-    const blocks = normalized.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) || [];
-    const body = blocks[0]?.replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, '') || '';
-    const bytes = body ? Math.floor((body.length * 3) / 4) : 0;
-    return {
-      blocks: blocks.length,
-      base64Length: body.length,
-      estimatedBytes: bytes,
-      format: blocks.length ? 'PEM certificate chain' : '未识别到 PEM 证书块',
-    };
-  }, [pem]);
+  const result = useMemo(() => parsePem(pem), [pem]);
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="证书文本解析器" description="受限版 SSL 工具：只解析粘贴的 PEM 文本，不做远程证书探测。" />
-      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_22rem]">
+      <CardHeader title="证书/密钥文本解析器" description="解析 PEM 格式证书、RSA/EC 私钥及 CSR 请求包结构，100% 浏览器本地化处理。" />
+      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_24rem]">
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>PEM 证书</FieldLabel>
-          <Textarea className="min-h-0 flex-1 resize-none font-mono text-xs" value={pem} onChange={event => setPem(event.target.value)} />
+          <FieldLabel hint="支持 CERTIFICATE, PRIVATE KEY, RSA/EC KEY, CERTIFICATE REQUEST 等 PEM 文本">PEM 证书或密钥块</FieldLabel>
+          <Textarea className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" value={pem} onChange={event => setPem(event.target.value)} />
         </div>
-        <div className="space-y-3">
-          {Object.entries(info).map(([key, value]) => (
+        <div className="app-scrollbar overflow-auto space-y-3 pr-1">
+          <div className="tool-panel p-4">
+            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">检测类型</div>
+            <div className="break-all font-mono text-base font-bold text-slate-900">{result.type}</div>
+          </div>
+
+          <div className="tool-panel p-4">
+            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">加密算法</div>
+            <div className="break-all font-mono text-sm font-semibold text-slate-900">{result.algorithm}</div>
+          </div>
+
+          {result.keySize > 0 && (
+            <div className="tool-panel p-4">
+              <div className="mb-1 text-xs font-semibold uppercase text-slate-500">密钥长度</div>
+              <div className="break-all font-mono text-sm font-semibold text-slate-900">{result.keySize} bits</div>
+            </div>
+          )}
+
+          {result.strength !== 'n_a' && (
+            <div className={`p-3 text-sm rounded-lg border ${
+              result.strength === 'strong' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' :
+              result.strength === 'medium' ? 'border-amber-200 bg-amber-50 text-amber-800' :
+              'border-rose-200 bg-rose-50 text-rose-800'
+            }`}>
+              <div className="font-semibold uppercase text-xs mb-1">安全评估</div>
+              <div className="font-mono text-xs leading-5">{result.strengthText}</div>
+            </div>
+          )}
+
+          <div className="tool-panel p-4">
+            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">包含块数量</div>
+            <div className="break-all font-mono text-sm text-slate-800">{result.blocksCount} 个 PEM 块</div>
+          </div>
+
+          <div className="tool-panel p-4">
+            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">估计原始大小</div>
+            <div className="break-all font-mono text-sm text-slate-800">{result.estimatedBytes} 字节</div>
+          </div>
+
+          {Object.entries(result.extraInfo).map(([key, value]) => (
             <div key={key} className="tool-panel p-4">
               <div className="mb-1 text-xs font-semibold uppercase text-slate-500">{key}</div>
-              <div className="break-all font-mono text-sm text-slate-900">{value}</div>
+              <div className="break-all font-mono text-xs leading-5 text-slate-800">{value}</div>
             </div>
           ))}
-          <div className="status-warning p-3 text-sm">
-            浏览器无法直接连接任意域名读取 TLS 证书链，因此这里不实现远程 SSL 管理。
+
+          <div className="status-warning p-3 text-xs leading-5">
+            提示：本工具仅解析 PEM 的包体和基本 ASN.1 拓扑，由于浏览器安全性限制，不执行任何远程的域名证书嗅探或连接测试。
           </div>
         </div>
       </CardContent>

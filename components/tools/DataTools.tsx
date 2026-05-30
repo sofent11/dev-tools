@@ -102,29 +102,57 @@ const countDiffs = (node: DiffNode): Record<DiffKind, number> => {
 };
 
 const DiffTree: React.FC<{ node: DiffNode; depth?: number }> = ({ node, depth = 0 }) => {
+  const [isOpen, setIsOpen] = useState(() => node.kind !== 'same');
+
   const color = {
-    same: 'border-slate-200 bg-white text-slate-700',
+    same: 'border-slate-200 bg-white text-slate-600',
     added: 'border-emerald-200 bg-emerald-50 text-emerald-800',
     removed: 'border-red-200 bg-red-50 text-red-800',
     changed: 'border-amber-200 bg-amber-50 text-amber-900',
   }[node.kind];
 
+  const hasChildren = node.children && node.children.length > 0;
+
   return (
     <div className="space-y-1">
-      <div className={`rounded-lg border px-3 py-2 text-sm ${color}`} style={{ marginLeft: depth ? Math.min(depth * 16, 96) : 0 }}>
-        <div className="flex flex-wrap items-center gap-2">
-          <code className="font-semibold">{node.key}</code>
-          <span className="rounded border border-current/20 px-1.5 py-0.5 text-[11px] uppercase">{node.kind}</span>
-          <span className="text-xs opacity-70">{node.path}</span>
+      <div
+        className={`rounded-lg border px-3 py-2 text-sm select-none transition-colors ${color} ${
+          hasChildren ? 'cursor-pointer hover:bg-slate-50/50' : ''
+        }`}
+        style={{ marginLeft: depth ? Math.min(depth * 16, 96) : 0 }}
+        onClick={() => hasChildren && setIsOpen(!isOpen)}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {hasChildren && (
+              <span className="font-mono text-xs text-slate-400 font-bold mr-1">
+                {isOpen ? '▼' : '▶'}
+              </span>
+            )}
+            <code className="font-semibold">{node.key}</code>
+            <span className="rounded border border-current/20 px-1.5 py-0.5 text-[10px] uppercase font-bold">{node.kind}</span>
+            <span className="text-[11px] opacity-70 font-mono">{node.path}</span>
+          </div>
+          {hasChildren && !isOpen && (
+            <span className="text-xs text-slate-400 font-medium">
+              ({node.children!.length} 个属性已折叠)
+            </span>
+          )}
         </div>
         {!node.children && (
-          <div className="mt-1 grid gap-1 font-mono text-xs md:grid-cols-2">
-            <div className="break-all">L: {previewValue(node.left)}</div>
-            <div className="break-all">R: {previewValue(node.right)}</div>
+          <div className="mt-1.5 grid gap-1.5 font-mono text-xs md:grid-cols-2 border-t border-slate-100/60 pt-1.5">
+            <div className="break-all opacity-85"><span className="font-semibold text-rose-600 mr-1">左:</span> {previewValue(node.left)}</div>
+            <div className="break-all"><span className="font-semibold text-emerald-600 mr-1">右:</span> {previewValue(node.right)}</div>
           </div>
         )}
       </div>
-      {node.children?.map(child => <DiffTree key={child.path} node={child} depth={depth + 1} />)}
+      {hasChildren && isOpen && (
+        <div className="space-y-1">
+          {node.children!.map(child => (
+            <DiffTree key={child.path} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
