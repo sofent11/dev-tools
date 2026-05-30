@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Send, Globe, Monitor } from 'lucide-react';
+import { Send, Globe, Monitor, FileVideo } from 'lucide-react';
 import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
 
 const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
@@ -12,6 +12,7 @@ const UrlParser = lazyNamed(() => import('../UrlParser'), 'UrlParser');
 const UserAgentTool = lazyNamed(() => import('../NetworkTools'), 'UserAgentTool');
 const IpInfoTool = lazyNamed(() => import('../NetworkTools'), 'IpInfoTool');
 const DeviceInfoTool = lazyNamed(() => import('../WebTools'), 'DeviceInfoTool');
+const VideoDownloader = lazyNamed(() => import('../VideoDownloader'), 'VideoDownloader');
 
 const subTools: SubTool[] = [
   { id: 'http', name: 'HTTP 请求', description: '简易 HTTP Client', icon: Send, component: HttpBuilderTool },
@@ -19,13 +20,14 @@ const subTools: SubTool[] = [
   { id: 'useragent', name: 'User Agent', description: 'UA 解析', icon: Monitor, component: UserAgentTool },
   { id: 'ip', name: 'IP 信息', description: '本机 IP 查询', icon: Globe, component: IpInfoTool },
   { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, component: DeviceInfoTool },
+  { id: 'video-download', name: '视频下载解析', description: '解析视频直链 / HLS 视频流', icon: FileVideo, component: VideoDownloader },
 ];
 
 export const NetworkClientInspector: React.FC = () => {
   return (
     <TabbedToolbox
       title="网络请求与客户端探针"
-      description="包含在线 HTTP 简易客户端、URL 分解、IP 与 User-Agent 解析及当前浏览器参数测定"
+      description="包含在线 HTTP 简易客户端、URL 分解、IP 与 User-Agent 解析、当前浏览器参数测定及在线视频流嗅探提取"
       tools={subTools}
       defaultTab="http"
     />

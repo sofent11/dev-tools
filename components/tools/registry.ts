@@ -1,6 +1,6 @@
 import { lazy, type ElementType } from 'react';
 import {
-  FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary
+  FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
@@ -20,6 +20,7 @@ const CssStylingToolkit = lazyNamed(() => import('./studios/CssStylingToolkit'),
 const ImageMediaStudio = lazyNamed(() => import('./studios/ImageMediaStudio'), 'ImageMediaStudio');
 const Cad3DStudio = lazyNamed(() => import('./studios/Cad3DStudio'), 'Cad3DStudio');
 const SystemAiStudio = lazyNamed(() => import('./studios/SystemAiStudio'), 'SystemAiStudio');
+const FileDocumentStudio = lazyNamed(() => import('./studios/FileDocumentStudio'), 'FileDocumentStudio');
 
 export const TOOLS: ToolDef[] = [
   { id: 'json-studio', name: 'JSON & 数据格式化', description: 'JSON、XML、YAML、CSV、SQL 转换与对比', icon: FileJson, category: Category.DEV, component: JsonFormatStudio },
@@ -27,11 +28,12 @@ export const TOOLS: ToolDef[] = [
   { id: 'text-studio', name: '文本编辑与对比', description: '大小写转换、正则测试、差分比对、字数统计', icon: Scissors, category: Category.TEXT, component: TextDiffSuite },
   { id: 'encoding-studio', name: '编码与字符转义', description: 'Base64、文件转换、URL 编码、转义处理', icon: Binary, category: Category.TEXT, component: EncodingEscaping },
   { id: 'html-markdown-studio', name: 'HTML & Markdown 预览', description: 'MD 即时渲染、双向转换与 HTML 压缩', icon: FileText, category: Category.TEXT, component: HtmlMarkdownStudio },
-  { id: 'network-studio', name: '网络请求与探针', description: 'HTTP 客户端、URL 解析、UA、IP 与设备探针', icon: Globe, category: Category.NETWORK, component: NetworkClientInspector },
-  { id: 'css-studio', name: 'CSS 视觉与样式', description: '单位换算、调色板、CSS 渐变阴影、SVG 转 CSS', icon: Palette, category: Category.MEDIA, component: CssStylingToolkit },
-  { id: 'image-studio', name: '图形与媒体中心', description: '压缩、水印、换脸、PDF 工具、拼豆、视频流', icon: Image, category: Category.MEDIA, component: ImageMediaStudio },
+  { id: 'network-studio', name: '网络请求与探针', description: 'HTTP 客户端、URL 解析、UA、IP 与设备探针及在线视频流解析', icon: Globe, category: Category.NETWORK, component: NetworkClientInspector },
+  { id: 'css-studio', name: 'CSS & 矢量图形样式工坊', description: '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入', icon: Palette, category: Category.MEDIA, component: CssStylingToolkit },
+  { id: 'image-studio', name: '图形与图像创意工坊', description: '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取', icon: Image, category: Category.MEDIA, component: ImageMediaStudio },
+  { id: 'file-studio', name: '文件与文档处理中心', description: '本地 PDF 合并转换、文件属性哈希分析及文件名提取', icon: Files, category: Category.MEDIA, component: FileDocumentStudio },
   { id: 'cad-3d-studio', name: '3D 建模与 CAD 首饰', description: '首饰定制、STL 修复、镂空设计、小学几何', icon: Gem, category: Category.MEDIA, component: Cad3DStudio },
-  { id: 'system-ai-studio', name: '系统、时间与 AI', description: 'UUID、Mock 假数、人民币大写、Chmod/Cron、AI 编程', icon: Sparkles, category: Category.SMART_AI, component: SystemAiStudio },
+  { id: 'system-ai-studio', name: '系统、时间与智能工坊', description: 'UUID、二维码、Mock 假数、人民币大写、Chmod/Cron Linux 计算', icon: Sparkles, category: Category.SMART_AI, component: SystemAiStudio },
 ];
 
 export const TOOL_IDS = new Set(TOOLS.map(tool => tool.id));
@@ -94,15 +96,19 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'image-watermark': { studioId: 'image-studio', subToolId: 'image-watermark' },
   'perler-beads': { studioId: 'image-studio', subToolId: 'perler-beads' },
   'headshot': { studioId: 'image-studio', subToolId: 'headshot' },
-  'pdf': { studioId: 'image-studio', subToolId: 'pdf' },
   'faceswap': { studioId: 'image-studio', subToolId: 'faceswap' },
-  'file-info': { studioId: 'image-studio', subToolId: 'file-info' },
-  'filename': { studioId: 'image-studio', subToolId: 'filename' },
-  'video-download': { studioId: 'image-studio', subToolId: 'video-download' },
-  'svg-optimizer': { studioId: 'image-studio', subToolId: 'svg-optimizer' },
-  'mime': { studioId: 'image-studio', subToolId: 'mime' },
-  'qrcode': { studioId: 'image-studio', subToolId: 'qrcode' },
   'background-removal': { studioId: 'image-studio', subToolId: 'background-removal' },
+
+  // File & Document Hub
+  'pdf': { studioId: 'file-studio', subToolId: 'pdf' },
+  'file-info': { studioId: 'file-studio', subToolId: 'file-info' },
+  'filename': { studioId: 'file-studio', subToolId: 'filename' },
+  'mime': { studioId: 'file-studio', subToolId: 'mime' },
+
+  // Network & System re-mapped
+  'video-download': { studioId: 'network-studio', subToolId: 'video-download' },
+  'svg-optimizer': { studioId: 'css-studio', subToolId: 'svg-optimizer' },
+  'qrcode': { studioId: 'system-ai-studio', subToolId: 'qrcode' },
 
   // 3D & CAD Studio
   'jewelry': { studioId: 'cad-3d-studio', subToolId: 'jewelry' },
