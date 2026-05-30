@@ -3,7 +3,7 @@ import {
   LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon
 } from 'lucide-react';
 import { Category, ToolDef } from './types';
-import { TOOLS, TOOL_IDS } from './components/tools/registry';
+import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
 const TOOL_ROUTE_PREFIX = 'tools';
@@ -30,6 +30,13 @@ const getAppPathname = () => {
 const getToolIdFromLocation = () => {
   const segments = getAppPathname().split('/').filter(Boolean).map(decodeURIComponent);
   const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
+
+  if (candidate && LEGACY_TOOL_MAP[candidate]) {
+    const mapping = LEGACY_TOOL_MAP[candidate];
+    const targetPath = `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${mapping.studioId}`;
+    window.history.replaceState(null, '', `${targetPath}#${mapping.subToolId}`);
+    return mapping.studioId;
+  }
 
   return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
 };

@@ -1,11 +1,6 @@
 import { lazy, type ElementType } from 'react';
 import {
-  AlignLeft, ArrowRightLeft, BadgeCent, Binary, Braces, CalendarClock, CaseUpper, Clock,
-  Box, Boxes, Code, Database, FileArchive, FileCode, FileJson, FileSearch, FileSpreadsheet, FileText,
-  Files, Fingerprint, Gem, Globe, Hash, Image, Images, KeyRound, LayoutTemplate, Link,
-  Monitor, Palette, QrCode, Regex, Ruler, Scissors, Send, Shield, Sparkles, Terminal,
-  Type, UserRoundCog, WalletCards,
-  FileVideo, GitCompareArrows, Grid3X3, Paintbrush, Wand2,
+  FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
@@ -14,151 +9,116 @@ const lazyNamed = <T extends Record<string, ElementType>, K extends keyof T>(
   exportName: K,
 ) => lazy(async () => ({ default: (await loader())[exportName] }));
 
-const lazyDefault = <T extends { default: ElementType }>(loader: () => Promise<T>) =>
-  lazy(async () => ({ default: (await loader()).default }));
-
-const JsonTool = lazyNamed(() => import('./FormatConverters'), 'JsonTool');
-const Base64Tool = lazyNamed(() => import('./FormatConverters'), 'Base64Tool');
-const UrlTool = lazyNamed(() => import('./FormatConverters'), 'UrlTool');
-const JwtTool = lazyNamed(() => import('./SecurityTools'), 'JwtTool');
-const UuidTool = lazyNamed(() => import('./SecurityTools'), 'UuidTool');
-const HashTool = lazyNamed(() => import('./SecurityTools'), 'HashTool');
-const PasswordGenTool = lazyNamed(() => import('./SecurityTools'), 'PasswordGenTool');
-const HmacTool = lazyNamed(() => import('./SecurityTools'), 'HmacTool');
-const AiAssistant = lazyNamed(() => import('./AiAssistant'), 'AiAssistant');
-const CaseConverterTool = lazyNamed(() => import('./TextTools'), 'CaseConverterTool');
-const TextStatsTool = lazyNamed(() => import('./TextTools'), 'TextStatsTool');
-const RegexTool = lazyNamed(() => import('./TextTools'), 'RegexTool');
-const PxRemTool = lazyNamed(() => import('./WebTools'), 'PxRemTool');
-const ColorConverterTool = lazyNamed(() => import('./WebTools'), 'ColorConverterTool');
-const QrCodeTool = lazyNamed(() => import('./WebTools'), 'QrCodeTool');
-const DeviceInfoTool = lazyNamed(() => import('./WebTools'), 'DeviceInfoTool');
-const ChmodTool = lazyNamed(() => import('./DevOpsTools'), 'ChmodTool');
-const CronTool = lazyNamed(() => import('./DevOpsTools'), 'CronTool');
-const StringEscaper = lazyNamed(() => import('./StringEscaper'), 'StringEscaper');
-const UrlParser = lazyNamed(() => import('./UrlParser'), 'UrlParser');
-const VideoDownloader = lazyNamed(() => import('./VideoDownloader'), 'VideoDownloader');
-const DiffViewer = lazyNamed(() => import('./DiffViewer'), 'DiffViewer');
-const XmlTool = lazyNamed(() => import('./FormatTools'), 'XmlTool');
-const YamlTool = lazyNamed(() => import('./FormatTools'), 'YamlTool');
-const CsvTool = lazyNamed(() => import('./FormatTools'), 'CsvTool');
-const MarkdownTool = lazyNamed(() => import('./FormatTools'), 'MarkdownTool');
-const StringManipulatorTool = lazyNamed(() => import('./StringTools'), 'StringManipulatorTool');
-const SlugTool = lazyNamed(() => import('./StringTools'), 'SlugTool');
-const RandomStringTool = lazyNamed(() => import('./StringTools'), 'RandomStringTool');
-const TimestampTool = lazyNamed(() => import('./TimeTools'), 'TimestampTool');
-const DateDiffTool = lazyNamed(() => import('./TimeTools'), 'DateDiffTool');
-const HttpBuilderTool = lazyNamed(() => import('./NetworkTools'), 'HttpBuilderTool');
-const UserAgentTool = lazyNamed(() => import('./NetworkTools'), 'UserAgentTool');
-const IpInfoTool = lazyNamed(() => import('./NetworkTools'), 'IpInfoTool');
-const JsonToTsTool = lazyNamed(() => import('./JsonToTsTool'), 'JsonToTsTool');
-const ImageTools = lazyNamed(() => import('./ImageTools'), 'ImageTools');
-const HeadshotExtractor = lazyNamed(() => import('./HeadshotExtractor'), 'HeadshotExtractor');
-const PdfTools = lazyNamed(() => import('./PdfTools'), 'PdfTools');
-const JewelryCustomizer = lazyDefault(() => import('./JewelryCustomizer'));
-const FaceSwapTool = lazyNamed(() => import('./FaceSwapTool'), 'FaceSwapTool');
-const SmartGeometryTool = lazyDefault(() => import('./SmartGeometry'));
-const StlRepairTool = lazyDefault(() => import('./StlRepair'));
-const VoronoiLatticeTool = lazyDefault(() => import('./VoronoiLattice'));
-const HtmlToMarkdownTool = lazyNamed(() => import('./text'), 'HtmlToMarkdownTool');
-const HtmlFormatTool = lazyNamed(() => import('./text'), 'HtmlFormatTool');
-const RmbUppercaseTool = lazyNamed(() => import('./text'), 'RmbUppercaseTool');
-const TimestampPlusTool = lazyNamed(() => import('./time'), 'TimestampPlusTool');
-const WorldClockTool = lazyNamed(() => import('./time'), 'WorldClockTool');
-const FileBase64Tool = lazyNamed(() => import('./files'), 'FileBase64Tool');
-const FileInfoTool = lazyNamed(() => import('./files'), 'FileInfoTool');
-const FileNameExtractorTool = lazyNamed(() => import('./files'), 'FileNameExtractorTool');
-const ImageColorExtractTool = lazyNamed(() => import('./images'), 'ImageColorExtractTool');
-const ImageToBase64Tool = lazyNamed(() => import('./images'), 'ImageToBase64Tool');
-const ImageWatermarkTool = lazyNamed(() => import('./images'), 'ImageWatermarkTool');
-const PerlerBeadTool = lazyNamed(() => import('./images'), 'PerlerBeadTool');
-const MimeTypeTool = lazyNamed(() => import('./frontend'), 'MimeTypeTool');
-const SvgToCssTool = lazyNamed(() => import('./frontend'), 'SvgToCssTool');
-const CssGeneratorTool = lazyNamed(() => import('./frontend'), 'CssGeneratorTool');
-const SvgOptimizerTool = lazyNamed(() => import('./frontend'), 'SvgOptimizerTool');
-const BasicAuthTool = lazyNamed(() => import('./security'), 'BasicAuthTool');
-const CertificateParserTool = lazyNamed(() => import('./security'), 'CertificateParserTool');
-const RandomNumberTool = lazyNamed(() => import('./generators'), 'RandomNumberTool');
-const LoremIpsumTool = lazyNamed(() => import('./generators'), 'LoremIpsumTool');
-const JsonDiffTool = lazyNamed(() => import('./DataTools'), 'JsonDiffTool');
-const SqlFormatterTool = lazyNamed(() => import('./DataTools'), 'SqlFormatterTool');
+// Import consolidated Studios
+const JsonFormatStudio = lazyNamed(() => import('./studios/JsonFormatStudio'), 'JsonFormatStudio');
+const CryptoSecurityCenter = lazyNamed(() => import('./studios/CryptoSecurityCenter'), 'CryptoSecurityCenter');
+const TextDiffSuite = lazyNamed(() => import('./studios/TextDiffSuite'), 'TextDiffSuite');
+const EncodingEscaping = lazyNamed(() => import('./studios/EncodingEscaping'), 'EncodingEscaping');
+const HtmlMarkdownStudio = lazyNamed(() => import('./studios/HtmlMarkdownStudio'), 'HtmlMarkdownStudio');
+const NetworkClientInspector = lazyNamed(() => import('./studios/NetworkClientInspector'), 'NetworkClientInspector');
+const CssStylingToolkit = lazyNamed(() => import('./studios/CssStylingToolkit'), 'CssStylingToolkit');
+const ImageMediaStudio = lazyNamed(() => import('./studios/ImageMediaStudio'), 'ImageMediaStudio');
+const Cad3DStudio = lazyNamed(() => import('./studios/Cad3DStudio'), 'Cad3DStudio');
+const SystemAiStudio = lazyNamed(() => import('./studios/SystemAiStudio'), 'SystemAiStudio');
 
 export const TOOLS: ToolDef[] = [
-  { id: 'json', name: 'JSON 格式化', description: '美化与压缩', icon: FileJson, category: Category.DEV, component: JsonTool },
-  { id: 'json2ts', name: 'JSON 转代码', description: '转 TS/Go/Java', icon: Code, category: Category.DEV, component: JsonToTsTool },
-  { id: 'xml', name: 'XML 工具', description: '格式化 / JSON 转换', icon: FileCode, category: Category.DEV, component: XmlTool },
-  { id: 'yaml', name: 'YAML ↔ JSON', description: 'YAML / JSON 互转', icon: Database, category: Category.DEV, component: YamlTool },
-  { id: 'csv', name: 'CSV ↔ JSON', description: 'CSV / JSON 互转', icon: FileSpreadsheet, category: Category.DEV, component: CsvTool },
-  { id: 'base64', name: 'Base64 转换', description: '文本编码与解码', icon: Type, category: Category.TEXT, component: Base64Tool },
-  { id: 'file-base64', name: 'Base64/文件转换器', description: '文件转 Data URL', icon: FileArchive, category: Category.TEXT, component: FileBase64Tool },
-  { id: 'url', name: 'URL 编码', description: 'URL 参数转义', icon: Link, category: Category.TEXT, component: UrlTool },
-  { id: 'escape', name: 'HTML/Uni 转义', description: 'HTML / Unicode', icon: Code, category: Category.TEXT, component: StringEscaper },
-  { id: 'html-markdown', name: 'HTML 转 Markdown', description: 'HTML 片段转 Markdown', icon: FileText, category: Category.TEXT, component: HtmlToMarkdownTool },
-  { id: 'html-format', name: 'HTML 格式化/压缩器', description: 'HTML 美化与压缩', icon: Braces, category: Category.TEXT, component: HtmlFormatTool },
-  { id: 'markdown', name: 'Markdown 预览', description: 'Markdown 转 HTML', icon: FileText, category: Category.TEXT, component: MarkdownTool },
-  { id: 'case', name: '大小写转换', description: '驼峰/下划线/大写', icon: CaseUpper, category: Category.TEXT, component: CaseConverterTool },
-  { id: 'text-manip', name: '文本处理', description: '去重/排序/全半角', icon: Scissors, category: Category.TEXT, component: StringManipulatorTool },
-  { id: 'slug', name: 'Slug 生成', description: '标题转 URL Slug', icon: Link, category: Category.TEXT, component: SlugTool },
-  { id: 'stats', name: '文本统计', description: '字数/行数统计', icon: AlignLeft, category: Category.TEXT, component: TextStatsTool },
-  { id: 'regex', name: '正则测试', description: 'JS 正则表达式测试', icon: Regex, category: Category.DEV, component: RegexTool },
-  { id: 'diff', name: '文本对比', description: '简易行对比', icon: ArrowRightLeft, category: Category.DEV, component: DiffViewer },
-
-  { id: 'timestamp', name: '时间戳转换', description: 'Unix 时间戳互转', icon: Clock, category: Category.SMART_AI, component: TimestampTool },
-  { id: 'timestamp-plus', name: '时间戳增强转换', description: '秒/毫秒/时区/ISO', icon: CalendarClock, category: Category.SMART_AI, component: TimestampPlusTool },
-  { id: 'datediff', name: '日期计算', description: '日期差值计算', icon: CalendarClock, category: Category.SMART_AI, component: DateDiffTool },
-  { id: 'world-clock', name: '世界时间', description: '常用时区时间', icon: Globe, category: Category.SMART_AI, component: WorldClockTool },
-
-  { id: 'http', name: 'HTTP 请求', description: '简易 HTTP Client', icon: Send, category: Category.NETWORK, component: HttpBuilderTool },
-  { id: 'video-download', name: '视频下载解析', description: '解析视频直链 / HLS', icon: FileVideo, category: Category.NETWORK, component: VideoDownloader },
-  { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, category: Category.NETWORK, component: UrlParser },
-  { id: 'useragent', name: 'User Agent', description: 'UA 解析', icon: Monitor, category: Category.NETWORK, component: UserAgentTool },
-  { id: 'ip', name: 'IP 信息', description: '本机 IP 查询', icon: Globe, category: Category.NETWORK, component: IpInfoTool },
-  { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, category: Category.NETWORK, component: DeviceInfoTool },
-
-  { id: 'jwt', name: 'JWT 解析', description: '载荷与时间声明', icon: Shield, category: Category.SECURITY, component: JwtTool },
-  { id: 'hash', name: 'Hash 生成', description: 'SHA1, SHA256, SHA512', icon: Hash, category: Category.SECURITY, component: HashTool },
-  { id: 'hmac', name: 'HMAC 计算', description: 'HMAC-SHA256 计算', icon: Shield, category: Category.SECURITY, component: HmacTool },
-  { id: 'password', name: '密码生成', description: '高强度随机密码', icon: KeyRound, category: Category.SECURITY, component: PasswordGenTool },
-  { id: 'basic-auth', name: 'Basic Auth 生成器', description: 'Authorization Header', icon: KeyRound, category: Category.SECURITY, component: BasicAuthTool },
-  { id: 'cert-parser', name: '证书文本解析器', description: 'PEM 文本解析', icon: Shield, category: Category.SECURITY, component: CertificateParserTool },
-
-  { id: 'pxrem', name: 'PX/REM 转换', description: 'CSS 单位计算', icon: ArrowRightLeft, category: Category.MEDIA, component: PxRemTool },
-  { id: 'color', name: '颜色转换', description: 'Hex / RGB / HSL', icon: Palette, category: Category.MEDIA, component: ColorConverterTool },
-  { id: 'css-generator', name: 'CSS 可视化生成器', description: '阴影/渐变/圆角/毛玻璃', icon: Paintbrush, category: Category.MEDIA, component: CssGeneratorTool },
-  { id: 'mime', name: 'MIME 类型', description: '扩展名与 MIME 查询', icon: FileSearch, category: Category.MEDIA, component: MimeTypeTool },
-  { id: 'svg-css', name: 'SVG 转 CSS', description: 'SVG Data URL', icon: BadgeCent, category: Category.MEDIA, component: SvgToCssTool },
-  { id: 'svg-optimizer', name: 'SVG 优化压缩', description: 'SVGO 本地压缩', icon: BadgeCent, category: Category.MEDIA, component: SvgOptimizerTool },
-  { id: 'qrcode', name: '二维码生成', description: '文本/WiFi/名片/事件', icon: QrCode, category: Category.MEDIA, component: QrCodeTool },
-  { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, category: Category.MEDIA, component: ImageTools },
-  { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, category: Category.MEDIA, component: ImageToBase64Tool },
-  { id: 'image-colors', name: '图片颜色提取', description: '主色与色板', icon: Palette, category: Category.MEDIA, component: ImageColorExtractTool },
-  { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, category: Category.MEDIA, component: ImageWatermarkTool },
-  { id: 'perler-beads', name: '拼豆图纸生成', description: '图片转拼豆网格', icon: Grid3X3, category: Category.MEDIA, component: PerlerBeadTool },
-  { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, category: Category.MEDIA, component: HeadshotExtractor },
-  { id: 'pdf', name: 'PDF 工具箱', description: '合并 / 转图片', icon: Files, category: Category.MEDIA, component: PdfTools },
-  { id: 'faceswap', name: 'AI 换脸', description: '本地 WebGL 换脸', icon: UserRoundCog, category: Category.MEDIA, component: FaceSwapTool },
-
-  { id: 'file-info', name: '文件信息', description: '大小/类型/哈希', icon: FileSearch, category: Category.MEDIA, component: FileInfoTool },
-  { id: 'filename', name: '文件名提取', description: '路径与 URL 提取', icon: FileText, category: Category.MEDIA, component: FileNameExtractorTool },
-  { id: 'json-diff', name: 'JSON 结构化对比', description: '树状增删改对比', icon: GitCompareArrows, category: Category.DEV, component: JsonDiffTool },
-  { id: 'sql-format', name: 'SQL 格式化', description: '方言格式化 / 压缩', icon: Database, category: Category.DEV, component: SqlFormatterTool },
-
-  { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, category: Category.NETWORK, component: ChmodTool },
-  { id: 'cron', name: 'Cron 表达式', description: '生成 / 解析 / 预览', icon: CalendarClock, category: Category.NETWORK, component: CronTool },
-
-  { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, category: Category.SECURITY, component: UuidTool },
-  { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, category: Category.SECURITY, component: RandomStringTool },
-  { id: 'random-number', name: '随机数生成器', description: '范围随机整数', icon: Binary, category: Category.SECURITY, component: RandomNumberTool },
-  { id: 'lorem', name: '假文生成器', description: '中英文占位文案', icon: Wand2, category: Category.TEXT, component: LoremIpsumTool },
-
-  { id: 'rmb-uppercase', name: '人民币大写', description: '金额转中文大写', icon: WalletCards, category: Category.TEXT, component: RmbUppercaseTool },
-
-  { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器', icon: Gem, category: Category.MEDIA, component: JewelryCustomizer },
-  { id: 'stl-repair', name: 'STL 修复/降面', description: '本地清理 / 降面 / 导出', icon: Box, category: Category.MEDIA, component: StlRepairTool },
-  { id: 'stl-voronoi', name: 'STL 镂空/Voronoi', description: '本地蜂窝镂空 / STL 导出', icon: Boxes, category: Category.MEDIA, component: VoronoiLatticeTool },
-  { id: 'smart-geometry', name: '小学几何解题', description: '加载 JSON 交互讲解', icon: Ruler, category: Category.SMART_AI, component: SmartGeometryTool },
-
-  { id: 'ai', name: 'AI 代码助手', description: '智能编程问答', icon: Sparkles, category: Category.SMART_AI, component: AiAssistant },
+  { id: 'json-studio', name: 'JSON & 数据格式化', description: 'JSON、XML、YAML、CSV、SQL 转换与对比', icon: FileJson, category: Category.DEV, component: JsonFormatStudio },
+  { id: 'crypto-studio', name: '安全与加密中心', description: 'JWT、Hash、HMAC、证书及私钥评估', icon: Shield, category: Category.SECURITY, component: CryptoSecurityCenter },
+  { id: 'text-studio', name: '文本编辑与对比', description: '大小写转换、正则测试、差分比对、字数统计', icon: Scissors, category: Category.TEXT, component: TextDiffSuite },
+  { id: 'encoding-studio', name: '编码与字符转义', description: 'Base64、文件转换、URL 编码、转义处理', icon: Binary, category: Category.TEXT, component: EncodingEscaping },
+  { id: 'html-markdown-studio', name: 'HTML & Markdown 预览', description: 'MD 即时渲染、双向转换与 HTML 压缩', icon: FileText, category: Category.TEXT, component: HtmlMarkdownStudio },
+  { id: 'network-studio', name: '网络请求与探针', description: 'HTTP 客户端、URL 解析、UA、IP 与设备探针', icon: Globe, category: Category.NETWORK, component: NetworkClientInspector },
+  { id: 'css-studio', name: 'CSS 视觉与样式', description: '单位换算、调色板、CSS 渐变阴影、SVG 转 CSS', icon: Palette, category: Category.MEDIA, component: CssStylingToolkit },
+  { id: 'image-studio', name: '图形与媒体中心', description: '压缩、水印、换脸、PDF 工具、拼豆、视频流', icon: Image, category: Category.MEDIA, component: ImageMediaStudio },
+  { id: 'cad-3d-studio', name: '3D 建模与 CAD 首饰', description: '首饰定制、STL 修复、镂空设计、小学几何', icon: Gem, category: Category.MEDIA, component: Cad3DStudio },
+  { id: 'system-ai-studio', name: '系统、时间与 AI', description: 'UUID、Mock 假数、人民币大写、Chmod/Cron、AI 编程', icon: Sparkles, category: Category.SMART_AI, component: SystemAiStudio },
 ];
 
 export const TOOL_IDS = new Set(TOOLS.map(tool => tool.id));
+
+export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: string }> = {
+  // JSON & Format Studio
+  'json': { studioId: 'json-studio', subToolId: 'json' },
+  'json2ts': { studioId: 'json-studio', subToolId: 'json2ts' },
+  'xml': { studioId: 'json-studio', subToolId: 'xml' },
+  'yaml': { studioId: 'json-studio', subToolId: 'yaml' },
+  'csv': { studioId: 'json-studio', subToolId: 'csv' },
+  'json-diff': { studioId: 'json-studio', subToolId: 'json-diff' },
+  'sql-format': { studioId: 'json-studio', subToolId: 'sql-format' },
+
+  // Crypto & Security Center
+  'jwt': { studioId: 'crypto-studio', subToolId: 'jwt' },
+  'hash': { studioId: 'crypto-studio', subToolId: 'hash' },
+  'hmac': { studioId: 'crypto-studio', subToolId: 'hmac' },
+  'password': { studioId: 'crypto-studio', subToolId: 'password' },
+  'basic-auth': { studioId: 'crypto-studio', subToolId: 'basic-auth' },
+  'cert-parser': { studioId: 'crypto-studio', subToolId: 'cert-parser' },
+
+  // Text & Diff Suite
+  'case': { studioId: 'text-studio', subToolId: 'case' },
+  'text-manip': { studioId: 'text-studio', subToolId: 'text-manip' },
+  'slug': { studioId: 'text-studio', subToolId: 'slug' },
+  'stats': { studioId: 'text-studio', subToolId: 'stats' },
+  'regex': { studioId: 'text-studio', subToolId: 'regex' },
+  'diff': { studioId: 'text-studio', subToolId: 'diff' },
+
+  // Encoding & Escaping
+  'base64': { studioId: 'encoding-studio', subToolId: 'base64' },
+  'file-base64': { studioId: 'encoding-studio', subToolId: 'file-base64' },
+  'url': { studioId: 'encoding-studio', subToolId: 'url' },
+  'escape': { studioId: 'encoding-studio', subToolId: 'escape' },
+
+  // Html & Markdown Studio
+  'markdown': { studioId: 'html-markdown-studio', subToolId: 'markdown' },
+  'html-markdown': { studioId: 'html-markdown-studio', subToolId: 'html-markdown' },
+  'html-format': { studioId: 'html-markdown-studio', subToolId: 'html-format' },
+
+  // Network & Client Inspector
+  'http': { studioId: 'network-studio', subToolId: 'http' },
+  'urlparser': { studioId: 'network-studio', subToolId: 'urlparser' },
+  'useragent': { studioId: 'network-studio', subToolId: 'useragent' },
+  'ip': { studioId: 'network-studio', subToolId: 'ip' },
+  'device': { studioId: 'network-studio', subToolId: 'device' },
+
+  // CSS & Styling Toolkit
+  'pxrem': { studioId: 'css-studio', subToolId: 'pxrem' },
+  'color': { studioId: 'css-studio', subToolId: 'color' },
+  'css-generator': { studioId: 'css-studio', subToolId: 'css-generator' },
+  'svg-css': { studioId: 'css-studio', subToolId: 'svg-css' },
+
+  // Image & Media Studio
+  'image': { studioId: 'image-studio', subToolId: 'image' },
+  'image-base64': { studioId: 'image-studio', subToolId: 'image-base64' },
+  'image-colors': { studioId: 'image-studio', subToolId: 'image-colors' },
+  'image-watermark': { studioId: 'image-studio', subToolId: 'image-watermark' },
+  'perler-beads': { studioId: 'image-studio', subToolId: 'perler-beads' },
+  'headshot': { studioId: 'image-studio', subToolId: 'headshot' },
+  'pdf': { studioId: 'image-studio', subToolId: 'pdf' },
+  'faceswap': { studioId: 'image-studio', subToolId: 'faceswap' },
+  'file-info': { studioId: 'image-studio', subToolId: 'file-info' },
+  'filename': { studioId: 'image-studio', subToolId: 'filename' },
+  'video-download': { studioId: 'image-studio', subToolId: 'video-download' },
+  'svg-optimizer': { studioId: 'image-studio', subToolId: 'svg-optimizer' },
+  'mime': { studioId: 'image-studio', subToolId: 'mime' },
+  'qrcode': { studioId: 'image-studio', subToolId: 'qrcode' },
+
+  // 3D & CAD Studio
+  'jewelry': { studioId: 'cad-3d-studio', subToolId: 'jewelry' },
+  'stl-repair': { studioId: 'cad-3d-studio', subToolId: 'stl-repair' },
+  'stl-voronoi': { studioId: 'cad-3d-studio', subToolId: 'stl-voronoi' },
+  'smart-geometry': { studioId: 'cad-3d-studio', subToolId: 'smart-geometry' },
+
+  // System, Generators & AI
+  'uuid': { studioId: 'system-ai-studio', subToolId: 'uuid' },
+  'random-str': { studioId: 'system-ai-studio', subToolId: 'random-str' },
+  'random-number': { studioId: 'system-ai-studio', subToolId: 'random-number' },
+  'lorem': { studioId: 'system-ai-studio', subToolId: 'lorem' },
+  'rmb-uppercase': { studioId: 'system-ai-studio', subToolId: 'rmb-uppercase' },
+  'chmod': { studioId: 'system-ai-studio', subToolId: 'chmod' },
+  'cron': { studioId: 'system-ai-studio', subToolId: 'cron' },
+  'ai': { studioId: 'system-ai-studio', subToolId: 'ai' },
+  'timestamp': { studioId: 'system-ai-studio', subToolId: 'timestamp' },
+  'timestamp-plus': { studioId: 'system-ai-studio', subToolId: 'timestamp-plus' },
+  'datediff': { studioId: 'system-ai-studio', subToolId: 'datediff' },
+  'world-clock': { studioId: 'system-ai-studio', subToolId: 'world-clock' },
+};
