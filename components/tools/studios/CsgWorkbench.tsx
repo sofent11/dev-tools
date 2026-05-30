@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { useMeshStore, SharedMesh } from '../shared/meshStore';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import {
@@ -37,6 +38,7 @@ const PRESET_COLORS = [
 
 export const CsgWorkbench: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const sharedMesh = useMeshStore(state => state.sharedMesh);
   
   // Scene objects hierarchy state
   const [shapes, setShapes] = useState<ShapeConfig[]>([
@@ -165,6 +167,36 @@ export const CsgWorkbench: React.FC = () => {
       visible: true,
       uploadedGeo: null,
       uploadedFileName: ''
+    };
+
+    setShapes(prev => [...prev, newShape]);
+    setSelectedShapeId(newId);
+  };
+
+  const importSharedMesh = (shared: SharedMesh) => {
+    const newId = `shape-${globalShapeIdCounter++}`;
+    const color = PRESET_COLORS[shapes.length % PRESET_COLORS.length];
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(shared.positions.slice(), 3));
+    geometry.setIndex(new THREE.Uint32BufferAttribute(shared.indices.slice(), 1));
+    geometry.computeVertexNormals();
+    geometry.center();
+
+    const newShape: ShapeConfig = {
+      id: newId,
+      name: `导入 - ${shared.fileName.replace(/\.[^.]+$/, '')}`,
+      type: 'upload',
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      scaleX: 10,
+      scaleY: 10,
+      scaleZ: 10,
+      color,
+      visible: true,
+      uploadedGeo: geometry,
+      uploadedFileName: shared.fileName
     };
 
     setShapes(prev => [...prev, newShape]);
@@ -793,6 +825,23 @@ export const CsgWorkbench: React.FC = () => {
       <div className="flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm max-h-[750px] overflow-y-auto">
         {!resultGeometry ? (
           <>
+            {/* Shared mesh quick loader panel */}
+            {sharedMesh && (
+              <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
+                  <span className="truncate">💡 共享内存可载入网格模型</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => importSharedMesh(sharedMesh)}
+                  className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
+                  title={sharedMesh.fileName}
+                >
+                  导入：{sharedMesh.fileName}
+                </button>
+              </div>
+            )}
+
             {/* Multi-mesh hierarchy tree outline list */}
             <div className="space-y-3.5 flex-none mb-5">
               <div className="flex justify-between items-center">

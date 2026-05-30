@@ -29,6 +29,7 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { FieldLabel, Input, UploadPanel } from '../../ui/ToolUi';
 import { formatBytes } from '../shared/fileUtils';
+import { useMeshStore } from '../shared/meshStore';
 import type {
   MeshBounds,
   MeshPreviewData,
@@ -448,12 +449,21 @@ export const StlRepairTool: React.FC = () => {
         return;
       }
 
+      const pos = new Float32Array(event.data.mesh.positions);
+      const ind = new Uint32Array(event.data.mesh.indices);
       setMesh({
-        positions: new Float32Array(event.data.mesh.positions),
-        indices: new Uint32Array(event.data.mesh.indices),
+        positions: pos,
+        indices: ind,
       });
       setReport(event.data.report);
       setStlBuffer(event.data.stl);
+
+      // Save to global mesh store for cross-tab sharing
+      useMeshStore.getState().setSharedMesh({
+        positions: pos.slice(),
+        indices: ind.slice(),
+        fileName: file.name,
+      });
     };
 
     worker.onerror = event => {

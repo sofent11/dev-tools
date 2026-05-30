@@ -30,6 +30,7 @@ import { Button } from '../../ui/Button';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { FieldLabel, UploadPanel } from '../../ui/ToolUi';
 import { formatBytes } from '../shared/fileUtils';
+import { useMeshStore, SharedMesh } from '../shared/meshStore';
 import type {
   HoleDensity,
   LatticeThickness,
@@ -80,6 +81,57 @@ const formatSize = (value: number) => {
 const makeDownloadName = (name: string) => {
   const stem = name.replace(/\.[^.]+$/, '') || 'model';
   return `${stem}_voronoi_lattice.stl`;
+};
+
+const exportToStlBuffer = (positions: Float32Array, indices: Uint32Array): ArrayBuffer => {
+  const faceCount = indices.length / 3;
+  const buffer = new ArrayBuffer(84 + faceCount * 50);
+  const view = new DataView(buffer);
+  
+  // Header (80 bytes)
+  const headerBytes = new TextEncoder().encode("Shared Mesh Export");
+  const headerView = new Uint8Array(buffer, 0, 80);
+  headerView.set(headerBytes.length > 80 ? headerBytes.subarray(0, 80) : headerBytes);
+  
+  // Number of triangles (4 bytes)
+  view.setUint32(80, faceCount, true);
+  
+  let offset = 84;
+  for (let i = 0; i < indices.length; i += 3) {
+    const ia = indices[i];
+    const ib = indices[i + 1];
+    const ic = indices[i + 2];
+    
+    // Normal (dummy normal)
+    view.setFloat32(offset, 0, true);
+    view.setFloat32(offset + 4, 0, true);
+    view.setFloat32(offset + 8, 0, true);
+    offset += 12;
+    
+    // Vertex A
+    view.setFloat32(offset, positions[ia * 3], true);
+    view.setFloat32(offset + 4, positions[ia * 3 + 1], true);
+    view.setFloat32(offset + 8, positions[ia * 3 + 2], true);
+    offset += 12;
+    
+    // Vertex B
+    view.setFloat32(offset, positions[ib * 3], true);
+    view.setFloat32(offset + 4, positions[ib * 3 + 1], true);
+    view.setFloat32(offset + 8, positions[ib * 3 + 2], true);
+    offset += 12;
+    
+    // Vertex C
+    view.setFloat32(offset, positions[ic * 3], true);
+    view.setFloat32(offset + 4, positions[ic * 3 + 1], true);
+    view.setFloat32(offset + 8, positions[ic * 3 + 2], true);
+    offset += 12;
+    
+    // Attribute byte count (2 bytes)
+    view.setUint16(offset, 0, true);
+    offset += 2;
+  }
+  
+  return buffer;
 };
 
 const SegmentedControl = <T extends string>({
@@ -385,6 +437,7 @@ const MeshPreview: React.FC<{
 export const VoronoiLatticeTool: React.FC = () => {
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
+  const sharedMesh = useMeshStore(state => state.sharedMesh);
   const [file, setFile] = useState<File | null>(null);
   const [options, setOptions] = useState<VoronoiOptions>(defaultOptions);
   const [viewMode, setViewMode] = useState<PreviewMode>('mixed');
@@ -400,6 +453,20 @@ export const VoronoiLatticeTool: React.FC = () => {
       workerRef.current?.terminate();
     };
   }, []);
+
+  const importSharedMesh = (shared: SharedMesh) => {
+    const stlBuf = exportToStlBuffer(shared.positions, shared.indices);
+    const newFile = new File([stlBuf], shared.fileName, { type: 'model/stl' });
+    setFile(newFile);
+    setOriginal({
+      positions: shared.positions.slice(),
+      indices: shared.indices.slice()
+    });
+    setLattice(null);
+    setReport(null);
+    setStlBuffer(null);
+    setError('');
+  };
 
   const outputSize = stlBuffer?.byteLength ?? 0;
   const canProcess = Boolean(file) && !processing;
@@ -498,6 +565,22 @@ export const VoronoiLatticeTool: React.FC = () => {
           description="纯浏览器本地生成表面蜂窝杆件，适合快速预览镂空风格并导出实验级 STL。"
         />
         <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
+          {sharedMesh && (
+            <div className="rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
+                <span className="truncate">💡 共享内存可载入网格模型</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => importSharedMesh(sharedMesh)}
+                className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
+                title={sharedMesh.fileName}
+              >
+                导入：{sharedMesh.fileName}
+              </button>
+            </div>
+          )}
+
           <UploadPanel className="min-h-[8.5rem]">
             <label className="flex w-full cursor-pointer flex-col items-center gap-2 p-5 text-center">
               <Upload className="h-8 w-8 text-primary-600" />
