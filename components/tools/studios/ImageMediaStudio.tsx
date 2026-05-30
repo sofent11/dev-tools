@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Image, Images, Palette, LayoutTemplate, Grid3X3, Files, UserRoundCog, FileSearch, FileText, FileVideo, BadgeCent, QrCode } from 'lucide-react';
+import { Image, Images, Palette, LayoutTemplate, Grid3X3, Files, UserRoundCog, FileSearch, FileText, FileVideo, BadgeCent, QrCode, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
 
 const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
@@ -8,6 +8,7 @@ const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof 
 ) => lazy(async () => ({ default: (await loader())[exportName] }));
 
 const ImageTools = lazyNamed(() => import('../ImageTools'), 'ImageTools');
+const BackgroundRemoval = lazyNamed(() => import('./BackgroundRemoval'), 'BackgroundRemoval');
 const ImageToBase64Tool = lazyNamed(() => import('../images'), 'ImageToBase64Tool');
 const ImageColorExtractTool = lazyNamed(() => import('../images'), 'ImageColorExtractTool');
 const ImageWatermarkTool = lazyNamed(() => import('../images'), 'ImageWatermarkTool');
@@ -24,6 +25,7 @@ const QrCodeTool = lazyNamed(() => import('../WebTools'), 'QrCodeTool');
 
 const subTools: SubTool[] = [
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, component: ImageTools },
+  { id: 'background-removal', name: '智能本地抠图', description: '本地高精度图片背景色去除与画笔边缘修正', icon: Scissors, component: BackgroundRemoval },
   { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, component: ImageToBase64Tool },
   { id: 'image-colors', name: '图片颜色提取', description: '主色与色板', icon: Palette, component: ImageColorExtractTool },
   { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, component: ImageWatermarkTool },

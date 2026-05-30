@@ -101,11 +101,13 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'svg-optimizer': { studioId: 'image-studio', subToolId: 'svg-optimizer' },
   'mime': { studioId: 'image-studio', subToolId: 'mime' },
   'qrcode': { studioId: 'image-studio', subToolId: 'qrcode' },
+  'background-removal': { studioId: 'image-studio', subToolId: 'background-removal' },
 
   // 3D & CAD Studio
   'jewelry': { studioId: 'cad-3d-studio', subToolId: 'jewelry' },
   'stl-repair': { studioId: 'cad-3d-studio', subToolId: 'stl-repair' },
   'stl-voronoi': { studioId: 'cad-3d-studio', subToolId: 'stl-voronoi' },
+  '3d-csg': { studioId: 'cad-3d-studio', subToolId: '3d-csg' },
   'smart-geometry': { studioId: 'cad-3d-studio', subToolId: 'smart-geometry' },
 
   // System, Generators & AI

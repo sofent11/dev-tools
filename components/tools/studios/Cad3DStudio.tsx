@@ -1,19 +1,26 @@
 import React, { lazy } from 'react';
-import { Gem, Box, Boxes, Ruler } from 'lucide-react';
+import { Gem, Box, Boxes, Ruler, Layers } from 'lucide-react';
 import { TabbedToolbox, SubTool } from '../shared/TabbedToolbox';
 
 const lazyDefault = <T extends { default: React.ElementType }>(loader: () => Promise<T>) =>
   lazy(async () => ({ default: (await loader()).default }));
 
+const lazyNamed = <T extends Record<string, React.ElementType>, K extends keyof T>(
+  loader: () => Promise<T>,
+  exportName: K,
+) => lazy(async () => ({ default: (await loader())[exportName] }));
+
 const JewelryCustomizer = lazyDefault(() => import('../JewelryCustomizer'));
 const StlRepairTool = lazyDefault(() => import('../StlRepair'));
 const VoronoiLatticeTool = lazyDefault(() => import('../VoronoiLattice'));
+const CsgWorkbench = lazyNamed(() => import('./CsgWorkbench'), 'CsgWorkbench');
 const SmartGeometryTool = lazyDefault(() => import('../SmartGeometry'));
 
 const subTools: SubTool[] = [
   { id: 'jewelry', name: 'AI 首饰定制', description: '文字首饰生成器与 3D PBR 实时预览及 DXF/STL 导出', icon: Gem, component: JewelryCustomizer },
   { id: 'stl-repair', name: 'STL 修复/降面', description: '本地清理 / 降面 / 导出及 Worker 进度反馈', icon: Box, component: StlRepairTool },
   { id: 'stl-voronoi', name: 'STL 镂空/Voronoi', description: '本地蜂窝镂空 / STL 导出及深度 GPU 释放', icon: Boxes, component: VoronoiLatticeTool },
+  { id: '3d-csg', name: '3D 实体布尔运算', description: '网页端 3D 实体交互式并集、差集、交集运算与 STL 导出', icon: Layers, component: CsgWorkbench },
   { id: 'smart-geometry', name: '小学几何解题', description: '加载 JSON 交互讲解', icon: Ruler, component: SmartGeometryTool },
 ];
 
