@@ -17,25 +17,53 @@ const useCopyToClipboard = () => {
 };
 
 // --- JWT Tool ---
+// --- JWT Tool ---
+const base64UrlEncode = (str: string): string => {
+  const base64 = window.btoa(unescape(encodeURIComponent(str)));
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+};
+
 export const JwtTool: React.FC = () => {
   const [token, setToken] = useState('');
-  const [secretKey, setSecretKey] = useState('');
+  const [secretKey, setSecretKey] = useState('secret');
   const [verificationResult, setVerificationResult] = useState<'unchecked' | 'valid' | 'invalid' | 'error'>('unchecked');
   const [crackedKey, setCrackedKey] = useState<string | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
 
+  const [headerInput, setHeaderInput] = useState('{\n  "alg": "HS256",\n  "typ": "JWT"\n}');
+  const [payloadInput, setPayloadInput] = useState('{\n  "sub": "1234567890",\n  "name": "John Doe",\n  "iat": 1516239022\n}');
+
   // Derived state during render
-  let header = '';
-  let payload = '';
   let claims: { label: string; value: string }[] = [];
   let headerObj: Record<string, any> | null = null;
   let payloadObj: Record<string, any> | null = null;
-  let error: string | null = null;
+  let parseError: string | null = null;
 
-  if (token) {
+  try {
+    headerObj = JSON.parse(headerInput);
+    payloadObj = JSON.parse(payloadInput);
+    
+    const toDate = (value: unknown) => typeof value === 'number' ? new Date(value * 1000).toLocaleString() : '';
+    if (payloadObj) {
+      claims = [
+        payloadObj.iss ? { label: 'Issuer (iss)', value: String(payloadObj.iss) } : null,
+        payloadObj.sub ? { label: 'Subject (sub)', value: String(payloadObj.sub) } : null,
+        payloadObj.aud ? { label: 'Audience (aud)', value: Array.isArray(payloadObj.aud) ? payloadObj.aud.join(', ') : String(payloadObj.aud) } : null,
+        payloadObj.iat ? { label: 'Issued At (iat)', value: toDate(payloadObj.iat) } : null,
+        payloadObj.nbf ? { label: 'Not Before (nbf)', value: toDate(payloadObj.nbf) } : null,
+        payloadObj.exp ? { label: 'Expires At (exp)', value: `${toDate(payloadObj.exp)}${Date.now() > payloadObj.exp * 1000 ? '（已过期 ⚠️）' : '（未过期 🟢）'}` } : null,
+      ].filter(Boolean) as { label: string; value: string }[];
+    }
+  } catch (err) {
+    parseError = "JSON 格式解析失败，请检查语法";
+  }
+
+  // Update editors when a token is pasted
+  useEffect(() => {
+    if (!token) return;
     try {
       const parts = token.split('.');
-      if (parts.length !== 3) throw new Error("Invalid JWT format");
+      if (parts.length !== 3) return;
 
       const decode = (str: string) => {
         const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
@@ -45,30 +73,22 @@ export const JwtTool: React.FC = () => {
         return JSON.stringify(JSON.parse(json), null, 2);
       };
 
-      header = decode(parts[0]);
-      payload = decode(parts[1]);
-      headerObj = JSON.parse(header);
-      payloadObj = JSON.parse(payload);
-      
-      const toDate = (value: unknown) => typeof value === 'number' ? new Date(value * 1000).toLocaleString() : '';
-      claims = [
-        payloadObj.iss ? { label: 'Issuer', value: String(payloadObj.iss) } : null,
-        payloadObj.sub ? { label: 'Subject', value: String(payloadObj.sub) } : null,
-        payloadObj.aud ? { label: 'Audience', value: Array.isArray(payloadObj.aud) ? payloadObj.aud.join(', ') : String(payloadObj.aud) } : null,
-        payloadObj.iat ? { label: 'Issued At', value: toDate(payloadObj.iat) } : null,
-        payloadObj.nbf ? { label: 'Not Before', value: toDate(payloadObj.nbf) } : null,
-        payloadObj.exp ? { label: 'Expires At', value: `${toDate(payloadObj.exp)}${Date.now() > payloadObj.exp * 1000 ? '（已过期 ⚠️）' : '（未过期 🟢）'}` } : null,
-      ].filter(Boolean) as { label: string; value: string }[];
+      setHeaderInput(decode(parts[0]));
+      setPayloadInput(decode(parts[1]));
     } catch {
-      error = "Invalid JWT Token";
+      // ignore invalid tokens pasted in Encoded field
     }
-  }
+  }, [token]);
 
   // Handle local signature verification
   const handleVerify = async () => {
-    if (!token || !secretKey || error) return;
+    if (!token || !secretKey) return;
     try {
       const parts = token.split('.');
+      if (parts.length !== 3) {
+        setVerificationResult('invalid');
+        return;
+      }
       const enc = new TextEncoder();
       const keyData = enc.encode(secretKey);
       const cryptoKey = await window.crypto.subtle.importKey(
@@ -83,9 +103,7 @@ export const JwtTool: React.FC = () => {
       const signatureBase64Url = parts[2];
       const signatureBase64 = signatureBase64Url.replace(/-/g, '+').replace(/_/g, '/');
       
-      // Handle base64 padding
       const paddedBase64 = signatureBase64.padEnd(signatureBase64.length + (4 - signatureBase64.length % 4) % 4, '=');
-      
       const signatureBinary = atob(paddedBase64);
       const signatureBytes = new Uint8Array(signatureBinary.length);
       for (let i = 0; i < signatureBinary.length; i++) {
@@ -106,13 +124,51 @@ export const JwtTool: React.FC = () => {
     }
   };
 
+  // Re-sign edited Header and Payload to forge/generate JWT
+  const handleSignToken = async () => {
+    try {
+      if (parseError) {
+        alert(parseError);
+        return;
+      }
+      const headerB64 = base64UrlEncode(JSON.stringify(headerObj));
+      const payloadB64 = base64UrlEncode(JSON.stringify(payloadObj));
+      
+      const enc = new TextEncoder();
+      const messageData = enc.encode(`${headerB64}.${payloadB64}`);
+      const keyData = enc.encode(secretKey || 'secret');
+      
+      const cryptoKey = await window.crypto.subtle.importKey(
+        "raw",
+        keyData,
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign"]
+      );
+      
+      const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, messageData);
+      const signatureBytes = new Uint8Array(signature);
+      
+      let signatureBinary = '';
+      for (let i = 0; i < signatureBytes.byteLength; i++) {
+        signatureBinary += String.fromCharCode(signatureBytes[i]);
+      }
+      const signatureB64Url = window.btoa(signatureBinary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+      
+      const newToken = `${headerB64}.${payloadB64}.${signatureB64Url}`;
+      setToken(newToken);
+      setVerificationResult('valid');
+    } catch (err) {
+      alert('签名签署失败: ' + (err as Error).message);
+    }
+  };
+
   // Weak Secret Brute-forcer
   const handleBruteForce = async () => {
-    if (!token || error) return;
+    if (!token) return;
     setIsAuditing(true);
     setCrackedKey(null);
     
-    // Dictionary of common weak secret keys
     const dictionary = [
       'secret', '123456', 'admin', 'development', 'jwt', 
       '12345678', 'password', 'key', 'test', 'demo', 
@@ -122,6 +178,7 @@ export const JwtTool: React.FC = () => {
 
     try {
       const parts = token.split('.');
+      if (parts.length !== 3) throw new Error("无效的 JWT 格式");
       const enc = new TextEncoder();
       const messageData = enc.encode(`${parts[0]}.${parts[1]}`);
       const signatureBase64Url = parts[2];
@@ -133,7 +190,6 @@ export const JwtTool: React.FC = () => {
         signatureBytes[i] = signatureBinary.charCodeAt(i);
       }
 
-      // Test each secret in the dictionary
       let found: string | null = null;
       for (const secret of dictionary) {
         const keyData = enc.encode(secret);
@@ -170,7 +226,6 @@ export const JwtTool: React.FC = () => {
     }
   };
 
-  // Reset verification state when token changes
   useEffect(() => {
     setVerificationResult('unchecked');
     setCrackedKey(null);
@@ -178,111 +233,117 @@ export const JwtTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="JWT 主动安全工坊" description="除标准的 JWT Header/Payload 解析外，特引入 Web Crypto API 级本地验证与弱密钥防伪造审计碰撞探针。" />
+      <CardHeader title="JWT 主动安全调试与签名沙箱" description="不仅是一个 JWT 头/载荷解析面板，更是支持实时编辑 Header/Payload 本地密钥一键重签伪造测试的 JWT 攻防沙箱。" />
       <CardContent className="flex-1 overflow-auto space-y-6">
         <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Encoded Token</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Encoded Token (输入或由下方 re-sign 实时生成)</label>
           <textarea
-            className={`w-full h-24 p-3 font-mono text-sm bg-slate-50 border rounded-lg resize-none focus:outline-none focus:ring-2 dark:bg-slate-900 dark:text-slate-100 ${error ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-primary-200'}`}
+            className="w-full h-24 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 dark:bg-slate-900 dark:text-slate-100 border-slate-200 focus:ring-primary-200"
             placeholder="eyJh..."
             value={token}
             onChange={(e) => setToken(e.target.value)}
           />
-          {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+          {parseError && <p className="text-red-500 text-xs mt-1">{parseError}</p>}
         </div>
 
-        {/* Dynamic Security Alarms & Audit recommendations */}
-        {token && !error && (
+        {/* Dynamic Security Alarms */}
+        {token && (
           <div className="space-y-2.5">
             {headerObj?.alg === 'none' && (
               <div className="status-error p-3 text-xs leading-5">
-                🔴 <b>高危安全警告：</b>此 Token 显式设置了 <code>alg: &apos;none&apos;</code> 签名算法！这意味着任意恶意客户端均可在不提供签名的情况下随意篡改 Header 或 Payload 并通过后端逻辑，代表极重度签名绕过风险！
+                🔴 <b>高危安全警告：</b>此 Token 显式设置了 <code>alg: &apos;none&apos;</code> 签名算法！这意味着任意恶意客户端均可在不提供签名的情况下随意篡改并绕过验证。
               </div>
             )}
             
             {crackedKey && (
               <div className="status-error p-3 text-xs leading-5">
-                🔴 <b>高危安全警告：</b>经过字典爆破，此 Token 使用了极度脆弱的公共弱签名密钥：<span className="font-mono bg-red-100 dark:bg-red-950 font-bold px-2 py-0.5 rounded text-red-700 dark:text-red-400">{crackedKey}</span>！这使得任何人皆可在本地生成新签名并篡改越权。请在生产中立即升级！
+                🔴 <b>高危安全警告：</b>此 Token 使用了被字典破解出的极弱公共密钥：<span className="font-mono bg-red-100 dark:bg-red-950 font-bold px-2 py-0.5 rounded text-red-700 dark:text-red-400">{crackedKey}</span>！
               </div>
             )}
 
             {payloadObj && !payloadObj.exp && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-                🟡 <b>安全防范建议：</b>该 Token 的 Payload 缺失了 <code>exp</code> (Expiration Time 过期时间) 声明。缺少 exp 将使该凭据永久有效，无法防范令牌重放攻击或生命周期劫持。
+                🟡 <b>安全防范建议：</b>该 Token 的 Payload 缺失了 <code>exp</code> (Expiration Time 过期时间) 声明，缺少 exp 使得凭据永久有效。
               </div>
             )}
 
             {secretKey && secretKey.length < 32 && (
               <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-xs leading-5 text-indigo-850">
-                🔵 <b>密钥强度审计：</b>当前验证密钥长度为 {secretKey.length} 位。根据 RFC-7518 安全标准，HMAC-SHA256 签名算法的密匙长度推荐使用至少 <b>32 字符 (256 bits)</b>，以防范现代 GPU 级并行暴力碰撞破解。
+                🔵 <b>密钥强度审计：</b>当前验证密钥长度为 {secretKey.length} 位。根据 RFC-7518 标准，HMAC-SHA256 密钥应至少为 <b>32 字符 (256 bits)</b>。
               </div>
             )}
           </div>
         )}
         
+        {/* Editable Headers & Payload */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Header</label>
-            <pre className="w-full h-48 p-3 font-mono text-xs bg-slate-900 text-green-400 rounded-lg overflow-auto border border-slate-700">
-              {header || '// Header'}
-            </pre>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Header (可在此处直接修改 JSON 并重签)</label>
+            <textarea
+              className="w-full h-48 p-3 font-mono text-xs bg-slate-900 text-green-400 rounded-lg overflow-auto border border-slate-700 focus:outline-none focus:border-green-500 resize-none leading-relaxed"
+              value={headerInput}
+              onChange={e => setHeaderInput(e.target.value)}
+            />
           </div>
           <div>
-             <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Payload</label>
-             <pre className="w-full h-48 p-3 font-mono text-xs bg-slate-900 text-blue-400 rounded-lg overflow-auto border border-slate-700">
-              {payload || '// Payload'}
-            </pre>
+             <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Payload (可在此处直接修改 JSON 并重签)</label>
+             <textarea
+              className="w-full h-48 p-3 font-mono text-xs bg-slate-900 text-blue-400 rounded-lg overflow-auto border border-slate-700 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"
+              value={payloadInput}
+              onChange={e => setPayloadInput(e.target.value)}
+            />
           </div>
         </div>
 
         {/* Verification Board Card */}
-        {token && !error && (
-          <div className="tool-panel p-4 space-y-4">
-            <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350 uppercase tracking-wider">
-              🛡️ 本地签名验证与字典安全爆破
-            </h4>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-              <div>
-                <FieldLabel>输入验证签名密钥 (HMAC Secret Key)</FieldLabel>
-                <Input
-                  className="font-mono text-sm"
-                  type="password"
-                  placeholder="Secret key..."
-                  value={secretKey}
-                  onChange={e => setSecretKey(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-2 flex-wrap">
-                <Button onClick={handleVerify} disabled={!secretKey}>
-                  验证签名
-                </Button>
-                <Button variant="secondary" onClick={handleBruteForce} isLoading={isAuditing}>
-                  弱密钥审计碰撞
-                </Button>
-              </div>
+        <div className="tool-panel p-4 space-y-4">
+          <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350 uppercase tracking-wider">
+            🛡️ JWT 签名调试、验证与安全爆破沙箱
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+            <div>
+              <FieldLabel>签名与验证密钥 (HMAC Secret Key)</FieldLabel>
+              <Input
+                className="font-mono text-sm"
+                type="text"
+                placeholder="Secret key..."
+                value={secretKey}
+                onChange={e => setSecretKey(e.target.value)}
+              />
             </div>
 
-            {verificationResult === 'valid' && (
-              <div className="p-3 text-xs leading-5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-bold flex items-center gap-2">
-                🟢 签名验证成功！在本地算力下基于当前密钥对 Token 的完整性校验通过。
-              </div>
-            )}
-
-            {verificationResult === 'invalid' && (
-              <div className="p-3 text-xs leading-5 bg-red-50 text-red-800 rounded-lg border border-red-200 font-bold flex items-center gap-2">
-                🔴 签名校验失败！签名不匹配，Token 曾被非法篡改或您输入的密钥不正确。
-              </div>
-            )}
-
-            {verificationResult === 'error' && (
-              <div className="p-3 text-xs leading-5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 flex items-center gap-2">
-                ⚠️ 本地校验过程中遇到错误，可能是算法不属于 HMAC-SHA256 导致。
-              </div>
-            )}
+            <div className="flex gap-2 flex-wrap">
+              <Button onClick={handleSignToken}>
+                一键重签 & 生成 Token
+              </Button>
+              <Button variant="secondary" onClick={handleVerify} disabled={!secretKey || !token}>
+                验证签名
+              </Button>
+              <Button variant="secondary" onClick={handleBruteForce} disabled={!token} isLoading={isAuditing}>
+                弱密钥审计碰撞
+              </Button>
+            </div>
           </div>
-        )}
+
+          {verificationResult === 'valid' && (
+            <div className="p-3 text-xs leading-5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-bold flex items-center gap-2">
+              🟢 签名验证成功！在本地算力下基于当前密钥对 Token 的完整性校验通过。
+            </div>
+          )}
+
+          {verificationResult === 'invalid' && (
+            <div className="p-3 text-xs leading-5 bg-red-50 text-red-800 rounded-lg border border-red-200 font-bold flex items-center gap-2">
+              🔴 签名校验失败！签名不匹配，Token 曾被非法篡改或您输入的密钥不正确。
+            </div>
+          )}
+
+          {verificationResult === 'error' && (
+            <div className="p-3 text-xs leading-5 bg-amber-50 text-amber-800 rounded-lg border border-amber-200 flex items-center gap-2">
+              ⚠️ 本地校验过程中遇到错误，可能是算法不属于 HMAC-SHA256 导致。
+            </div>
+          )}
+        </div>
 
         {claims.length > 0 && (
           <div className="tool-panel grid gap-3 p-4 md:grid-cols-2">

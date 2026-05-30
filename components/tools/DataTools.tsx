@@ -319,3 +319,249 @@ export const SqlFormatterTool: React.FC = () => {
     </Card>
   );
 };
+
+// --- JSON Schema Generator & Local Validator ---
+const generateSchema = (val: unknown): Record<string, any> => {
+  if (val === null) return { type: 'null' };
+  if (typeof val === 'string') return { type: 'string' };
+  if (typeof val === 'number') return { type: Number.isInteger(val) ? 'integer' : 'number' };
+  if (typeof val === 'boolean') return { type: 'boolean' };
+  if (Array.isArray(val)) {
+    const items = val.length > 0 ? generateSchema(val[0]) : {};
+    return { type: 'array', items };
+  }
+  if (typeof val === 'object') {
+    const properties: Record<string, any> = {};
+    const required: string[] = [];
+    const obj = val as Record<string, any>;
+    for (const key of Object.keys(obj)) {
+      properties[key] = generateSchema(obj[key]);
+      required.push(key);
+    }
+    return { type: 'object', properties, required };
+  }
+  return {};
+};
+
+const validateJson = (schema: any, data: any, path = 'root'): string[] => {
+  const errors: string[] = [];
+  if (!schema || typeof schema !== 'object') return errors;
+
+  const type = schema.type;
+  if (type) {
+    if (type === 'null' && data !== null) {
+      errors.push(`[${path}] 应为 null，但实际为 ${typeof data}`);
+    } else if (type === 'string' && typeof data !== 'string') {
+      errors.push(`[${path}] 应为 string，但实际为 ${typeof data}`);
+    } else if (type === 'boolean' && typeof data !== 'boolean') {
+      errors.push(`[${path}] 应为 boolean，但实际为 ${typeof data}`);
+    } else if (type === 'number' && typeof data !== 'number') {
+      errors.push(`[${path}] 应为 number，但实际为 ${typeof data}`);
+    } else if (type === 'integer' && !Number.isInteger(data)) {
+      errors.push(`[${path}] 应为 integer，但实际为 ${typeof data === 'number' ? 'float' : typeof data}`);
+    } else if (type === 'array' && !Array.isArray(data)) {
+      errors.push(`[${path}] 应为 array，但实际为 ${typeof data}`);
+    } else if (type === 'object' && (typeof data !== 'object' || data === null || Array.isArray(data))) {
+      errors.push(`[${path}] 应为 object，但实际为 ${typeof data}`);
+    }
+  }
+
+  if (type === 'object' && data && typeof data === 'object' && !Array.isArray(data)) {
+    const props = schema.properties;
+    if (props) {
+      for (const key of Object.keys(props)) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+          errors.push(...validateJson(props[key], data[key], `${path}.${key}`));
+        }
+      }
+    }
+    const required = schema.required;
+    if (Array.isArray(required)) {
+      for (const reqKey of required) {
+        if (!Object.prototype.hasOwnProperty.call(data, reqKey)) {
+          errors.push(`[${path}] 缺失必需的属性: "${reqKey}"`);
+        }
+      }
+    }
+  }
+
+  if (type === 'array' && Array.isArray(data)) {
+    const itemsSchema = schema.items;
+    if (itemsSchema) {
+      data.forEach((item, index) => {
+        errors.push(...validateJson(itemsSchema, item, `${path}[${index}]`));
+      });
+    }
+  }
+
+  return errors;
+};
+
+const defaultJsonSample = `{
+  "id": 1,
+  "name": "Leanne Graham",
+  "email": "Sincere@april.biz",
+  "address": {
+    "street": "Kulas Light",
+    "city": "Gwenborough"
+  },
+  "tags": ["developer", "curious"],
+  "active": true
+}`;
+
+const defaultSchemaSample = `{
+  "type": "object",
+  "properties": {
+    "id": { "type": "integer" },
+    "name": { "type": "string" },
+    "email": { "type": "string" },
+    "address": {
+      "type": "object",
+      "properties": {
+        "street": { "type": "string" },
+        "city": { "type": "string" }
+      },
+      "required": ["street", "city"]
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "active": { "type": "boolean" }
+  },
+  "required": ["id", "name", "email"]
+}`;
+
+export const JsonSchemaTool: React.FC = () => {
+  const [jsonText, setJsonText] = useState(defaultJsonSample);
+  const [schemaText, setSchemaText] = useState(defaultSchemaSample);
+  
+  const [validationOutput, setValidationOutput] = useState<{
+    status: 'idle' | 'valid' | 'invalid';
+    errors: string[];
+  }>({ status: 'idle', errors: [] });
+
+  const jsonCopy = useCopy();
+  const schemaCopy = useCopy();
+
+  const handleGenerateSchema = () => {
+    try {
+      const parsed = JSON.parse(jsonText);
+      const schema = generateSchema(parsed);
+      // Format generated schema nicely
+      setSchemaText(JSON.stringify(schema, null, 2));
+      setValidationOutput({ status: 'idle', errors: [] });
+    } catch (err) {
+      setSchemaText(`[JSON 解析失败: ${(err as Error).message}]`);
+    }
+  };
+
+  const handleValidate = () => {
+    try {
+      const data = JSON.parse(jsonText);
+      const schema = JSON.parse(schemaText);
+      const errors = validateJson(schema, data);
+      
+      setValidationOutput({
+        status: errors.length === 0 ? 'valid' : 'invalid',
+        errors
+      });
+    } catch (err) {
+      setValidationOutput({
+        status: 'invalid',
+        errors: [`[解析错误] ${ (err as Error).message }`]
+      });
+    }
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader
+        title="JSON Schema 智能验证与生成器"
+        description="本地根据 JSON 载荷一键提取 draft-07 Schema；提供多维递归校验沙箱，实时捕获缺失字段与数据类型兼容异常。"
+      />
+      <CardContent className="flex-1 flex flex-col gap-4 overflow-hidden min-h-0">
+        
+        {/* Dual Pane Editor */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0">
+          
+          {/* Left Pane: JSON Payload */}
+          <div className="flex flex-col min-h-0">
+            <div className="flex justify-between items-center mb-1.5 text-xs">
+              <FieldLabel>JSON 数据载荷 (JSON Payload)</FieldLabel>
+              <button
+                onClick={() => jsonCopy.copy(jsonText)}
+                className="text-slate-400 hover:text-primary-600 transition-colors p-1"
+                title="复制 JSON"
+              >
+                {jsonCopy.copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <textarea
+              className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
+              value={jsonText}
+              onChange={e => setJsonText(e.target.value)}
+              placeholder="请输入需要验证或提取 Schema 的 JSON 数据..."
+            />
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" className="flex-1" onClick={handleGenerateSchema} icon={<Wand2 className="w-4 h-4" />}>
+                一键生成 JSON Schema
+              </Button>
+            </div>
+          </div>
+
+          {/* Right Pane: JSON Schema */}
+          <div className="flex flex-col min-h-0">
+            <div className="flex justify-between items-center mb-1.5 text-xs">
+              <FieldLabel>JSON Schema 实体定义</FieldLabel>
+              <button
+                onClick={() => schemaCopy.copy(schemaText)}
+                className="text-slate-400 hover:text-primary-600 transition-colors p-1"
+                title="复制 Schema"
+              >
+                {schemaCopy.copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+            <textarea
+              className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/20 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
+              value={schemaText}
+              onChange={e => setSchemaText(e.target.value)}
+              placeholder="请输入或由左侧生成的 JSON Schema 对象..."
+            />
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" className="flex-1" variant="secondary" onClick={handleValidate} icon={<Check className="w-4 h-4" />}>
+                运行 Schema 本地校验
+              </Button>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Validation Output Status Panel */}
+        <div className="flex-none">
+          {validationOutput.status === 'valid' && (
+            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-ping" />
+              <span>✓ 验证通过！JSON 载荷格式与类型完全符合 JSON Schema 定义。</span>
+            </div>
+          )}
+
+          {validationOutput.status === 'invalid' && (
+            <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-300 text-xs font-medium space-y-1.5 leading-relaxed overflow-y-auto max-h-[140px]">
+              <div className="font-bold text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                <span>✗ 验证失败！共捕获 {validationOutput.errors.length} 项格式异常：</span>
+              </div>
+              <ul className="list-disc pl-4 space-y-1 font-mono text-[11px]">
+                {validationOutput.errors.map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+
+      </CardContent>
+    </Card>
+  );
+};
+

@@ -42,6 +42,7 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   // JSON & Format Studio
   'json': { studioId: 'json-studio', subToolId: 'json' },
   'json2ts': { studioId: 'json-studio', subToolId: 'json2ts' },
+  'json-schema': { studioId: 'json-studio', subToolId: 'json-schema' },
   'xml': { studioId: 'json-studio', subToolId: 'xml' },
   'yaml': { studioId: 'json-studio', subToolId: 'yaml' },
   'csv': { studioId: 'json-studio', subToolId: 'csv' },

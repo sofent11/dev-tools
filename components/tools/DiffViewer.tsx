@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Split, AlignLeft, RefreshCw, FileText } from 'lucide-react';
+import { useScratchpadStore } from './shared/scratchpadStore';
 
 interface DiffChange {
   type: 'added' | 'removed' | 'unchanged';
@@ -229,6 +230,8 @@ export const DiffViewer: React.FC = () => {
   const [newText, setNewText] = useState(JS_EXAMPLE_NEW);
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'unified'>('side-by-side');
   
+  const scratchpadItems = useScratchpadStore((state) => state.items);
+  
   // Slice Render Limits for 60 FPS Scrolling Optimization
   const [renderLimit, setRenderLimit] = useState(150);
 
@@ -287,7 +290,30 @@ export const DiffViewer: React.FC = () => {
           <div className="flex flex-col min-h-0">
             <div className="flex justify-between items-center mb-1 text-xs">
               <span className="font-bold text-slate-400 uppercase tracking-wider">原始文本 (Original)</span>
-              <span className="text-slate-500 font-mono">{lines1.length} 行 | {oldText.length} 字符</span>
+              <div className="flex items-center gap-2">
+                {scratchpadItems.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        const item = scratchpadItems.find(i => i.id === val);
+                        if (item) {
+                          setOldText(item.content);
+                          setRenderLimit(150);
+                        }
+                        e.target.value = '';
+                      }
+                    }}
+                    className="p-0.5 border rounded bg-slate-950 border-slate-800 text-[10px] text-slate-400 focus:outline-none"
+                  >
+                    <option value="">暂存箱载入...</option>
+                    {scratchpadItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                )}
+                <span className="text-slate-500 font-mono">{lines1.length} 行 | {oldText.length} 字符</span>
+              </div>
             </div>
             <textarea
               className="flex-1 w-full p-3 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
@@ -302,7 +328,30 @@ export const DiffViewer: React.FC = () => {
           <div className="flex flex-col min-h-0">
             <div className="flex justify-between items-center mb-1 text-xs">
               <span className="font-bold text-slate-400 uppercase tracking-wider">修改后文本 (Modified)</span>
-              <span className="text-slate-500 font-mono">{lines2.length} 行 | {newText.length} 字符</span>
+              <div className="flex items-center gap-2">
+                {scratchpadItems.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val) {
+                        const item = scratchpadItems.find(i => i.id === val);
+                        if (item) {
+                          setNewText(item.content);
+                          setRenderLimit(150);
+                        }
+                        e.target.value = '';
+                      }
+                    }}
+                    className="p-0.5 border rounded bg-slate-950 border-slate-800 text-[10px] text-slate-400 focus:outline-none"
+                  >
+                    <option value="">暂存箱载入...</option>
+                    {scratchpadItems.map(item => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                )}
+                <span className="text-slate-500 font-mono">{lines2.length} 行 | {newText.length} 字符</span>
+              </div>
             </div>
             <textarea
               className="flex-1 w-full p-3 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"

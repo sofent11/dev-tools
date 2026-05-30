@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, HelpCircle, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel } from '../ui/ToolUi';
@@ -21,6 +21,112 @@ export const HttpBuilderTool: React.FC = () => {
     const [body, setBody] = useState('');
     const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // Code snippet exporter states
+    const [resTab, setResTab] = useState<'response' | 'export'>('response');
+    const [exportLang, setExportLang] = useState<'fetch' | 'axios' | 'curl' | 'python' | 'go'>('fetch');
+    const [copiedSnippet, setCopiedSnippet] = useState(false);
+
+    const handleCopySnippet = async (snippet: string) => {
+        await navigator.clipboard.writeText(snippet);
+        setCopiedSnippet(true);
+        setTimeout(() => setCopiedSnippet(false), 1500);
+    };
+
+    const getCodeSnippet = () => {
+        let parsedHeaders: Record<string, string> = {};
+        try {
+            parsedHeaders = JSON.parse(headers || '{}');
+        } catch (e) {
+            // Ignore JSON parsing errors
+        }
+
+        const hasBody = method !== 'GET' && method !== 'HEAD' && body;
+        const targetUrl = url || 'https://api.example.com/data';
+
+        switch (exportLang) {
+            case 'fetch': {
+                let optsStr = `{\n  method: '${method}',\n`;
+                if (Object.keys(parsedHeaders).length > 0) {
+                    optsStr += `  headers: ${JSON.stringify(parsedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
+                }
+                if (hasBody) {
+                    optsStr += `  body: JSON.stringify(${body.trim() || '{}'}),\n`;
+                }
+                if (optsStr.endsWith(',\n')) optsStr = optsStr.slice(0, -2) + '\n';
+                optsStr += '}';
+                return `fetch('${targetUrl}', ${optsStr})\n  .then(res => res.json())\n  .then(data => console.log(data))\n  .catch(err => console.error(err));`;
+            }
+            case 'axios': {
+                let configStr = `{\n  method: '${method.toLowerCase()}',\n  url: '${targetUrl}',\n`;
+                if (Object.keys(parsedHeaders).length > 0) {
+                    configStr += `  headers: ${JSON.stringify(parsedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
+                }
+                if (hasBody) {
+                    try {
+                        const parsedBody = JSON.parse(body);
+                        configStr += `  data: ${JSON.stringify(parsedBody, null, 4).replace(/\n/g, '\n  ')},\n`;
+                    } catch {
+                        configStr += `  data: '${body.replace(/'/g, "\\'")}',\n`;
+                    }
+                }
+                if (configStr.endsWith(',\n')) configStr = configStr.slice(0, -2) + '\n';
+                configStr += '}';
+                return `import axios from 'axios';\n\naxios(${configStr})\n  .then(res => {\n    console.log(res.data);\n  })\n  .catch(err => {\n    console.error(err);\n  });`;
+            }
+            case 'curl': {
+                let curl = `curl -X ${method} "${targetUrl}"`;
+                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                    curl += ` \\\n  -H "${k}: ${v}"`;
+                });
+                if (hasBody) {
+                    curl += ` \\\n  -d '${body.replace(/'/g, "'\\''")}'`;
+                }
+                return curl;
+            }
+            case 'python': {
+                let code = `import requests\nimport json\n\nurl = "${targetUrl}"\n`;
+                if (Object.keys(parsedHeaders).length > 0) {
+                    code += `headers = ${JSON.stringify(parsedHeaders, null, 4)}\n`;
+                } else {
+                    code += `headers = {}\n`;
+                }
+                if (hasBody) {
+                    try {
+                        const parsedBody = JSON.parse(body);
+                        code += `data = ${JSON.stringify(parsedBody, null, 4)}\n`;
+                        code += `response = requests.${method.toLowerCase()}(url, headers=headers, json=data)\n`;
+                    } catch {
+                        code += `data = """${body}"""\n`;
+                        code += `response = requests.${method.toLowerCase()}(url, headers=headers, data=data)\n`;
+                    }
+                } else {
+                    code += `response = requests.${method.toLowerCase()}(url, headers=headers)\n`;
+                }
+                code += `print(response.status_code)\nprint(response.json())`;
+                return code;
+            }
+            case 'go': {
+                let headersCode = '';
+                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                    headersCode += `\treq.Header.Add("${k}", "${v}")\n`;
+                });
+
+                let bodyReader = 'nil';
+                let importBody = '';
+                let bodyDef = '';
+                if (hasBody) {
+                    importBody = '\n\t"strings"';
+                    bodyDef = `\tpayload := strings.NewReader(\`${body}\`)\n`;
+                    bodyReader = 'payload';
+                }
+
+                return `package main\n\nimport (\n\t"fmt"\n\t"io"\n\t"net/http"${importBody}\n)\n\nfunc main() {\n\turl := "${targetUrl}"\n${bodyDef}\treq, _ := http.NewRequest("${method}", url, ${bodyReader})\n${headersCode}\n\tclient := &http.Client{}\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer resp.Body.Close()\n\n\tbody, _ := io.ReadAll(resp.Body)\n\tfmt.Println(resp.Status)\n\tfmt.Println(string(body))\n}`;
+            }
+            default:
+                return '';
+        }
+    };
 
     // CORS Proxy States
     const [useProxy, setUseProxy] = useState(false);
@@ -300,18 +406,64 @@ export const HttpBuilderTool: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Response Card */}
-                    <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[160px]">
-                        <div className="bg-slate-50 dark:bg-slate-950 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                                响应数据 (Response)
-                            </span>
+                    {/* Tabbed Response & Code Gen Card */}
+                    <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[220px]">
+                        <div className="bg-slate-50 dark:bg-slate-950 px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
+                            <div className="flex gap-2">
+                                <button 
+                                    className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'response' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                    onClick={() => setResTab('response')}
+                                >
+                                    响应结果
+                                </button>
+                                <button 
+                                    className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'export' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+                                    onClick={() => setResTab('export')}
+                                >
+                                    导出请求代码
+                                </button>
+                            </div>
                         </div>
-                        <textarea
-                            readOnly
-                            className="flex-1 p-3 bg-slate-950 border-0 outline-none font-mono text-xs text-emerald-400 leading-relaxed resize-none overflow-auto"
-                            value={response}
-                        />
+
+                        {resTab === 'response' ? (
+                            <textarea
+                                readOnly
+                                className="flex-1 p-3 bg-slate-950 border-0 outline-none font-mono text-xs text-emerald-400 leading-relaxed resize-none overflow-auto"
+                                value={response}
+                            />
+                        ) : (
+                            <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
+                                {/* Language selection buttons */}
+                                <div className="flex flex-wrap gap-1.5 mb-2 flex-none">
+                                    {(['fetch', 'axios', 'curl', 'python', 'go'] as const).map(lang => (
+                                        <button
+                                            key={lang}
+                                            onClick={() => setExportLang(lang)}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
+                                                exportLang === lang 
+                                                    ? 'bg-primary-950 border-primary-800 text-primary-400' 
+                                                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                                            }`}
+                                        >
+                                            {lang.toUpperCase()}
+                                        </button>
+                                    ))}
+                                </div>
+                                
+                                {/* Snippet output container */}
+                                <div className="flex-1 relative min-h-0">
+                                    <pre className="w-full h-full p-2.5 rounded-lg border border-slate-900 bg-slate-900/40 font-mono text-[10px] text-slate-300 overflow-auto whitespace-pre leading-relaxed select-all">
+                                        {getCodeSnippet()}
+                                    </pre>
+                                    <button
+                                        onClick={() => handleCopySnippet(getCodeSnippet())}
+                                        className="absolute top-2 right-2 p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200 transition-all shadow-md hover:bg-slate-800"
+                                    >
+                                        {copiedSnippet ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -480,6 +632,265 @@ export const IpInfoTool: React.FC = () => {
                     </div>
                 )}
              </CardContent>
+        </Card>
+    );
+};
+
+interface PingRecord {
+    time: number;
+    latency: number;
+    status: 'success' | 'error';
+}
+
+export const PingAnalyzerTool: React.FC = () => {
+    const [target, setTarget] = useState('https://www.cloudflare.com/cdn-cgi/trace');
+    const [customUrl, setCustomUrl] = useState('');
+    const [intervalMs, setIntervalMs] = useState(1000);
+    const [isRunning, setIsRunning] = useState(false);
+    const [history, setHistory] = useState<PingRecord[]>([]);
+    
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Derive network stats dynamically on every render to fully prevent set-state-in-effect issues
+    const successes = history.filter(h => h.status === 'success');
+    const total = history.length;
+    const lossRate = total > 0 ? Math.round(((total - successes.length) / total) * 100) : 0;
+
+    let avg = 0;
+    let min = 0;
+    let max = 0;
+    let jitter = 0;
+
+    if (successes.length > 0) {
+        const latencies = successes.map(h => h.latency);
+        const sum = latencies.reduce((a, b) => a + b, 0);
+        avg = Math.round(sum / latencies.length);
+        min = Math.min(...latencies);
+        max = Math.max(...latencies);
+
+        let jitterSum = 0;
+        let count = 0;
+        for (let i = 1; i < latencies.length; i++) {
+            jitterSum += Math.abs(latencies[i] - latencies[i-1]);
+            count++;
+        }
+        jitter = count > 0 ? Math.round(jitterSum / count) : 0;
+    }
+
+    const performPing = async () => {
+        const pingUrl = target === 'custom' ? customUrl : target;
+        if (!pingUrl) return;
+
+        const urlWithBuster = `${pingUrl}${pingUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        const start = performance.now();
+        
+        try {
+            await fetch(urlWithBuster, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3000) });
+            const latency = Math.round(performance.now() - start);
+            
+            setHistory(prev => {
+                const next = [...prev, { time: Date.now(), latency, status: 'success' }];
+                return next.slice(-30);
+            });
+        } catch {
+            setHistory(prev => {
+                const next = [...prev, { time: Date.now(), latency: 0, status: 'error' }];
+                return next.slice(-30);
+            });
+        }
+    };
+
+    useEffect(() => {
+        if (isRunning) {
+            // Defer immediate invocation to bypass set-state-in-effect synchronous rendering error
+            Promise.resolve().then(performPing);
+            timerRef.current = setInterval(performPing, intervalMs);
+        } else {
+            if (timerRef.current) clearInterval(timerRef.current);
+        }
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [isRunning, target, customUrl, intervalMs]);
+
+    const renderChart = () => {
+        if (history.length === 0) return null;
+        
+        const width = 500;
+        const height = 150;
+        const padding = 20;
+
+        const maxVal = Math.max(...history.map(h => h.latency), 100);
+        
+        const points = history.map((record, i) => {
+            const x = padding + (i * (width - padding * 2)) / Math.max(1, history.length - 1);
+            const y = height - padding - (record.status === 'success' ? (record.latency * (height - padding * 2)) / maxVal : 0);
+            return { x, y, record };
+        });
+
+        const pathD = points.length > 1 
+            ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
+            : '';
+
+        const areaD = points.length > 1
+            ? `${pathD} L ${points[points.length-1].x} ${height - padding} L ${points[0].x} ${height - padding} Z`
+            : '';
+
+        return (
+            <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full text-primary-500 overflow-visible">
+                <defs>
+                    <linearGradient id="pingAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="rgb(59, 130, 246)" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="rgb(59, 130, 246)" stopOpacity="0.0" />
+                    </linearGradient>
+                </defs>
+                <line x1={padding} y1={padding} x2={width-padding} y2={padding} stroke="#1e293b" strokeDasharray="3,3" />
+                <line x1={padding} y1={height/2} x2={width-padding} y2={height/2} stroke="#1e293b" strokeDasharray="3,3" />
+                <line x1={padding} y1={height-padding} x2={width-padding} y2={height-padding} stroke="#334155" />
+
+                <text x={padding + 5} y={padding + 12} fill="#64748b" className="text-[8px] font-mono font-bold">{maxVal}ms</text>
+                <text x={padding + 5} y={height/2 + 4} fill="#64748b" className="text-[8px] font-mono font-bold">{Math.round(maxVal/2)}ms</text>
+
+                {areaD && <path d={areaD} fill="url(#pingAreaGrad)" />}
+                {pathD && <path d={pathD} fill="none" stroke="rgb(59, 130, 246)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+
+                {points.map((p, idx) => (
+                    <g key={idx} className="group/dot cursor-pointer">
+                        <circle 
+                            cx={p.x} cy={p.y} r={p.record.status === 'success' ? 3.5 : 5}
+                            fill={p.record.status === 'success' ? 'rgb(59, 130, 246)' : 'rgb(239, 68, 68)'}
+                            className="transition-all hover:scale-150"
+                        />
+                        <title>
+                            {`时间: ${new Date(p.record.time).toLocaleTimeString()}\n延时: ${p.record.status === 'success' ? p.record.latency + 'ms' : '丢包/超时'}`}
+                        </title>
+                    </g>
+                ))}
+            </svg>
+        );
+    };
+
+    return (
+        <Card className="h-full flex flex-col">
+            <CardHeader title="本地网络延迟与抖动 Ping 仪表盘" description="在本地浏览器内通过多节点 HTTP 并发轻量嗅探计算网络时延、波动抖动及丢包比率。" />
+            <CardContent className="flex-1 overflow-auto p-6 space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end text-xs">
+                    <div className="md:col-span-4 space-y-1.5">
+                        <FieldLabel>嗅探节点服务器</FieldLabel>
+                        <select
+                            value={target}
+                            onChange={e => setTarget(e.target.value)}
+                            className="w-full p-2 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-semibold"
+                        >
+                            <option value="https://www.cloudflare.com/cdn-cgi/trace">Cloudflare Global Edge</option>
+                            <option value="https://www.baidu.com/favicon.ico">Baidu (中国大陆推荐)</option>
+                            <option value="https://github.com/favicon.ico">GitHub Server</option>
+                            <option value="https://www.taobao.com/favicon.ico">Taobao Edge</option>
+                            <option value="custom">自定义主机 URL</option>
+                        </select>
+                    </div>
+
+                    {target === 'custom' && (
+                        <div className="md:col-span-4 space-y-1.5">
+                            <FieldLabel>自定义请求 URL (需支持 HEAD/GET)</FieldLabel>
+                            <input
+                                value={customUrl}
+                                onChange={e => setCustomUrl(e.target.value)}
+                                placeholder="https://api.myhost.com/health"
+                                className="w-full p-2 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-mono"
+                            />
+                        </div>
+                    )}
+
+                    <div className="md:col-span-2 space-y-1.5">
+                        <FieldLabel>探测采样间隔</FieldLabel>
+                        <select
+                            value={intervalMs}
+                            onChange={e => setIntervalMs(Number(e.target.value))}
+                            className="w-full p-2 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-mono"
+                        >
+                            <option value={500}>500 ms</option>
+                            <option value={1000}>1.0 秒</option>
+                            <option value={2000}>2.0 秒</option>
+                            <option value={5000}>5.0 秒</option>
+                        </select>
+                    </div>
+
+                    <div className="md:col-span-3 flex gap-2">
+                        <button
+                            onClick={() => setIsRunning(!isRunning)}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-bold transition-all shadow active:scale-95 border ${
+                                isRunning 
+                                    ? 'bg-rose-600 border-rose-500 text-white' 
+                                    : 'bg-primary-600 border-primary-500 text-white'
+                            }`}
+                        >
+                            {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                            <span>{isRunning ? '暂停探测' : '开启探测'}</span>
+                        </button>
+                        <button
+                            onClick={() => setHistory([])}
+                            className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 font-bold transition-all"
+                        >
+                            重置
+                        </button>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">实时延迟</span>
+                        <p className="text-2xl font-mono font-bold text-slate-800 dark:text-slate-100">
+                            {history.length > 0 && history[history.length - 1].status === 'success' 
+                                ? `${history[history.length - 1].latency} ms` 
+                                : '--'
+                            }
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">平均延时</span>
+                        <p className="text-2xl font-mono font-bold text-primary-500">{avg ? `${avg} ms` : '--'}</p>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">网络抖动 (Jitter)</span>
+                        <p className="text-2xl font-mono font-bold text-amber-500">{jitter ? `${jitter} ms` : '--'}</p>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">丢包率</span>
+                        <p className={`text-2xl font-mono font-bold ${lossRate > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                            {lossRate}%
+                        </p>
+                    </div>
+                    <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">极值 (Min/Max)</span>
+                        <p className="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 mt-1">
+                            {min || max ? `${min} / ${max} ms` : '--'}
+                        </p>
+                    </div>
+                </div>
+
+                <div className="p-5 border border-slate-200 dark:border-slate-800 bg-slate-950 rounded-2xl flex flex-col justify-between min-h-[220px]">
+                    <div className="flex justify-between items-center text-xs mb-3">
+                        <div className="flex items-center gap-2 font-bold text-slate-300">
+                            <Activity className="w-4 h-4 text-primary-500 animate-pulse" />
+                            <span>延迟波动实时波形图</span>
+                        </div>
+                        <span className="text-[10px] text-slate-500 font-mono">采集上限: 最近 30 次</span>
+                    </div>
+
+                    <div className="flex-1 flex items-center justify-center min-h-[150px]">
+                        {history.length > 0 ? (
+                            renderChart()
+                        ) : (
+                            <div className="text-slate-500 text-xs text-center space-y-2 select-none">
+                                <Wifi className="w-10 h-10 text-slate-700 mx-auto stroke-1" />
+                                <p>开启网络探测以载入实时延迟波形图表</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+            </CardContent>
         </Card>
     );
 };

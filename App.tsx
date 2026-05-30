@@ -1,7 +1,8 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check
 } from 'lucide-react';
+import { useScratchpadStore } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 
@@ -50,6 +51,12 @@ export default function App() {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  // Zustand Global Scratchpad Store State
+  const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
+  const scratchpadItems = useScratchpadStore((state) => state.items);
+  const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
+  const clearScratchpad = useScratchpadStore((state) => state.clearAll);
 
   useEffect(() => {
     if (isDarkMode) {
@@ -256,7 +263,19 @@ export default function App() {
               <p className="mt-0.5 truncate text-sm text-slate-500">{activeTool.description}</p>
             </div>
           </div>
-          <div className="flex items-center gap-4 ml-auto md:ml-0">
+          <div className="flex items-center gap-3 ml-auto md:ml-0">
+            <button
+              onClick={() => setIsScratchpadOpen(true)}
+              className="relative p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+              title="打开全局数据暂存箱"
+            >
+              <ClipboardList className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+              {scratchpadItems.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary-500 text-[9px] font-bold text-white leading-none">
+                  {scratchpadItems.length}
+                </span>
+              )}
+            </button>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
@@ -290,6 +309,123 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* Global Scratchpad Drawer Drawer */}
+      {isScratchpadOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+          onClick={() => setIsScratchpadOpen(false)}
+        >
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-80 sm:w-96 max-w-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-850 shadow-2xl flex flex-col p-5 animate-in slide-in-from-right duration-250"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 flex-none">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 text-primary-500 animate-pulse" />
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">全局数据暂存箱</h3>
+                  <p className="text-[10px] text-slate-400">临时保存文本/代码，打通所有 Studio</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsScratchpadOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-3 space-y-3 pr-1 scrollbar-thin">
+              {scratchpadItems.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
+                  <ClipboardList className="w-12 h-12 text-slate-300 dark:text-slate-800 stroke-1" />
+                  <span className="font-bold">暂存箱暂无内容</span>
+                  <p className="text-[10px] text-slate-500 text-center max-w-[220px] leading-relaxed">
+                    您可以在 Mock数据、图片矢量化、Hex查看器 等工具中直接点击“送入暂存箱”将数据路由到此处。
+                  </p>
+                </div>
+              ) : (
+                scratchpadItems.map(item => (
+                  <ScratchpadItemCard key={item.id} item={item} onRemove={removeScratchpadItem} />
+                ))
+              )}
+            </div>
+
+            {scratchpadItems.length > 0 && (
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex-none">
+                <button
+                  onClick={clearScratchpad}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 font-bold text-xs select-none transition-all active:scale-95"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>清空暂存箱</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const ScratchpadItemCard: React.FC<{ item: any; onRemove: (id: string) => void }> = ({ item, onRemove }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(item.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleDownload = () => {
+    const blob = new Blob([item.content], { type: 'text/plain;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = item.name;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
+  return (
+    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs relative group transition-all hover:shadow-sm">
+      <div className="flex justify-between items-start">
+        <div className="min-w-0 flex-1 pr-2">
+          <p className="font-bold text-slate-800 dark:text-slate-200 truncate font-mono text-[11px]" title={item.name}>
+            {item.name}
+          </p>
+          <span className="text-[9px] text-slate-400 block mt-0.5">
+            {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} 字符
+          </span>
+        </div>
+        <div className="flex gap-1 shrink-0">
+          <button 
+            onClick={handleCopy}
+            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+            title="复制"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+          <button 
+            onClick={handleDownload}
+            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+            title="下载"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button 
+            onClick={() => onRemove(item.id)}
+            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 transition-colors"
+            title="删除"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded font-mono text-[10px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none">
+        {item.content.slice(0, 300)}{item.content.length > 300 ? '...' : ''}
+      </div>
+    </div>
+  );
+};

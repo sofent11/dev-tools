@@ -10,6 +10,8 @@ import {
   Settings,
   Sparkles,
   Upload,
+  Copy,
+  Check,
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import JSZip from 'jszip';
@@ -1644,14 +1646,398 @@ const StickerSplitterPanel: React.FC = () => {
   );
 };
 
+// --- Image Vectorizer Panel (Grayscale Marching Edges) ---
+const ImageVectorizerPanel: React.FC = () => {
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState(128);
+  const [simplifyTolerance, setSimplifyTolerance] = useState(0.5);
+  const [invert, setInvert] = useState(false);
+  const [fillColor, setFillColor] = useState('#0f172a');
+  const [bgColor, setBgColor] = useState('transparent');
+  const [svgPath, setSvgPath] = useState('');
+  const [svgWidth, setSvgWidth] = useState(0);
+  const [svgHeight, setSvgHeight] = useState(0);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showCode, setShowCode] = useState(false);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selected = e.target.files[0];
+      setFile(selected);
+      const url = URL.createObjectURL(selected);
+      setPreviewUrl(url);
+      setSvgPath('');
+    }
+  };
+
+  const getSvgContent = () => {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="100%" height="100%" style="background-color: ${bgColor};">\n  <path d="${svgPath}" fill="${fillColor}" fill-rule="evenodd" />\n</svg>`;
+  };
+
+  const handleCopyCode = async () => {
+    await navigator.clipboard.writeText(getSvgContent());
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleDownloadSvg = () => {
+    const svgContent = getSvgContent();
+    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+    const name = file ? getBaseName(file.name) : 'vectorized';
+    downloadBlob(blob, `${name}.svg`);
+  };
+
+  const sendSvgToScratchpad = () => {
+    if (!svgPath) return;
+    try {
+      const scratchEvent = new CustomEvent('add-scratchpad-item', {
+        detail: {
+          name: `${file ? getBaseName(file.name) : 'vectorized'}.svg`,
+          content: getSvgContent(),
+          type: 'text'
+        }
+      });
+      window.dispatchEvent(scratchEvent);
+      alert('已成功将生成的无损 SVG 送入全局暂存箱！');
+    } catch {
+      alert('送入暂存箱失败');
+    }
+  };
+
+  const handleVectorize = () => {
+    if (!previewUrl) return;
+    setIsProcessing(true);
+
+    const img = new Image();
+    img.onload = () => {
+      const maxSide = 600;
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+      if (w > maxSide || h > maxSide) {
+        if (w > h) {
+          h = Math.round((h * maxSide) / w);
+          w = maxSide;
+        } else {
+          w = Math.round((w * maxSide) / h);
+          h = maxSide;
+        }
+      }
+
+      setSvgWidth(w);
+      setSvgHeight(h);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setIsProcessing(false);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, w, h);
+      const path = runMarchingEdges(canvas, threshold, invert, simplifyTolerance);
+      setSvgPath(path);
+      setIsProcessing(false);
+    };
+    img.src = previewUrl;
+  };
+
+  useEffect(() => {
+    if (previewUrl) {
+      Promise.resolve().then(handleVectorize);
+    }
+  }, [threshold, simplifyTolerance, invert, previewUrl]);
+
+  return (
+    <CardContent className="flex-1 flex flex-col lg:flex-row gap-6 overflow-auto p-6 min-h-0 text-slate-700 dark:text-slate-200">
+      <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4">
+        {!previewUrl ? (
+          <div 
+            onClick={() => document.getElementById('vector-file')?.click()}
+            className="flex-1 min-h-[220px] border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-xl flex flex-col items-center justify-center p-6 text-center cursor-pointer hover:border-primary-500 hover:bg-slate-50 dark:hover:bg-slate-900/10 transition-all"
+          >
+            <input 
+              type="file" id="vector-file" className="hidden" 
+              accept="image/*" onChange={handleFileChange}
+            />
+            <Upload className="w-10 h-10 text-slate-400 mb-3" />
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">选择本地位图进行矢量化</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">支持 PNG, JPG, WEBP • 纯本地离线计算</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-3 text-xs">
+              <ImageIcon className="w-8 h-8 text-primary-500 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{file?.name}</p>
+                <p className="text-[10px] text-slate-500">尺寸: {svgWidth} x {svgHeight} px</p>
+              </div>
+              <button
+                onClick={() => {
+                  setFile(null);
+                  setPreviewUrl(null);
+                  setSvgPath('');
+                }}
+                className="text-[10px] text-rose-500 font-bold hover:underline"
+              >
+                移除
+              </button>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
+                <span>二值化阈值 (Threshold)</span>
+                <span className="font-mono text-primary-500">{threshold}</span>
+              </div>
+              <input 
+                type="range" min="0" max="255" value={threshold} 
+                onChange={e => setThreshold(Number(e.target.value))}
+                className="w-full accent-primary-500"
+              />
+              <p className="text-[9px] text-slate-500">数值越低提取线条越细，数值越高填充面积越大。</p>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
+              <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
+                <span>平滑化程度 (Simplify)</span>
+                <span className="font-mono text-primary-500">{simplifyTolerance}px</span>
+              </div>
+              <input 
+                type="range" min="0" max="3" step="0.1" value={simplifyTolerance} 
+                onChange={e => setSimplifyTolerance(Number(e.target.value))}
+                className="w-full accent-primary-500"
+              />
+              <p className="text-[9px] text-slate-500">过滤锯齿边缘波动，数值越高线条越平滑。</p>
+            </div>
+
+            <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 text-xs">
+              <label className="flex items-center gap-2 font-bold cursor-pointer text-slate-700 dark:text-slate-300">
+                <input 
+                  type="checkbox" checked={invert} onChange={e => setInvert(e.target.checked)}
+                  className="rounded text-primary-500 focus:ring-primary-400"
+                />
+                <span>反转颜色区域 (Inverting)</span>
+              </label>
+
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">前景填充颜色</span>
+                  <div className="flex items-center gap-1.5">
+                    <input 
+                      type="color" value={fillColor.startsWith('#') ? fillColor : '#000000'} 
+                      onChange={e => setFillColor(e.target.value)}
+                      className="w-6 h-6 border-0 rounded cursor-pointer"
+                    />
+                    <input 
+                      type="text" value={fillColor} onChange={e => setFillColor(e.target.value)}
+                      className="w-full border rounded px-1 py-0.5 font-mono text-[9px] bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="text-slate-500 block">背景背景颜色</span>
+                  <select 
+                    value={bgColor} onChange={e => setBgColor(e.target.value)}
+                    className="w-full border rounded px-1 py-0.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-[10px]"
+                  >
+                    <option value="transparent">透明背景</option>
+                    <option value="#ffffff">白色白色</option>
+                    <option value="#f8fafc">浅灰背景</option>
+                    <option value="#0f172a">深蓝背景</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={handleDownloadSvg} icon={<Download className="w-4 h-4"/>}>
+                下载 SVG
+              </Button>
+              <Button variant="secondary" onClick={sendSvgToScratchpad}>
+                送入暂存箱
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-950 min-h-[300px]">
+        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              {showCode ? 'SVG 矢量源码' : '无损 SVG 预览'}
+            </span>
+            {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">矢量化计算中...</span>}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCode(!showCode)}
+              className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+            >
+              {showCode ? '图形预览' : '查看源码'}
+            </button>
+            {svgPath && (
+              <button
+                onClick={handleCopyCode}
+                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 flex items-center gap-1"
+              >
+                {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                <span>复制代码</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 p-6 flex items-center justify-center overflow-auto min-h-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] dark:bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px]">
+          {!previewUrl ? (
+            <div className="text-slate-400 text-center text-xs">
+              <ImageIcon className="w-12 h-12 text-slate-300 dark:text-slate-800 mx-auto mb-3" />
+              <span>上传位图图像，在此实时生成并预览高阶矢量化路径。</span>
+            </div>
+          ) : showCode ? (
+            <pre className="w-full h-full p-4 rounded-xl border border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-950 font-mono text-[10px] text-slate-700 dark:text-slate-300 overflow-auto whitespace-pre leading-relaxed">
+              {getSvgContent()}
+            </pre>
+          ) : svgPath ? (
+            <div 
+              className="max-w-full max-h-full aspect-square border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow flex items-center justify-center"
+              style={{
+                width: `${svgWidth}px`,
+                height: `${svgHeight}px`,
+                backgroundColor: bgColor
+              }}
+              dangerouslySetInnerHTML={{ __html: getSvgContent() }}
+            />
+          ) : (
+            <div className="text-slate-400 text-center text-xs animate-pulse">
+              <span>正在追踪位图边缘...</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </CardContent>
+  );
+};
+
+// Precise mathematical marching edge boundary crawler
+const runMarchingEdges = (canvas: HTMLCanvasElement, threshold: number, invert: boolean, simplifyTol: number): string => {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  const w = canvas.width;
+  const h = canvas.height;
+  const imgData = ctx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+
+  const binary = new Uint8Array(w * h);
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i+1];
+    const b = data[i+2];
+    const a = data[i+3];
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    const isFg = a > 50 && gray < threshold;
+    binary[i/4] = invert ? (isFg ? 0 : 1) : (isFg ? 1 : 0);
+  }
+
+  const getVal = (col: number, row: number) => {
+    if (col < 0 || col >= w || row < 0 || row >= h) return 0;
+    return binary[row * w + col];
+  };
+
+  const adj = new Map<string, string>();
+  for (let r = 0; r <= h; r++) {
+    for (let c = 0; c <= w; c++) {
+      const val = getVal(c, r);
+      const valLeft = getVal(c - 1, r);
+      const valUp = getVal(c, r - 1);
+
+      if (val !== valUp) {
+        const start = val ? `${c+1},${r}` : `${c},${r}`;
+        const end = val ? `${c},${r}` : `${c+1},${r}`;
+        adj.set(start, end);
+      }
+
+      if (val !== valLeft) {
+        const start = val ? `${c},${r}` : `${c},${r+1}`;
+        const end = val ? `${c},${r+1}` : `${c},${r}`;
+        adj.set(start, end);
+      }
+    }
+  }
+
+  const visited = new Set<string>();
+  const loops: [number, number][][] = [];
+
+  for (const startKey of adj.keys()) {
+    if (visited.has(startKey)) continue;
+
+    const loop: [number, number][] = [];
+    let curr = startKey;
+    while (curr && !visited.has(curr)) {
+      visited.add(curr);
+      const [x, y] = curr.split(',').map(Number);
+      loop.push([x, y]);
+      curr = adj.get(curr) || '';
+      if (curr === startKey) {
+        break;
+      }
+    }
+    if (loop.length > 2) {
+      loops.push(loop);
+    }
+  }
+
+  let pathD = '';
+  loops.forEach(loop => {
+    let pts = loop;
+    if (simplifyTol > 0) {
+      pts = simplifyCollinearPath(loop, simplifyTol);
+    }
+    if (pts.length < 3) return;
+    pathD += `M ${pts[0][0]} ${pts[0][1]} `;
+    for (let i = 1; i < pts.length; i++) {
+      pathD += `L ${pts[i][0]} ${pts[i][1]} `;
+    }
+    pathD += 'Z ';
+  });
+
+  return pathD.trim();
+};
+
+const simplifyCollinearPath = (points: [number, number][], tol: number): [number, number][] => {
+  if (points.length < 3) return points;
+  const result: [number, number][] = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const prev = result[result.length - 1];
+    const curr = points[i];
+    const next = points[i + 1];
+
+    const dx1 = curr[0] - prev[0];
+    const dy1 = curr[1] - prev[1];
+    const dx2 = next[0] - curr[0];
+    const dy2 = next[1] - curr[1];
+
+    const cross = dx1 * dy2 - dy1 * dx2;
+    if (Math.abs(cross) > tol * 0.25) {
+      result.push(curr);
+    }
+  }
+  result.push(points[points.length - 1]);
+  return result;
+};
+
 export const ImageTools: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'compress' | 'split'>('compress');
+  const [activeTab, setActiveTab] = useState<'compress' | 'split' | 'vectorizer'>('compress');
 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
         title="Image Toolbox"
-        description="Compress images, convert formats, or split a sticker sheet into separate images."
+        description="Compress images, convert formats, split sticker sheets, or vectorize bitmap images to SVGs offline."
       />
       <Tabs>
         <TabButton active={activeTab === 'compress'} onClick={() => setActiveTab('compress')}>
@@ -1660,9 +2046,18 @@ export const ImageTools: React.FC = () => {
         <TabButton active={activeTab === 'split'} onClick={() => setActiveTab('split')}>
           表情包拆分
         </TabButton>
+        <TabButton active={activeTab === 'vectorizer'} onClick={() => setActiveTab('vectorizer')}>
+          图片矢量化 (Vectorizer)
+        </TabButton>
       </Tabs>
 
-      {activeTab === 'compress' ? <ImageCompressorPanel /> : <StickerSplitterPanel />}
+      {activeTab === 'compress' ? (
+        <ImageCompressorPanel />
+      ) : activeTab === 'split' ? (
+        <StickerSplitterPanel />
+      ) : (
+        <ImageVectorizerPanel />
+      )}
     </Card>
   );
 };
