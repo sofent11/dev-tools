@@ -615,8 +615,10 @@ export const PerlerBeadTool: React.FC = () => {
 
   useEffect(() => {
     if (!imageUrl) {
-      setResult(null);
-      setError('');
+      Promise.resolve().then(() => {
+        setResult(null);
+        setError('');
+      });
       return;
     }
 
@@ -649,7 +651,9 @@ export const PerlerBeadTool: React.FC = () => {
     try {
       drawBeadChart(canvasRef.current, result);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '图纸预览绘制失败。');
+      Promise.resolve().then(() => {
+        setError(reason instanceof Error ? reason.message : '图纸预览绘制失败。');
+      });
     }
   }, [result]);
 
