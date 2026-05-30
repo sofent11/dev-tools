@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { GeometryResult } from './utils/geometry';
 
 interface CanvasStageProps {
@@ -32,6 +32,29 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<{ pointer: { x: number; y: number }; position: { x: number; y: number } } | null>(null);
+  const scaleRef = useRef(scale);
+  const posRef = useRef({ x: position.x, y: position.y });
+  const onTransformRef = useRef(onTransformChange);
+  scaleRef.current = scale;
+  posRef.current = { x: position.x, y: position.y };
+  onTransformRef.current = onTransformChange;
+
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const handler = (event: WheelEvent) => {
+      event.preventDefault();
+      const nextScale = Math.min(6, Math.max(0.15, scaleRef.current * (event.deltaY > 0 ? 0.92 : 1.08)));
+      onTransformRef.current({
+        x: posRef.current.x,
+        y: posRef.current.y,
+        rotation,
+        scale: nextScale,
+      });
+    };
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
+  }, [rotation]);
 
   const handlePointerDown = (event: React.PointerEvent<SVGGElement>) => {
     if (!svgRef.current) return;
@@ -53,17 +76,6 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
     });
   };
 
-  const handleWheel = (event: React.WheelEvent<SVGSVGElement>) => {
-    event.preventDefault();
-    const nextScale = Math.min(6, Math.max(0.15, scale * (event.deltaY > 0 ? 0.92 : 1.08)));
-    onTransformChange({
-      x: position.x,
-      y: position.y,
-      rotation,
-      scale: nextScale,
-    });
-  };
-
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-inner">
       <svg
@@ -72,7 +84,6 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         className="block max-h-[70vh] w-full touch-none select-none"
-        onWheel={handleWheel}
       >
         <defs>
           <pattern id="jewelry-grid" width="24" height="24" patternUnits="userSpaceOnUse">
