@@ -35,9 +35,11 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   const scaleRef = useRef(scale);
   const posRef = useRef({ x: position.x, y: position.y });
   const onTransformRef = useRef(onTransformChange);
-  scaleRef.current = scale;
-  posRef.current = { x: position.x, y: position.y };
-  onTransformRef.current = onTransformChange;
+  useEffect(() => {
+    scaleRef.current = scale;
+    posRef.current = { x: position.x, y: position.y };
+    onTransformRef.current = onTransformChange;
+  });
 
   useEffect(() => {
     const el = svgRef.current;

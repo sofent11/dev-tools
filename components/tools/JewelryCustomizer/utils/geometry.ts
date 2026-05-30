@@ -444,13 +444,65 @@ const polygonsToPathData = (polygons: number[][][], decimalPlaces: number = 2): 
     .join(' ');
 };
 
+const bridgeGlyphDots = (
+  scaledPaths: IntPoint[][],
+  char: string,
+  bridgeWidth: number
+): IntPoint[][] => {
+  if (!/[ij]/i.test(char)) return scaledPaths;
+  if (scaledPaths.length <= 1) return scaledPaths;
+
+  try {
+    const glyphBounds = unionBounds(scaledPaths);
+    if (!glyphBounds) return scaledPaths;
+    const glyphHeight = boundsHeight(glyphBounds);
+
+    const pathsWithBounds = scaledPaths.map(path => ({
+      path,
+      bounds: boundsOf(path),
+      area: Math.abs(polygonArea(path))
+    })).filter(p => p.area > 0);
+
+    if (pathsWithBounds.length <= 1) return scaledPaths;
+
+    const main = pathsWithBounds.reduce((best, p) => (p.area > best.area ? p : best), pathsWithBounds[0]);
+    
+    for (const part of pathsWithBounds) {
+      if (part === main) continue;
+
+      const isUpperDot = part.bounds.bottom < main.bounds.top || part.bounds.bottom < glyphBounds.top + glyphHeight * 0.55;
+      if (!isUpperDot) continue;
+
+      const cx = (part.bounds.left + part.bounds.right) / 2;
+      const topY = (part.bounds.top + part.bounds.bottom) / 2;
+      const stemHeight = main.bounds.bottom - main.bounds.top;
+      const bottomY = main.bounds.top + Math.max(stemHeight * 0.2, bridgeWidth * 0.5);
+
+      const hw = bridgeWidth * 0.45;
+      const rectPoly: IntPoint[] = [
+        { X: Math.round(cx - hw), Y: Math.round(topY) },
+        { X: Math.round(cx + hw), Y: Math.round(topY) },
+        { X: Math.round(cx + hw), Y: Math.round(bottomY) },
+        { X: Math.round(cx - hw), Y: Math.round(bottomY) },
+      ];
+
+      scaledPaths.push(rectPoly);
+    }
+  } catch (e) {
+    console.warn('Individual glyph dot bridging failed:', e);
+  }
+
+  return scaledPaths;
+};
+
 const buildTextLayout = (
   font: opentype.Font,
   text: string,
   size: number,
   letterSpacingUnits: number,
   flattenToleranceUnits: number,
-  scaleUp: number
+  scaleUp: number,
+  bridgeWidth: number
 ): TextLayout => {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const lineHeight = size * 1.2;
@@ -474,12 +526,16 @@ const buildTextLayout = (
       const glyphScaledPaths = glyphRawPolys
         .filter((poly) => poly.length >= 3)
         .map((poly) => poly.map((p) => ({ X: Math.round(p[0] * scaleUp), Y: Math.round(p[1] * scaleUp) })));
-      const glyphShape = glyphScaledPaths.length > 0
-        ? new Shape(glyphScaledPaths, true, false, false, true)
+      
+      // Perform dot bridging directly on the isolated glyph!
+      const bridgedPaths = bridgeGlyphDots(glyphScaledPaths, char, bridgeWidth);
+
+      const glyphShape = bridgedPaths.length > 0
+        ? new Shape(bridgedPaths, true, false, false, true)
         : null;
 
       rawPolys.push(...glyphRawPolys);
-      scaledPolys.push(...glyphScaledPaths);
+      scaledPolys.push(...bridgedPaths);
 
       const advance = (glyph.advanceWidth ?? font.unitsPerEm) * glyphScale;
       const nextGlyph = lineGlyphs[charIndex + 1];
@@ -869,23 +925,38 @@ const applyDotBridges = (
     if (parts.length <= 1) continue;
 
     const main = parts.reduce((best, part) => (part.area > best.area ? part : best), parts[0]);
-    const glyphHeight = boundsHeight(glyph.bounds);
     for (const part of parts) {
       if (part === main) continue;
-      const isSmallUpperMark = part.area < main.area * 0.42 && part.bounds.bottom < glyph.bounds.top + glyphHeight * 0.52;
-      if (!isSmallUpperMark) continue;
+      
+      // The dot is always in the upper portion
+      const isUpperDot = part.bounds.bottom < main.bounds.top || part.bounds.bottom < glyph.bounds.top + boundsHeight(glyph.bounds) * 0.55;
+      if (!isUpperDot) continue;
 
-      const upperTarget = { X: boundsCenter(part.bounds).X, Y: part.bounds.bottom };
-      const lowerTarget = { X: boundsCenter(part.bounds).X, Y: main.bounds.top };
-      const upperPoint = pointClosestTo(flattenShapePoints(part.shape), upperTarget, 'max');
-      const lowerPoint = pointClosestTo(flattenShapePoints(main.shape), lowerTarget, 'min');
-      if (!upperPoint || !lowerPoint) continue;
-      if (Math.hypot(lowerPoint.X - upperPoint.X, lowerPoint.Y - upperPoint.Y) > Math.max(maxGap, bridgeWidth * 4.5)) continue;
+      try {
+        // Draw a solid vertical rectangle connecting the dot and the stem
+        const cx = (part.bounds.left + part.bounds.right) / 2;
+        const topY = (part.bounds.top + part.bounds.bottom) / 2; // middle of the dot
+        const stemHeight = main.bounds.bottom - main.bounds.top;
+        const bottomY = main.bounds.top + Math.max(stemHeight * 0.2, bridgeWidth * 0.5); // extends into the stem
+        
+        const hw = bridgeWidth * 0.45; // bridge half-width
+        const rectPoly: IntPoint[] = [
+          { X: Math.round(cx - hw), Y: Math.round(topY) },    // top-left
+          { X: Math.round(cx + hw), Y: Math.round(topY) },    // top-right
+          { X: Math.round(cx + hw), Y: Math.round(bottomY) }, // bottom-right
+          { X: Math.round(cx - hw), Y: Math.round(bottomY) }, // bottom-left
+        ];
 
-      const next = unionBridge(merged, buildVerticalBridgeShape(upperPoint, lowerPoint, bridgeWidth * 0.9, scaleUp));
-      if (next) {
-        merged = next;
-        count++;
+        // Directly push the rectangle path to merged.paths to bypass any Clipper union issues or winding mismatches,
+        // then normalize it to resolve the overlapping contours.
+        merged.paths.push(rectPoly);
+        const resolved = normalizeClosedShape(merged, merged, scaleUp);
+        if (resolved && resolved.paths.length > 0) {
+          merged = resolved;
+          count++;
+        }
+      } catch (e) {
+        console.warn('Dot bridge rectangle weld failed:', e);
       }
     }
   }
@@ -1051,9 +1122,10 @@ export const generateGeometry = (
   const flattenTolUnits = Math.max(0.05, config.flattenToleranceMm * unitsPerMm);
   const baseLetterSpacingUnits = config.letterSpacingMm * unitsPerMm;
   const maxTightenUnits = Math.max(0, config.autoTightenMaxMm * unitsPerMm);
+  const bridgeWidth = Math.max(0.1, config.minBridgeMm) * unitsPerMm * scaleUp;
 
   const tryBuildShape = (letterSpacingUnits: number) => {
-    return buildTextLayout(font, safeText, size, letterSpacingUnits, flattenTolUnits, scaleUp);
+    return buildTextLayout(font, safeText, size, letterSpacingUnits, flattenTolUnits, scaleUp, bridgeWidth);
   };
 
   if (!font || safeText.length === 0) {
@@ -1061,6 +1133,10 @@ export const generateGeometry = (
       originalPath: '',
       processedPath: '',
       polygons: [],
+      textPath: '',
+      framePath: '',
+      textPolygons: [],
+      framePolygons: [],
       diagnostics: {
         componentsBeforeRepair: 0,
         componentsAfterRepair: 0,
@@ -1083,6 +1159,10 @@ export const generateGeometry = (
       originalPath: originalSvg,
       processedPath: '',
       polygons: [],
+      textPath: '',
+      framePath: '',
+      textPolygons: [],
+      framePolygons: [],
       diagnostics: {
         componentsBeforeRepair: 0,
         componentsAfterRepair: 0,
@@ -1124,7 +1204,6 @@ export const generateGeometry = (
 
   // 4) Bridge repair: first use glyph order and baseline-aware smooth joins.
   const maxGap = Math.max(0, config.bridgeMaxGapMm) * unitsPerMm * scaleUp;
-  const bridgeWidth = Math.max(0.1, config.minBridgeMm) * unitsPerMm * scaleUp;
   let usedBridgeCount = 0;
 
   const dotRepair = applyDotBridges(merged, glyphs, bridgeWidth, maxGap, scaleUp);
@@ -1261,57 +1340,212 @@ export const generateGeometry = (
   }
 
   const hasFrame = config.frameStyle !== 'none' && frameShape.paths.length > 0;
-  const baseShapeForLoops = hasFrame ? frameShape : (finalTextPaths.length > 0 ? offsetShape : merged);
+  let baseShapeForLoops = hasFrame ? frameShape : (finalTextPaths.length > 0 ? offsetShape : merged);
 
-  // Generate loops
-  let outerLoopsShape = new Shape([], true);
-  let innerLoopsShape = new Shape([], true);
-
+  // Generate loops using a STEM + RING approach so the bail is always one solid piece:
+  //   1. A rectangular "stem" is unioned into the body first (acts as the neck/bridge)
+  //   2. A full outer-circle ring is unioned on top of the stem
+  //   3. An inner circle (chain hole) is punched only from the ring area
+  //   This ensures the hole never severs the connection between bail and body.
   if (config.loopType && config.loopType !== 'none') {
     const loopOuterR = (Math.max(1, config.loopOuterDiameterMm ?? 4.0) / 2) * unitsPerMm * scaleUp;
     const loopInnerR = (Math.max(0.5, config.loopInnerDiameterMm ?? 2.0) / 2) * unitsPerMm * scaleUp;
+    // Stem dimensions: width = ring width (outer-inner), height = loopOuterR (half a diameter)
+    const ringThickness = loopOuterR - loopInnerR;
+    const stemW = Math.max(ringThickness, loopOuterR * 0.6);  // stem width
+    const stemH = loopOuterR;                                   // stem height (sticks up from body)
 
     const boundsForLoops = hasFrame ? (frameShape.shapeBounds() as Bounds) : textBounds;
     const lWidth = boundsForLoops.right - boundsForLoops.left;
     const lCenterY = (boundsForLoops.top + boundsForLoops.bottom) / 2;
 
-    const addLoopAt = (cx: number, cy: number) => {
-      const outerCircle = makeCirclePath(cx, cy, loopOuterR);
-      const innerCircle = makeCirclePath(cx, cy, loopInnerR);
-      outerLoopsShape = outerLoopsShape.union(new Shape([outerCircle], true));
-      innerLoopsShape = innerLoopsShape.union(new Shape([innerCircle], true));
+    // Helper: Find the top Y coordinate and center X of the individual glyph closest horizontally to a given cx
+    const getClosestGlyphTop = (cx: number, fallbackY: number): { top: number, cx: number } => {
+      const validGlyphs = glyphs.filter((g) => g.bounds && !g.isWhitespace);
+      if (validGlyphs.length === 0) return { top: fallbackY, cx };
+
+      let closestGlyph = validGlyphs[0];
+      let minDistance = Number.POSITIVE_INFINITY;
+
+      for (const g of validGlyphs) {
+        const bounds = g.bounds as Bounds;
+        const gCx = (bounds.left + bounds.right) / 2;
+        const dist = Math.abs(gCx - cx);
+        if (dist < minDistance) {
+          minDistance = dist;
+          closestGlyph = g;
+        }
+      }
+
+      const bestBounds = closestGlyph.bounds as Bounds;
+      const bestCx = (bestBounds.left + bestBounds.right) / 2;
+      return { top: bestBounds.top, cx: bestCx };
+    };
+
+    // Helper: build stem polygon with CLOCKWISE (CW) winding order so Clipper treats it as solid
+    const makeStemPoly = (cx: number, bodyEdge: number, dir: 'up' | 'left' | 'right', overlap: number): IntPoint[] => {
+
+      if (dir === 'up') {
+        const hw = stemW / 2;
+        return [
+          { X: Math.round(cx - hw), Y: Math.round(bodyEdge - stemH) },  // top-left
+          { X: Math.round(cx + hw), Y: Math.round(bodyEdge - stemH) },  // top-right
+          { X: Math.round(cx + hw), Y: Math.round(bodyEdge + overlap) }, // bottom-right
+          { X: Math.round(cx - hw), Y: Math.round(bodyEdge + overlap) }, // bottom-left
+        ];
+      } else if (dir === 'left') {
+        const hh = stemW / 2;
+        return [
+          { X: Math.round(bodyEdge - overlap), Y: Math.round(lCenterY - hh) }, // top-left
+          { X: Math.round(bodyEdge + stemH),   Y: Math.round(lCenterY - hh) }, // top-right
+          { X: Math.round(bodyEdge + stemH),   Y: Math.round(lCenterY + hh) }, // bottom-right
+          { X: Math.round(bodyEdge - overlap), Y: Math.round(lCenterY + hh) }, // bottom-left
+        ];
+      } else { // right
+        const hh = stemW / 2;
+        return [
+          { X: Math.round(bodyEdge - stemH),   Y: Math.round(lCenterY - hh) }, // top-left
+          { X: Math.round(bodyEdge + overlap), Y: Math.round(lCenterY - hh) }, // top-right
+          { X: Math.round(bodyEdge + overlap), Y: Math.round(lCenterY + hh) }, // bottom-right
+          { X: Math.round(bodyEdge - stemH),   Y: Math.round(lCenterY + hh) }, // bottom-left
+        ];
+      }
+    };
+
+    // Helper: add one bail at position (ringCx, ringCy) – ring center above/beside body
+    const addOneBail = (ringCx: number, ringCy: number, dir: 'up' | 'left' | 'right', bodyEdge: number, cx: number) => {
+      const outerCircle = makeCirclePath(ringCx, ringCy, loopOuterR);
+      const innerCircle = makeCirclePath(ringCx, ringCy, loopInnerR);
+
+      let punchedShape: Shape | null = null;
+      const initialComponents = getTextComponents(baseShapeForLoops).length;
+
+      // Dynamically attempt welding with increasing overlaps to guarantee connection
+      let currentOverlap = loopOuterR * 0.4;
+      const stepSize = loopOuterR * 0.4;
+
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const stem = makeStemPoly(cx, bodyEdge, dir, currentOverlap);
+        try {
+          // Step 1: union stem into body
+          const stemShape = new Shape([stem], true, false, false, true);
+          const withStem = baseShapeForLoops.union(stemShape);
+          if (withStem.paths.length === 0) {
+            currentOverlap += stepSize;
+            continue;
+          }
+
+          // Step 2: union outer ring circle
+          const outerRingShape = new Shape([outerCircle], true, false, false, true);
+          const withRing = withStem.union(outerRingShape);
+          if (withRing.paths.length === 0) {
+            currentOverlap += stepSize;
+            continue;
+          }
+
+          // Step 3: punch the inner hole
+          const innerHoleShape = new Shape([innerCircle], true, false, false, true);
+          const punched = withRing.difference(innerHoleShape);
+
+          if (punched.paths.length > 0) {
+            punchedShape = punched;
+            const currentComponents = getTextComponents(punched).length;
+            if (currentComponents <= initialComponents) {
+              // Successfully connected and didn't introduce new floating components!
+              break;
+            }
+          }
+        } catch (e) {
+          console.warn(`Bail weld attempt ${attempt} failed:`, e);
+        }
+        currentOverlap += stepSize;
+      }
+
+      // If the stem union failed to connect (e.g. gaps between characters or deep valleys like 'V'),
+      // fallback to a highly aggressive overlapping ring and a long thick stem to force connection.
+      if (punchedShape && getTextComponents(punchedShape).length > initialComponents) {
+        try {
+          // Calculate direct overlap center Y/X such that inner circle bottom doesn't touch the body,
+          // but the outer circle overlaps heavily
+          let safeCx = ringCx;
+          let safeCy = ringCy;
+          const safeInnerR = Math.min(loopInnerR, loopOuterR * 0.8);
+          
+          let longStemPoly: IntPoint[] = [];
+
+          if (dir === 'up') {
+            safeCy = bodyEdge - safeInnerR; // Push it deep
+            const hugeOverlap = loopOuterR * 4; // Long stem
+            longStemPoly = makeStemPoly(cx, bodyEdge, dir, hugeOverlap);
+          } else if (dir === 'left') {
+            safeCx = bodyEdge - safeInnerR;
+            const hugeOverlap = loopOuterR * 4;
+            longStemPoly = makeStemPoly(cx, bodyEdge, dir, hugeOverlap);
+          } else { // right
+            safeCx = bodyEdge + safeInnerR;
+            const hugeOverlap = loopOuterR * 4;
+            longStemPoly = makeStemPoly(cx, bodyEdge, dir, hugeOverlap);
+          }
+
+          const directOuter = makeCirclePath(safeCx, safeCy, loopOuterR);
+          const directInner = makeCirclePath(safeCx, safeCy, safeInnerR);
+
+          const directOuterShape = new Shape([directOuter], true, false, false, true);
+          const directInnerShape = new Shape([directInner], true, false, false, true);
+          const ring = directOuterShape.difference(directInnerShape);
+          
+          const longStemShape = new Shape([longStemPoly], true, false, false, true);
+          const ringWithStem = ring.union(longStemShape);
+          
+          punchedShape = baseShapeForLoops.union(ringWithStem);
+        } catch (e) {
+          console.warn('Fallback direct bail weld failed:', e);
+        }
+      }
+
+      if (punchedShape) {
+        baseShapeForLoops = safeCleanDedupe(punchedShape, baseShapeForLoops);
+      }
     };
 
     if (config.loopType === 'top') {
-      addLoopAt((boundsForLoops.left + boundsForLoops.right) / 2, boundsForLoops.top + loopOuterR * 0.25);
+      const targetCx = (boundsForLoops.left + boundsForLoops.right) / 2;
+      const { top: bodyTop, cx: ringCx } = getClosestGlyphTop(targetCx, boundsForLoops.top);
+      const ringCy = bodyTop - stemH - loopOuterR * 0.1; // ring center sits above stem
+      
+      addOneBail(ringCx, ringCy, 'up', bodyTop, ringCx);
     } else if (config.loopType === 'double_side') {
-      addLoopAt(boundsForLoops.left + loopOuterR * 0.25, lCenterY);
-      addLoopAt(boundsForLoops.right - loopOuterR * 0.25, lCenterY);
+      // For double loops, place them on the left and right sides
+      {
+        const cx = boundsForLoops.left - stemH - loopOuterR * 0.1;
+        addOneBail(cx, lCenterY, 'left', boundsForLoops.left, lCenterY);
+      }
+      
+      {
+        const cx = boundsForLoops.right + stemH + loopOuterR * 0.1;
+        addOneBail(cx, lCenterY, 'right', boundsForLoops.right, lCenterY);
+      }
     } else if (config.loopType === 'double_top') {
+      // Place two loops on the top edge, roughly 15% inwards from edges
       const x1 = boundsForLoops.left + lWidth * 0.15;
       const x2 = boundsForLoops.right - lWidth * 0.15;
-      addLoopAt(x1, boundsForLoops.top + loopOuterR * 0.25);
-      addLoopAt(x2, boundsForLoops.top + loopOuterR * 0.25);
+      
+      const { top: bodyTop1, cx: ringCx1 } = getClosestGlyphTop(x1, boundsForLoops.top);
+      const { top: bodyTop2, cx: ringCx2 } = getClosestGlyphTop(x2, boundsForLoops.top);
+      
+      const ringCy1 = bodyTop1 - stemH - loopOuterR * 0.1;
+      const ringCy2 = bodyTop2 - stemH - loopOuterR * 0.1;
+      
+      addOneBail(x1, ringCy1, 'up', bodyTop1, x1);
+      addOneBail(x2, ringCy2, 'up', bodyTop2, x2);
     }
+
   }
 
-  // Weld loops
-  let mergedWithLoops = baseShapeForLoops;
-  if (outerLoopsShape.paths.length > 0) {
-    try {
-      const welded = baseShapeForLoops.union(outerLoopsShape);
-      const punched = welded.difference(innerLoopsShape);
-      if (punched.paths.length > 0) {
-        mergedWithLoops = safeCleanDedupe(punched, baseShapeForLoops);
-      }
-    } catch (e) {
-      console.warn('Weld loops failed:', e);
-    }
-  }
   if (hasFrame) {
-    frameShape = mergedWithLoops;
+    frameShape = baseShapeForLoops;
   } else {
-    offsetShape = mergedWithLoops;
+    offsetShape = baseShapeForLoops;
   }
 
   // 1. Calculate overall combined bounds to find center of the finished piece

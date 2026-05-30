@@ -130,6 +130,8 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Object3D | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
 
   // Setup scene, camera, lights, controls
   useEffect(() => {
@@ -144,6 +146,7 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
     // Camera
     const camera = new THREE.PerspectiveCamera(40, width / height, 1, 5000);
     camera.position.set(0, 0, 450);
+    cameraRef.current = camera;
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
@@ -158,6 +161,7 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.maxPolarAngle = Math.PI / 1.8; // Prevent rendering underground
+    controlsRef.current = controls;
 
     // Lighting (Premium studio setup for shiny PBR materials)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
@@ -312,6 +316,34 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
       // 5. Add to scene and save ref
       scene.add(group);
       meshRef.current = group;
+
+      // 6. Auto-fit camera to the object
+      if (cameraRef.current && controlsRef.current) {
+        const box = new THREE.Box3().setFromObject(group);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+
+        // Find the maximum dimension of the bounding box
+        const maxDim = Math.max(size.x, size.y, size.z);
+        
+        // Calculate the camera distance needed to fit the object
+        const fov = cameraRef.current.fov * (Math.PI / 180);
+        let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+        
+        // Add a margin to ensure the object is comfortably within view
+        cameraZ *= 1.4;
+
+        // Animate or instantly update the camera and controls
+        cameraRef.current.position.set(center.x, center.y, cameraZ);
+        cameraRef.current.near = cameraZ / 100;
+        cameraRef.current.far = cameraZ * 100;
+        cameraRef.current.updateProjectionMatrix();
+
+        controlsRef.current.target.copy(center);
+        controlsRef.current.update();
+      }
     } catch (e) {
       console.error('Three.js geometry generation failed:', e);
     }
