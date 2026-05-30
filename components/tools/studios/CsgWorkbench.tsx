@@ -338,6 +338,76 @@ export const CsgWorkbench: React.FC = () => {
     }));
   };
 
+  const alignShape = (type: 'centerX' | 'centerY' | 'centerZ' | 'centerAll' | 'top' | 'bottom' | 'right' | 'left' | 'front' | 'back') => {
+    const geoA = buildGeometry(shapeA);
+    const geoB = buildGeometry(shapeB);
+
+    geoA.computeBoundingBox();
+    geoB.computeBoundingBox();
+
+    const boxA = geoA.boundingBox!;
+    const boxB = geoB.boundingBox!;
+
+    // World centers of A
+    const cAx = shapeA.posX + (boxA.min.x + boxA.max.x) / 2;
+    const cAy = shapeA.posY + (boxA.min.y + boxA.max.y) / 2;
+    const cAz = shapeA.posZ + (boxA.min.z + boxA.max.z) / 2;
+
+    // Local center offsets of B
+    const hcBx = (boxB.min.x + boxB.max.x) / 2;
+    const hcBy = (boxB.min.y + boxB.max.y) / 2;
+    const hcBz = (boxB.min.z + boxB.max.z) / 2;
+
+    let newX = shapeB.posX;
+    let newY = shapeB.posY;
+    let newZ = shapeB.posZ;
+
+    switch (type) {
+      case 'centerX':
+        newX = cAx - hcBx;
+        break;
+      case 'centerY':
+        newY = cAy - hcBy;
+        break;
+      case 'centerZ':
+        newZ = cAz - hcBz;
+        break;
+      case 'centerAll':
+        newX = cAx - hcBx;
+        newY = cAy - hcBy;
+        newZ = cAz - hcBz;
+        break;
+      case 'top':
+        newY = shapeA.posY + boxA.max.y - boxB.min.y;
+        break;
+      case 'bottom':
+        newY = shapeA.posY + boxA.min.y - boxB.max.y;
+        break;
+      case 'right':
+        newX = shapeA.posX + boxA.max.x - boxB.min.x;
+        break;
+      case 'left':
+        newX = shapeA.posX + boxA.min.x - boxB.max.x;
+        break;
+      case 'front':
+        newZ = shapeA.posZ + boxA.max.z - boxB.min.z;
+        break;
+      case 'back':
+        newZ = shapeA.posZ + boxA.min.z - boxB.max.z;
+        break;
+    }
+
+    geoA.dispose();
+    geoB.dispose();
+
+    setShapeB(prev => ({
+      ...prev,
+      posX: Number(newX.toFixed(2)),
+      posY: Number(newY.toFixed(2)),
+      posZ: Number(newZ.toFixed(2))
+    }));
+  };
+
   const handleReset = () => {
     if (resultGeometry) {
       resultGeometry.dispose();
@@ -474,6 +544,87 @@ export const CsgWorkbench: React.FC = () => {
                     onChange={(e) => handleParamChange('posZ', parseFloat(e.target.value))}
                     className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer dark:bg-slate-700 accent-primary-600"
                   />
+                </div>
+              </div>
+
+              {/* Quick Alignment Actions */}
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-slate-500 uppercase">实体快捷对齐 (调整 B 对齐 A)</h4>
+                  <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[10px] font-semibold text-primary-600 dark:bg-primary-950/40">高效对齐</span>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => alignShape('centerAll')}
+                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold"
+                    title="将实体 B 的中心完全与实体 A 的中心重合"
+                  >
+                    <span>三轴完全居中</span>
+                  </button>
+                  <button
+                    onClick={() => alignShape('centerX')}
+                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
+                  >
+                    <span>X 轴居中</span>
+                  </button>
+                  <button
+                    onClick={() => alignShape('centerY')}
+                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
+                  >
+                    <span>Y 轴居中</span>
+                  </button>
+                  <button
+                    onClick={() => alignShape('centerZ')}
+                    className="text-xs py-1.5 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 dark:text-slate-300"
+                  >
+                    <span>Z 轴居中</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                  <button
+                    onClick={() => alignShape('top')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 叠放在 A 的正上方"
+                  >
+                    叠放上方
+                  </button>
+                  <button
+                    onClick={() => alignShape('bottom')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 贴合在 A 的正下方"
+                  >
+                    贴合下方
+                  </button>
+                  <button
+                    onClick={() => alignShape('right')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 贴合在 A 的右侧"
+                  >
+                    贴合右侧
+                  </button>
+                  <button
+                    onClick={() => alignShape('left')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 贴合在 A 的左侧"
+                  >
+                    贴合左侧
+                  </button>
+                  <button
+                    onClick={() => alignShape('front')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 贴合在 A 的前侧"
+                  >
+                    贴合前侧
+                  </button>
+                  <button
+                    onClick={() => alignShape('back')}
+                    className="text-[10px] py-1 font-medium bg-slate-50 hover:bg-slate-100 rounded-md transition-all text-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer text-center"
+                    title="将 B 贴合在 A 的后侧"
+                  >
+                    贴合后侧
+                  </button>
                 </div>
               </div>
 
