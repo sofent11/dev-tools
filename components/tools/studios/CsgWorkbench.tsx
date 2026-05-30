@@ -7,7 +7,6 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import {
   HelpCircle, Layers, Trash2, Download, RefreshCw, Upload, Eye, EyeOff, Plus, Settings, Ruler
 } from 'lucide-react';
-import { CSGExporter } from '../shared/csg';
 
 interface ShapeConfig {
   id: string;
@@ -24,6 +23,8 @@ interface ShapeConfig {
   uploadedGeo: THREE.BufferGeometry | null;
   uploadedFileName: string;
 }
+
+let globalShapeIdCounter = 0;
 
 const PRESET_COLORS = [
   '#3b82f6', // blue
@@ -82,6 +83,20 @@ export const CsgWorkbench: React.FC = () => {
   const [showWireframe, setShowWireframe] = useState(false);
   const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
 
+  const [sceneReady, setSceneReady] = useState(false);
+
+  const [progressPercent, setProgressPercent] = useState<number>(0);
+  const [progressText, setProgressText] = useState<string>('');
+
+  const workerRef = useRef<Worker | null>(null);
+  const requestIdRef = useRef<number>(0);
+
+  useEffect(() => {
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, []);
+
   // WebGL scene refs
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -134,7 +149,7 @@ export const CsgWorkbench: React.FC = () => {
 
   // Add new shape to hierarchy
   const addShape = (type: 'cube' | 'sphere' | 'cylinder' | 'cone') => {
-    const newId = `shape-${Date.now()}`;
+    const newId = `shape-${globalShapeIdCounter++}`;
     const color = PRESET_COLORS[shapes.length % PRESET_COLORS.length];
     const newShape: ShapeConfig = {
       id: newId,
@@ -212,71 +227,109 @@ export const CsgWorkbench: React.FC = () => {
     return base;
   }, []);
 
-  // Execute advanced multiple Boolean CSG calculations
+  const getWorker = () => {
+    if (!workerRef.current) {
+      workerRef.current = new Worker(new URL('../shared/csg.worker.ts', import.meta.url), { type: 'module' });
+    }
+    return workerRef.current;
+  };
+
+  // Execute advanced multiple Boolean CSG calculations asynchronously via Web Worker
   const executeCsg = (type: 'union' | 'subtract' | 'intersect') => {
+    const baseShape = shapes.find(s => s.id === baseShapeId);
+    if (!baseShape || !baseShape.visible) {
+      alert('请确保已选定并显示基准实体！');
+      return;
+    }
+
+    const activeTools = shapes.filter(s => s.id !== baseShapeId && toolShapeIds[s.id] && s.visible);
+    if (activeTools.length === 0) {
+      alert('请在场景树勾选至少一个工具实体作为布尔计算输入！');
+      return;
+    }
+
     setIsProcessing(true);
     setOpType(type);
+    setProgressPercent(0);
+    setProgressText('已启动 Web Worker 线程...');
 
-    setTimeout(() => {
-      try {
-        const baseShape = shapes.find(s => s.id === baseShapeId);
-        if (!baseShape || !baseShape.visible) {
-          alert('请确保已选定并显示基准实体！');
-          setIsProcessing(false);
-          setOpType(null);
-          return;
-        }
+    const id = requestIdRef.current + 1;
+    requestIdRef.current = id;
 
-        const activeTools = shapes.filter(s => s.id !== baseShapeId && toolShapeIds[s.id] && s.visible);
-        if (activeTools.length === 0) {
-          alert('请在场景树勾选至少一个工具实体作为布尔计算输入！');
-          setIsProcessing(false);
-          setOpType(null);
-          return;
-        }
+    // 1. Prepare Base Geometry position attribute
+    const baseGeo = buildGeometry(baseShape);
+    baseGeo.translate(baseShape.posX, baseShape.posY, baseShape.posZ);
+    const basePosAttr = baseGeo.getAttribute('position') as THREE.BufferAttribute;
+    const basePositions = (basePosAttr.array as Float32Array).slice();
+    baseGeo.dispose();
 
-        // 1. Prepare Base Geometry
-        const baseGeo = buildGeometry(baseShape);
-        baseGeo.translate(baseShape.posX, baseShape.posY, baseShape.posZ);
+    // 2. Prepare Tools position attributes and transform parameters
+    const toolsData = activeTools.map(tool => {
+      const toolGeo = buildGeometry(tool);
+      const toolPosAttr = toolGeo.getAttribute('position') as THREE.BufferAttribute;
+      const toolPositions = (toolPosAttr.array as Float32Array).slice();
+      toolGeo.dispose();
+      return {
+        positions: toolPositions,
+        posX: tool.posX,
+        posY: tool.posY,
+        posZ: tool.posZ
+      };
+    });
 
-        // 2. Perform sequential CSG boolean chain
-        let finalGeo = baseGeo;
+    const worker = getWorker();
 
-        for (const tool of activeTools) {
-          const toolGeo = buildGeometry(tool);
-          toolGeo.translate(tool.posX, tool.posY, tool.posZ);
+    worker.onmessage = (event: MessageEvent<unknown>) => {
+      const data = event.data as {
+        id: number;
+        type: 'success' | 'error' | 'progress';
+        progress?: number;
+        status?: string;
+        mesh?: { positions: ArrayBuffer; normals: ArrayBuffer; uvs: ArrayBuffer };
+        stats?: { vertices: number; triangles: number };
+        error?: string;
+      };
+      if (data.id !== requestIdRef.current) return;
 
-          let tempGeo: THREE.BufferGeometry;
-          if (type === 'union') {
-            tempGeo = CSGExporter.union(finalGeo, toolGeo);
-          } else if (type === 'subtract') {
-            tempGeo = CSGExporter.subtract(finalGeo, toolGeo);
-          } else {
-            tempGeo = CSGExporter.intersect(finalGeo, toolGeo);
-          }
-
-          // Free intermediate memory
-          if (finalGeo !== baseGeo) finalGeo.dispose();
-          toolGeo.dispose();
-          finalGeo = tempGeo;
-        }
-
-        const positionAttr = finalGeo.getAttribute('position');
-        const vCount = positionAttr ? positionAttr.count : 0;
-
-        setResultGeometry(finalGeo);
-        setResultStats({
-          vertices: vCount,
-          triangles: Math.floor(vCount / 3)
-        });
-      } catch (err) {
-        console.error(err);
-        alert('空间布尔运算失败，部分模型的网格不闭合或面重合！');
-        setOpType(null);
-      } finally {
-        setIsProcessing(false);
+      if (data.type === 'progress') {
+        setProgressPercent(data.progress || 0);
+        setProgressText(data.status || '');
+        return;
       }
-    }, 50);
+
+      setIsProcessing(false);
+      if (data.type === 'error') {
+        alert(data.error || '空间布尔运算失败');
+        setOpType(null);
+        return;
+      }
+
+      const { positions, normals, uvs } = data.mesh!;
+      const resultGeo = new THREE.BufferGeometry();
+      resultGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(positions), 3));
+      resultGeo.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(normals), 3));
+      resultGeo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(uvs), 2));
+      resultGeo.computeBoundingBox();
+      resultGeo.computeBoundingSphere();
+
+      setResultGeometry(resultGeo);
+      setResultStats(data.stats || null);
+    };
+
+    worker.onerror = event => {
+      if (id !== requestIdRef.current) return;
+      setIsProcessing(false);
+      alert(event.message || 'Worker 执行失败');
+      setOpType(null);
+    };
+
+    // Serialize and post message to worker
+    worker.postMessage({
+      id,
+      opType: type,
+      base: { positions: basePositions },
+      tools: toolsData
+    }, [basePositions.buffer, ...toolsData.map(t => t.positions.buffer)]);
   };
 
   // Export and download STL
@@ -433,7 +486,7 @@ export const CsgWorkbench: React.FC = () => {
 
     // Transform controls (3D Gizmo)
     const tControls = new TransformControls(camera, renderer.domElement);
-    scene.add(tControls);
+    scene.add(tControls.getHelper());
     transformControlsRef.current = tControls;
 
     // Block OrbitControls when dragging gizmo
@@ -509,10 +562,13 @@ export const CsgWorkbench: React.FC = () => {
     };
     animate();
 
+    setSceneReady(true);
+
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener('resize', handleResize);
       
+      scene.remove(tControls.getHelper());
       tControls.dispose();
       if (rendererRef.current) {
         rendererRef.current.forceContextLoss();
@@ -658,7 +714,7 @@ export const CsgWorkbench: React.FC = () => {
       transformControlsRef.current.detach();
     }
 
-  }, [shapes, selectedShapeId, resultGeometry, showWireframe, buildGeometry]);
+  }, [shapes, selectedShapeId, resultGeometry, showWireframe, buildGeometry, sceneReady]);
 
   const selectedShape = shapes.find(s => s.id === selectedShapeId);
 
@@ -716,9 +772,18 @@ export const CsgWorkbench: React.FC = () => {
         {/* Processing Spinner Overlay */}
         {isProcessing && (
           <div className="absolute inset-0 bg-white/60 dark:bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-20">
-            <div className="flex flex-col items-center gap-3 bg-white dark:bg-slate-900 px-6 py-4 rounded-xl border border-slate-200/50 shadow-md">
+            <div className="flex flex-col items-center gap-3 bg-white dark:bg-slate-900 px-6 py-4 rounded-xl border border-slate-200/50 shadow-md w-72">
               <RefreshCw className="w-8 h-8 animate-spin text-primary-600" />
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">正在进行三维实体布尔运算...</span>
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 text-center">
+                {progressText || '正在进行三维实体布尔运算...'}
+              </span>
+              <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 transition-all duration-300 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-400 font-bold">{progressPercent}%</span>
             </div>
           </div>
         )}

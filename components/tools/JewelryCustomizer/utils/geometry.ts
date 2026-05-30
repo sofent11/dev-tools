@@ -49,7 +49,25 @@ export interface GeometryResult {
 
 // Helper to load font
 export const loadFont = async (url: string): Promise<opentype.Font> => {
-  const response = await fetch(url, { mode: 'cors' });
+  const cacheName = 'dev-tools-fonts';
+  let response: Response;
+  
+  try {
+    const cache = await caches.open(cacheName);
+    const cachedResponse = await cache.match(url);
+    if (cachedResponse) {
+      response = cachedResponse;
+    } else {
+      response = await fetch(url, { mode: 'cors' });
+      if (response.ok) {
+        await cache.put(url, response.clone());
+      }
+    }
+  } catch (e) {
+    console.warn('Cache Storage API not available, falling back to direct fetch', e);
+    response = await fetch(url, { mode: 'cors' });
+  }
+
   if (!response.ok) {
     throw new Error(`Font request failed: ${response.status} ${response.statusText}`);
   }
