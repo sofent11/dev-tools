@@ -831,7 +831,7 @@ export const CsgWorkbench: React.FC = () => {
 
             {/* Config Panel for the selected shape */}
             {selectedShape && (
-              <div className="flex-1 space-y-4 min-h-0">
+              <div className="flex-1 space-y-4 min-h-0 overflow-y-auto pr-1">
                 <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between flex-none">
                   <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
                     <Settings className="w-3.5 h-3.5 text-primary-600" />
