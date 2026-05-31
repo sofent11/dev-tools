@@ -16,20 +16,37 @@ const useCopy = () => {
 };
 
 type DiffKind = 'same' | 'added' | 'removed' | 'changed';
+type JsonPrimitive = string | number | boolean | null;
+type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
+type MutableJsonContainer = JsonValue[] | { [key: string]: JsonValue };
+
+type JsonSchema =
+  | { type: 'null' }
+  | { type: 'string' }
+  | { type: 'integer' | 'number' }
+  | { type: 'boolean' }
+  | { type: 'array'; items?: JsonSchema }
+  | { type: 'object'; properties: Record<string, JsonSchema>; required: string[] }
+  | Record<string, never>;
 
 interface DiffNode {
   key: string;
   path: string;
   kind: DiffKind;
-  left?: unknown;
-  right?: unknown;
+  left?: JsonValue;
+  right?: JsonValue;
   children?: DiffNode[];
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-const stableStringify = (value: unknown): string => {
+const getDiffContainerValue = (
+  container: Record<string, JsonValue> | JsonValue[],
+  key: string,
+): JsonValue => (Array.isArray(container) ? container[Number(key)] : container[key]);
+
+const stableStringify = (value: JsonValue | undefined): string => {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
   if (isRecord(value)) {
     return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`;
@@ -37,14 +54,14 @@ const stableStringify = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
-const previewValue = (value: unknown) => {
+const previewValue = (value: JsonValue | undefined) => {
   if (value === undefined) return 'undefined';
   if (typeof value === 'string') return JSON.stringify(value);
   if (typeof value === 'number' || typeof value === 'boolean' || value === null) return String(value);
   return JSON.stringify(value);
 };
 
-const buildDiff = (left: unknown, right: unknown, key = 'root', path = 'root'): DiffNode => {
+const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path = 'root'): DiffNode => {
   if (stableStringify(left) === stableStringify(right)) {
     return { key, path, kind: 'same', left, right };
   }
@@ -53,8 +70,8 @@ const buildDiff = (left: unknown, right: unknown, key = 'root', path = 'root'): 
   const bothObjects = isRecord(left) && isRecord(right);
 
   if (bothArrays || bothObjects) {
-    const leftContainer = left as Record<string, unknown> | unknown[];
-    const rightContainer = right as Record<string, unknown> | unknown[];
+    const leftContainer = left as Record<string, JsonValue> | JsonValue[];
+    const rightContainer = right as Record<string, JsonValue> | JsonValue[];
     const keys = Array.from(
       new Set([...Object.keys(leftContainer), ...Object.keys(rightContainer)]),
     ).sort((a, b) => {
@@ -64,15 +81,15 @@ const buildDiff = (left: unknown, right: unknown, key = 'root', path = 'root'): 
       return a.localeCompare(b);
     });
 
-    const children = keys.map(childKey => {
+    const children: DiffNode[] = keys.map(childKey => {
       const hasLeft = Object.prototype.hasOwnProperty.call(leftContainer, childKey);
       const hasRight = Object.prototype.hasOwnProperty.call(rightContainer, childKey);
       const childPath = bothArrays ? `${path}[${childKey}]` : `${path}.${childKey}`;
-      if (!hasLeft) return { key: childKey, path: childPath, kind: 'added' as const, right: rightContainer[childKey as keyof typeof rightContainer] };
-      if (!hasRight) return { key: childKey, path: childPath, kind: 'removed' as const, left: leftContainer[childKey as keyof typeof leftContainer] };
+      if (!hasLeft) return { key: childKey, path: childPath, kind: 'added' as const, right: getDiffContainerValue(rightContainer, childKey) };
+      if (!hasRight) return { key: childKey, path: childPath, kind: 'removed' as const, left: getDiffContainerValue(leftContainer, childKey) };
       return buildDiff(
-        leftContainer[childKey as keyof typeof leftContainer],
-        rightContainer[childKey as keyof typeof rightContainer],
+        getDiffContainerValue(leftContainer, childKey),
+        getDiffContainerValue(rightContainer, childKey),
         childKey,
         childPath,
       );
@@ -119,35 +136,52 @@ const parsePath = (path: string): (string | number)[] => {
   return result;
 };
 
-const setValueAtPath = (obj: any, path: (string | number)[], value: any): any => {
+const cloneJsonContainer = (value: JsonValue): MutableJsonContainer =>
+  Array.isArray(value) ? [...value] : isRecord(value) ? { ...value } as { [key: string]: JsonValue } : {};
+
+const getJsonChild = (container: MutableJsonContainer, segment: string | number): JsonValue | undefined =>
+  Array.isArray(container) ? container[Number(segment)] : container[String(segment)];
+
+const setJsonChild = (container: MutableJsonContainer, segment: string | number, value: JsonValue) => {
+  if (Array.isArray(container)) {
+    container[Number(segment)] = value;
+  } else {
+    container[String(segment)] = value;
+  }
+};
+
+const setValueAtPath = (obj: JsonValue, path: (string | number)[], value: JsonValue | undefined): JsonValue => {
+  if (value === undefined) return obj;
   if (path.length === 0) return value;
-  const newObj = Array.isArray(obj) ? [...obj] : { ...obj };
+  const newObj = cloneJsonContainer(obj);
   let curr = newObj;
   for (let i = 0; i < path.length - 1; i++) {
     const seg = path[i];
     const nextSeg = path[i + 1];
     const isNextArray = typeof nextSeg === 'number';
-    if (curr[seg] === undefined || curr[seg] === null) {
-      curr[seg] = isNextArray ? [] : {};
+    const currentChild = getJsonChild(curr, seg);
+    if (currentChild === undefined || currentChild === null) {
+      setJsonChild(curr, seg, isNextArray ? [] : {});
     } else {
-      curr[seg] = Array.isArray(curr[seg]) ? [...curr[seg]] : { ...curr[seg] };
+      setJsonChild(curr, seg, cloneJsonContainer(currentChild));
     }
-    curr = curr[seg];
+    curr = getJsonChild(curr, seg) as MutableJsonContainer;
   }
   const lastSeg = path[path.length - 1];
-  curr[lastSeg] = value;
+  setJsonChild(curr, lastSeg, value);
   return newObj;
 };
 
-const deleteValueAtPath = (obj: any, path: (string | number)[]): any => {
+const deleteValueAtPath = (obj: JsonValue, path: (string | number)[]): JsonValue => {
   if (path.length === 0) return obj;
-  const newObj = Array.isArray(obj) ? [...obj] : { ...obj };
+  const newObj = cloneJsonContainer(obj);
   let curr = newObj;
   for (let i = 0; i < path.length - 1; i++) {
     const seg = path[i];
-    if (curr[seg] === undefined || curr[seg] === null) return obj;
-    curr[seg] = Array.isArray(curr[seg]) ? [...curr[seg]] : { ...curr[seg] };
-    curr = curr[seg];
+    const currentChild = getJsonChild(curr, seg);
+    if (currentChild === undefined || currentChild === null) return obj;
+    setJsonChild(curr, seg, cloneJsonContainer(currentChild));
+    curr = getJsonChild(curr, seg) as MutableJsonContainer;
   }
   const lastSeg = path[path.length - 1];
   if (Array.isArray(curr)) {
@@ -161,7 +195,7 @@ const deleteValueAtPath = (obj: any, path: (string | number)[]): any => {
 interface JsonPatchOp {
   op: 'add' | 'remove' | 'replace';
   path: string;
-  value?: any;
+  value?: JsonValue;
 }
 
 const generateJsonPatch = (node: DiffNode): JsonPatchOp[] => {
@@ -513,7 +547,7 @@ export const SqlFormatterTool: React.FC = () => {
 };
 
 // --- JSON Schema Generator & Local Validator ---
-const generateSchema = (val: unknown): Record<string, any> => {
+const generateSchema = (val: JsonValue): JsonSchema => {
   if (val === null) return { type: 'null' };
   if (typeof val === 'string') return { type: 'string' };
   if (typeof val === 'number') return { type: Number.isInteger(val) ? 'integer' : 'number' };
@@ -523,9 +557,9 @@ const generateSchema = (val: unknown): Record<string, any> => {
     return { type: 'array', items };
   }
   if (typeof val === 'object') {
-    const properties: Record<string, any> = {};
+    const properties: Record<string, JsonSchema> = {};
     const required: string[] = [];
-    const obj = val as Record<string, any>;
+    const obj = val as Record<string, JsonValue>;
     for (const key of Object.keys(obj)) {
       properties[key] = generateSchema(obj[key]);
       required.push(key);
@@ -535,7 +569,7 @@ const generateSchema = (val: unknown): Record<string, any> => {
   return {};
 };
 
-const validateJson = (schema: any, data: any, path = 'root'): string[] => {
+const validateJson = (schema: JsonSchema, data: JsonValue, path = 'root'): string[] => {
   const errors: string[] = [];
   if (!schema || typeof schema !== 'object') return errors;
 
@@ -561,9 +595,10 @@ const validateJson = (schema: any, data: any, path = 'root'): string[] => {
   if (type === 'object' && data && typeof data === 'object' && !Array.isArray(data)) {
     const props = schema.properties;
     if (props) {
+      const dataRecord = data as Record<string, JsonValue>;
       for (const key of Object.keys(props)) {
         if (Object.prototype.hasOwnProperty.call(data, key)) {
-          errors.push(...validateJson(props[key], data[key], `${path}.${key}`));
+          errors.push(...validateJson(props[key], dataRecord[key], `${path}.${key}`));
         }
       }
     }
