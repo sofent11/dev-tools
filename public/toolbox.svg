@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="程序员百宝箱">
+  <rect width="64" height="64" rx="14" fill="#2563eb"/>
+  <path d="M18 25h28v23H18z" fill="#eff6ff"/>
+  <path d="M22 21h20v8H22z" fill="#93c5fd"/>
+  <path d="M14 27h36v8H14z" fill="#bfdbfe"/>
+  <path d="M25 43l-6-6 6-6" fill="none" stroke="#1e3a8a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 31l6 6-6 6" fill="none" stroke="#1e3a8a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M34 30l-4 16" fill="none" stroke="#1d4ed8" stroke-width="4" stroke-linecap="round"/>
+</svg>
