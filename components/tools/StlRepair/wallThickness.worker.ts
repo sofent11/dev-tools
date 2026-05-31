@@ -19,6 +19,9 @@ export interface WallThicknessWorkerReport {
   partial?: boolean;
   estimatedWork?: number;
   abortedByBudget?: boolean;
+  acceleration?: 'none' | 'grid' | 'bvh';
+  candidateTests?: number;
+  skippedFaces?: number;
 }
 
 export type WallThicknessWorkerResponse =
@@ -83,6 +86,112 @@ const rayTriangleDistance = (
   return dist > 1e-5 ? dist : null;
 };
 
+interface TriangleGrid {
+  acceleration: 'grid' | 'none';
+  resolution: number;
+  boundsMin: [number, number, number];
+  boundsMax: [number, number, number];
+  cellSize: [number, number, number];
+  cells: Map<string, number[]>;
+  targetFaces: number;
+}
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const cellKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+const buildTriangleGrid = (positions: Float32Array, indices: Uint32Array, faceCount: number, targetStep: number): TriangleGrid => {
+  if (faceCount < 200) {
+    return {
+      acceleration: 'none',
+      resolution: 1,
+      boundsMin: [0, 0, 0],
+      boundsMax: [0, 0, 0],
+      cellSize: [1, 1, 1],
+      cells: new Map(),
+      targetFaces: Math.ceil(faceCount / targetStep),
+    };
+  }
+
+  const boundsMin: [number, number, number] = [Infinity, Infinity, Infinity];
+  const boundsMax: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < positions.length; i += 3) {
+    boundsMin[0] = Math.min(boundsMin[0], positions[i]);
+    boundsMin[1] = Math.min(boundsMin[1], positions[i + 1]);
+    boundsMin[2] = Math.min(boundsMin[2], positions[i + 2]);
+    boundsMax[0] = Math.max(boundsMax[0], positions[i]);
+    boundsMax[1] = Math.max(boundsMax[1], positions[i + 1]);
+    boundsMax[2] = Math.max(boundsMax[2], positions[i + 2]);
+  }
+
+  const targetFaces = Math.ceil(faceCount / targetStep);
+  const resolution = clamp(Math.round(Math.cbrt(targetFaces) * 1.8), 6, 24);
+  const cellSize: [number, number, number] = [
+    Math.max((boundsMax[0] - boundsMin[0]) / resolution, 1e-6),
+    Math.max((boundsMax[1] - boundsMin[1]) / resolution, 1e-6),
+    Math.max((boundsMax[2] - boundsMin[2]) / resolution, 1e-6),
+  ];
+  const cells = new Map<string, number[]>();
+
+  const toCell = (value: number, axis: 0 | 1 | 2) =>
+    clamp(Math.floor((value - boundsMin[axis]) / cellSize[axis]), 0, resolution - 1);
+
+  for (let faceIndex = 0; faceIndex < faceCount; faceIndex += targetStep) {
+    const a = getVertex(positions, indices[faceIndex * 3]);
+    const b = getVertex(positions, indices[faceIndex * 3 + 1]);
+    const c = getVertex(positions, indices[faceIndex * 3 + 2]);
+    const minX = Math.min(a[0], b[0], c[0]);
+    const minY = Math.min(a[1], b[1], c[1]);
+    const minZ = Math.min(a[2], b[2], c[2]);
+    const maxX = Math.max(a[0], b[0], c[0]);
+    const maxY = Math.max(a[1], b[1], c[1]);
+    const maxZ = Math.max(a[2], b[2], c[2]);
+    for (let x = toCell(minX, 0); x <= toCell(maxX, 0); x += 1) {
+      for (let y = toCell(minY, 1); y <= toCell(maxY, 1); y += 1) {
+        for (let z = toCell(minZ, 2); z <= toCell(maxZ, 2); z += 1) {
+          const key = cellKey(x, y, z);
+          const bucket = cells.get(key);
+          if (bucket) bucket.push(faceIndex);
+          else cells.set(key, [faceIndex]);
+        }
+      }
+    }
+  }
+
+  return { acceleration: 'grid', resolution, boundsMin, boundsMax, cellSize, cells, targetFaces };
+};
+
+const collectGridCandidates = (
+  grid: TriangleGrid,
+  origin: [number, number, number],
+  direction: [number, number, number],
+  maxDistance: number,
+) => {
+  if (grid.acceleration === 'none') return null;
+  const candidates = new Set<number>();
+  const stepDistance = Math.max(Math.min(...grid.cellSize) * 0.7, maxDistance / 96, 1e-4);
+  const toCell = (value: number, axis: 0 | 1 | 2) =>
+    clamp(Math.floor((value - grid.boundsMin[axis]) / grid.cellSize[axis]), 0, grid.resolution - 1);
+
+  for (let distance = 0; distance <= maxDistance; distance += stepDistance) {
+    const x = origin[0] + direction[0] * distance;
+    const y = origin[1] + direction[1] * distance;
+    const z = origin[2] + direction[2] * distance;
+    if (
+      x < grid.boundsMin[0] || x > grid.boundsMax[0] ||
+      y < grid.boundsMin[1] || y > grid.boundsMax[1] ||
+      z < grid.boundsMin[2] || z > grid.boundsMax[2]
+    ) {
+      continue;
+    }
+    const bucket = grid.cells.get(cellKey(toCell(x, 0), toCell(y, 1), toCell(z, 2)));
+    if (bucket) {
+      for (const faceIndex of bucket) candidates.add(faceIndex);
+    }
+  }
+
+  return candidates;
+};
+
 self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
   const started = performance.now();
   const { id, positions, indices, threshold, mode, maxAnalysisMs } = event.data;
@@ -100,11 +209,14 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
     const step = Math.max(1, Math.floor(faceCount / maxSamples));
     const targetStep = mode === 'precise' ? 1 : Math.max(1, Math.floor(faceCount / 5000));
     const estimatedWork = Math.ceil(faceCount / step) * Math.ceil(faceCount / targetStep);
+    const grid = buildTriangleGrid(positions, indices, faceCount, targetStep);
     const budgetMs = maxAnalysisMs ?? (mode === 'precise' ? 6500 : 2500);
     let sampledFaces = 0;
     let thinFaces = 0;
     let minThickness: number | null = null;
     let abortedByBudget = false;
+    let candidateTests = 0;
+    let skippedFaces = 0;
 
     for (let faceIndex = 0; faceIndex < faceCount; faceIndex += step) {
       const ia = indices[faceIndex * 3];
@@ -133,14 +245,29 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
       ];
 
       let best: number | null = null;
-      for (let targetFace = 0; targetFace < faceCount; targetFace += targetStep) {
-        if (targetFace === faceIndex) continue;
+      const candidates = collectGridCandidates(grid, origin, direction, threshold * 8);
+      const targetFaces = candidates && candidates.size > 0 ? candidates : null;
+      if (targetFaces) {
+        skippedFaces += Math.max(0, grid.targetFaces - targetFaces.size);
+      }
+
+      const scanTargetFace = (targetFace: number) => {
+        if (targetFace === faceIndex) return;
         const ta = getVertex(positions, indices[targetFace * 3]);
         const tb = getVertex(positions, indices[targetFace * 3 + 1]);
         const tc = getVertex(positions, indices[targetFace * 3 + 2]);
+        candidateTests += 1;
         const dist = rayTriangleDistance(origin, direction, ta, tb, tc);
         if (dist !== null && dist < threshold * 8 && (best === null || dist < best)) {
           best = dist;
+        }
+      };
+
+      if (targetFaces) {
+        for (const targetFace of targetFaces) scanTargetFace(targetFace);
+      } else {
+        for (let targetFace = 0; targetFace < faceCount; targetFace += targetStep) {
+          scanTargetFace(targetFace);
         }
       }
 
@@ -179,6 +306,9 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
       partial: abortedByBudget,
       estimatedWork,
       abortedByBudget,
+      acceleration: grid.acceleration,
+      candidateTests,
+      skippedFaces,
     };
 
     self.postMessage({ id, type: 'success', report, colors }, [colors.buffer]);

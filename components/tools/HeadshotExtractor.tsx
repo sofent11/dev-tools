@@ -10,6 +10,22 @@ import {
   registerCacheProgressListener, 
   unregisterCacheProgressListener 
 } from './shared/cdnCacheManager';
+import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
+import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+
+const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm';
+const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+
+const createRuntimeState = (
+  label: string,
+  source: string,
+  status: RuntimeAssetLoaderState['status'] = 'idle',
+): RuntimeAssetLoaderState => ({
+  status,
+  label,
+  version: '0.10.0',
+  source,
+});
 
 export const HeadshotExtractor: React.FC = () => {
   const [imgSrc, setImgSrc] = useState('');
@@ -25,15 +41,18 @@ export const HeadshotExtractor: React.FC = () => {
   const [isModelLoading, setIsModelLoading] = useState(false);
   const isModelLoadingRef = useRef(false);
 
-  // Model download progress
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
-  
-  const totalProgress = useMemo(() => {
-    const vals = Object.values(progressMap);
-    if (vals.length === 0) return 0;
-    const sum = vals.reduce((a, b) => a + b, 0);
-    return Math.round(sum / vals.length);
-  }, [progressMap]);
+  const [wasmRuntimeState, setWasmRuntimeState] = useState<RuntimeAssetLoaderState>(() =>
+    createRuntimeState('MediaPipe WASM 运行时', MEDIAPIPE_WASM_URL),
+  );
+  const [modelRuntimeState, setModelRuntimeState] = useState<RuntimeAssetLoaderState>(() =>
+    createRuntimeState('人脸检测模型', MEDIAPIPE_MODEL_URL),
+  );
+
+  const runtimeProgress = useMemo(() => {
+    const states = [wasmRuntimeState, modelRuntimeState];
+    const progressSum = states.reduce((sum, item) => sum + (item.progress ?? (item.status === 'ready' ? 100 : 0)), 0);
+    return Math.round(progressSum / states.length);
+  }, [modelRuntimeState, wasmRuntimeState]);
 
   useEffect(() => {
     initMediaPipe();
@@ -54,19 +73,57 @@ export const HeadshotExtractor: React.FC = () => {
       // Install cache interceptor and register progress hooks
       installCdnCacheInterceptor();
       registerCacheProgressListener('tasks-vision', (p) => {
-        setProgressMap(prev => ({ ...prev, wasm: p }));
+        setWasmRuntimeState(prev => ({
+          ...prev,
+          status: p >= 100 ? 'cached' : 'loading',
+          cached: p >= 100,
+          progress: p,
+        }));
       });
       registerCacheProgressListener('blaze_face_short_range.tflite', (p) => {
-        setProgressMap(prev => ({ ...prev, model: p }));
+        setModelRuntimeState(prev => ({
+          ...prev,
+          status: p >= 100 ? 'cached' : 'loading',
+          cached: p >= 100,
+          progress: p,
+        }));
       });
 
+      setWasmRuntimeState(createRuntimeState('MediaPipe WASM 运行时', MEDIAPIPE_WASM_URL, 'loading'));
+      const wasmProbe = await loadRuntimeAsset<Response>({
+        url: `${MEDIAPIPE_WASM_URL}/vision_wasm_internal.wasm`,
+        kind: 'asset',
+        label: 'MediaPipe WASM 运行时',
+        version: '0.10.0',
+        timeoutMs: 20000,
+        retries: 1,
+        cache: true,
+        onState: setWasmRuntimeState,
+      });
+      await wasmProbe.arrayBuffer();
+      setWasmRuntimeState(prev => ({ ...prev, status: 'ready', progress: 100 }));
+
       const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+        MEDIAPIPE_WASM_URL
       );
+
+      setModelRuntimeState(createRuntimeState('人脸检测模型', MEDIAPIPE_MODEL_URL, 'loading'));
+      const modelProbe = await loadRuntimeAsset<Response>({
+        url: MEDIAPIPE_MODEL_URL,
+        kind: 'asset',
+        label: '人脸检测模型',
+        version: 'BlazeFace short range float16',
+        timeoutMs: 25000,
+        retries: 1,
+        cache: true,
+        onState: setModelRuntimeState,
+      });
+      await modelProbe.arrayBuffer();
+      setModelRuntimeState(prev => ({ ...prev, status: 'ready', progress: 100 }));
       
       faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite",
+          modelAssetPath: MEDIAPIPE_MODEL_URL,
           delegate: "GPU"
         },
         runningMode: "IMAGE",
@@ -76,7 +133,10 @@ export const HeadshotExtractor: React.FC = () => {
       setStatus('Ready. Please select an image.');
     } catch (error) {
       console.error('Error loading MediaPipe:', error);
-      setStatus('Failed to load AI models. Please check your connection.');
+      const message = error instanceof Error ? error.message : '未知错误';
+      setStatus(`AI 模型加载失败：${message}`);
+      setWasmRuntimeState(prev => prev.status === 'ready' ? prev : { ...prev, status: 'error', error: message });
+      setModelRuntimeState(prev => prev.status === 'ready' ? prev : { ...prev, status: 'error', error: message });
     } finally {
       isModelLoadingRef.current = false;
       setIsModelLoading(false);
@@ -366,6 +426,11 @@ export const HeadshotExtractor: React.FC = () => {
             />
         </div>
 
+        <div className="max-w-md mx-auto w-full space-y-2">
+          <RuntimeAssetStatusPanel state={wasmRuntimeState} onRetry={initMediaPipe} compact />
+          <RuntimeAssetStatusPanel state={modelRuntimeState} onRetry={initMediaPipe} compact />
+        </div>
+
         {isModelLoading ? (
           <div className="max-w-md mx-auto w-full space-y-2 animate-in fade-in duration-300 p-4 border border-slate-200 bg-white rounded-xl shadow-xs">
             <div className="flex justify-between text-xs font-semibold text-slate-600">
@@ -373,12 +438,12 @@ export const HeadshotExtractor: React.FC = () => {
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary-500" />
                 {status}
               </span>
-              <span>{totalProgress}%</span>
+              <span>{runtimeProgress}%</span>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
               <div 
                 className="bg-primary-600 h-full transition-all duration-300 ease-out" 
-                style={{ width: `${totalProgress}%` }}
+                style={{ width: `${runtimeProgress}%` }}
               />
             </div>
           </div>

@@ -1,6 +1,6 @@
 const CACHE_NAME = 'devtoolbox-runtime-assets-cache';
 
-export type RuntimeAssetKind = 'script' | 'module';
+export type RuntimeAssetKind = 'script' | 'module' | 'asset';
 export type RuntimeAssetStatus = 'idle' | 'loading' | 'cached' | 'ready' | 'error';
 
 export interface RuntimeAssetLoaderState {
@@ -69,7 +69,13 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number) 
     const cachedResponse = await cache?.match(options.url);
     if (cachedResponse) {
       emit(options, { status: 'cached', cached: true, attempt, progress: 100 });
-      return cachedResponse;
+      const headers = new Headers(cachedResponse.headers);
+      headers.set('x-devtoolbox-runtime-cache', 'hit');
+      return new Response(cachedResponse.body, {
+        status: cachedResponse.status,
+        statusText: cachedResponse.statusText,
+        headers,
+      });
     }
 
     emit(options, { status: 'loading', cached: false, attempt, progress: 0 });
@@ -187,6 +193,30 @@ const loadScriptAsset = async (options: RuntimeAssetOptions) => {
   throw lastError instanceof Error ? lastError : new Error(`${options.label} 加载失败。`);
 };
 
+const loadRawAsset = async (options: RuntimeAssetOptions) => {
+  const attempts = Math.max(1, (options.retries ?? 1) + 1);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetchWithProgress(options, attempt);
+      emit(options, {
+        status: 'ready',
+        cached: response.headers.get('x-devtoolbox-runtime-cache') === 'hit',
+        attempt,
+        progress: 100,
+      });
+      return response;
+    } catch (err) {
+      lastError = err;
+      emit(options, { status: 'error', attempt, error: (err as Error).message });
+      if (attempt < attempts) await delay(400 * attempt);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(`${options.label} 加载失败。`);
+};
+
 export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions): Promise<T> => {
   if (options.kind === 'module') {
     if (!moduleCache.has(options.url)) {
@@ -217,6 +247,10 @@ export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions
       moduleCache.set(options.url, promise);
     }
     return moduleCache.get(options.url) as Promise<T>;
+  }
+
+  if (options.kind === 'asset') {
+    return loadRawAsset(options) as Promise<T>;
   }
 
   if (!scriptCache.has(options.url)) {

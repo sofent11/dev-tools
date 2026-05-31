@@ -165,6 +165,15 @@ export const useScratchpadStore = create<ScratchpadState>()(
       addItem: (nameOrPayload, content = '', type = 'text', mimeType) => {
         get().addItemAsync(nameOrPayload, content, type, mimeType).catch((err) => {
           console.error('Background scratchpad stashing failed:', err);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
+              detail: {
+                title: '暂存箱保存失败',
+                description: err instanceof Error ? err.message : '浏览器本地存储不可用，请下载文件或清理空间后重试。',
+                tone: 'error',
+              },
+            }));
+          }
         });
       },
 

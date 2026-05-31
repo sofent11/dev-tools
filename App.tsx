@@ -8,6 +8,7 @@ import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 import { useI18n } from './src/i18n';
+import { formatBytes } from './components/tools/shared/fileUtils';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
 const TOOL_ROUTE_PREFIX = 'tools';
@@ -108,10 +109,14 @@ export default function App() {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const scratchpadItems = useScratchpadStore((state) => state.items);
+  const scratchpadStorageStatus = useScratchpadStore((state) => state.storageStatus);
+  const scratchpadStorageError = useScratchpadStore((state) => state.lastStorageError);
+  const estimateScratchpadQuota = useScratchpadStore((state) => state.estimateQuota);
   const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
   const updateScratchpadItem = useScratchpadStore((state) => state.updateItem);
   const clearScratchpad = useScratchpadStore((state) => state.clearAll);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [scratchpadQuota, setScratchpadQuota] = useState<StorageEstimate | null>(null);
   const validSelectedIds = useMemo(() => {
     const availableIds = new Set(scratchpadItems.map(item => item.id));
     return selectedIds.filter(id => availableIds.has(id));
@@ -153,13 +158,15 @@ export default function App() {
   useEffect(() => {
     if (!isScratchpadOpen) return;
 
+    estimateScratchpadQuota().then(setScratchpadQuota);
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsScratchpadOpen(false);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isScratchpadOpen]);
+  }, [estimateScratchpadQuota, isScratchpadOpen]);
 
   useEffect(() => {
     const handleToast = (event: Event) => {
@@ -462,6 +469,13 @@ export default function App() {
               </button>
             </div>
 
+            <ScratchpadStorageHealth
+              status={scratchpadStorageStatus}
+              lastError={scratchpadStorageError}
+              quota={scratchpadQuota}
+              onRefresh={() => estimateScratchpadQuota().then(setScratchpadQuota)}
+            />
+
             {/* Header controls bar for multi-select */}
             {scratchpadItems.length > 0 && (
               <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-xl mt-2 flex-none border border-slate-150 dark:border-slate-850 text-xs">
@@ -570,6 +584,64 @@ export default function App() {
     </div>
   );
 }
+
+const ScratchpadStorageHealth: React.FC<{
+  status: 'ok' | 'degraded' | 'error';
+  lastError?: string;
+  quota: StorageEstimate | null;
+  onRefresh: () => void;
+}> = ({ status, lastError, quota, onRefresh }) => {
+  const { t } = useI18n();
+  const usage = quota?.usage ?? 0;
+  const total = quota?.quota ?? 0;
+  const percent = total > 0 ? Math.min(100, Math.round((usage / total) * 100)) : null;
+  const tone = status === 'ok' ? 'emerald' : status === 'degraded' ? 'amber' : 'red';
+  const label = status === 'ok' ? '存储健康' : status === 'degraded' ? '降级存储' : '存储异常';
+  const description = status === 'ok'
+    ? 'IndexedDB 可用，大文件会保存到浏览器本地。'
+    : status === 'degraded'
+      ? 'IndexedDB 不稳定，小文本仍会保存在元数据中。'
+      : '大文件或二进制暂存可能失败，请下载本地文件或清理空间。';
+
+  return (
+    <div className={`mt-3 rounded-xl border p-3 text-xs ${
+      tone === 'emerald'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+        : tone === 'amber'
+          ? 'border-amber-200 bg-amber-50 text-amber-900'
+          : 'border-red-200 bg-red-50 text-red-900'
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="font-bold">{t(label)}</div>
+          <p className="mt-1 leading-5">{t(description)}</p>
+          {percent !== null && (
+            <div className="mt-2">
+              <div className="flex justify-between text-[10px] font-semibold opacity-80">
+                <span>{formatBytes(usage)} / {formatBytes(total)}</span>
+                <span>{percent}%</span>
+              </div>
+              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/70">
+                <div
+                  className={`h-full ${tone === 'red' ? 'bg-red-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+            </div>
+          )}
+          {lastError && <p className="mt-2 break-words text-[10px] opacity-80">{lastError}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded-lg border border-current/20 bg-white/70 px-2 py-1 text-[10px] font-bold hover:bg-white"
+        >
+          {t('重新检测')}
+        </button>
+      </div>
+    </div>
+  );
+};
 
 const ScratchpadItemCard: React.FC<{
   item: ScratchpadItem;

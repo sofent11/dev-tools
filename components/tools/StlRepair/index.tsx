@@ -607,6 +607,15 @@ export const StlRepairTool: React.FC = () => {
 
   const canProcess = Boolean(file) && !processing;
   const outputSize = stlBuffer?.byteLength ?? 0;
+  const estimatedWallWork = useMemo(() => {
+    if (!mesh) return null;
+    const faceCount = Math.floor(mesh.indices.length / 3);
+    const maxSamples = wallThicknessMode === 'precise' ? 2400 : 700;
+    const step = Math.max(1, Math.floor(faceCount / maxSamples));
+    const targetStep = wallThicknessMode === 'precise' ? 1 : Math.max(1, Math.floor(faceCount / 5000));
+    return Math.ceil(faceCount / step) * Math.ceil(faceCount / targetStep);
+  }, [mesh, wallThicknessMode]);
+  const preciseModeWarning = wallThicknessMode === 'precise' && estimatedWallWork !== null && estimatedWallWork > 2_500_000;
 
   const updateOption = <K extends keyof RepairOptions>(key: K, value: RepairOptions[K]) => {
     setOptions(previous => ({ ...previous, [key]: value }));
@@ -937,6 +946,13 @@ export const StlRepairTool: React.FC = () => {
                 <option value="fast">快速采样 (推荐)</option>
                 <option value="precise">精细采样 (较慢)</option>
               </Select>
+              {wallThicknessEnabled && (
+                <p className={`mt-1 text-[11px] leading-4 ${preciseModeWarning ? 'text-amber-700' : 'text-slate-500'}`}>
+                  {estimatedWallWork === null
+                    ? '导入模型后会预估分析成本；大模型建议先用快速采样。'
+                    : `预计约 ${formatNumber(estimatedWallWork)} 次候选射线测试，Worker 会用网格预筛并在超预算时返回局部报告。${preciseModeWarning ? ' 当前模型较大，建议优先使用快速采样。' : ''}`}
+                </p>
+              )}
             </div>
             <div>
               <FieldLabel hint={`${formatSize(wallThicknessThreshold)} mm`}>壁厚风险阈值</FieldLabel>
@@ -973,7 +989,8 @@ export const StlRepairTool: React.FC = () => {
                 已采样 {formatNumber(wallReport.sampledFaces)} 个面，低于 {formatSize(wallReport.threshold)} mm 的风险面 {formatNumber(wallReport.thinFaces)} 个；
                 最小估算厚度 {wallReport.minThickness === null ? '未命中对向面' : `${formatSize(wallReport.minThickness)} mm`}；
                 采样率 {(wallReport.sampleRate * 100).toFixed(1)}%，置信度 {wallReport.confidence}，耗时 {Math.round(wallReport.elapsedMs)} ms；
-                估算工作量 {formatNumber(wallReport.estimatedWork || 0)} 次射线测试。
+                估算工作量 {formatNumber(wallReport.estimatedWork || 0)} 次射线测试；
+                加速结构 {wallReport.acceleration || 'none'}，实际候选测试 {formatNumber(wallReport.candidateTests || 0)} 次，跳过 {formatNumber(wallReport.skippedFaces || 0)} 个候选面。
               </div>
               {wallReport.partial && (
                 <div className="mt-1 leading-5 text-amber-700">

@@ -37,6 +37,12 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Fixed all TypeScript errors reported by `tsc --noEmit`.
 - Added Vite and remote PDF.js module type declarations.
 - Fixed `fast-xml-parser` option casing for namespace handling.
+- Surfaced shared runtime loader state in sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and Headshot/MediaPipe panels.
+- Added runtime timeout cleanup tests, retry/cached state coverage, and unified retry affordances for major CDN-backed tools.
+- Added scratchpad degraded/error persistence handling, background failure toasts, and Drawer storage health/quota visibility.
+- Added animation batch progress/cancel flows, ZIP filename sanitization, and WebCodecs APNG/WebP unknown-frame probing.
+- Moved STL wall-thickness analysis into a Worker, added partial reports, fast/precise controls, and grid-based candidate prefiltering.
+- Added Playwright smoke coverage for mobile scratchpad, APNG/WebP capability messaging, and STL wall-thickness controls.
 - Stabilized React hook dependencies in network pinging, SQLite setup, image vectorization, and 3D material rendering.
 - Moved mock WebSocket/SSE classes out of React component bodies so React Compiler can optimize the component.
 - Hardened scratchpad SVG preview sanitization before `dangerouslySetInnerHTML`.
@@ -49,23 +55,23 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 ## Remaining Known Issues
 
 - Several large vendor chunks remain by nature of Three.js, pdf-lib, and data tooling. They are lazy-loaded and cached, but deeper splitting can be revisited if real-user performance data shows a problem.
-- Browser-only remote CDN dependencies now share a common runtime loader compatibility path, but more tools should expose the loader state directly in their own panels.
-- Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder` support and use memory/frame budgets.
-- STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The wall-thickness result is a sampling estimate, not a replacement for slicer or industrial inspection.
+- Browser-only remote CDN dependencies now share a common runtime loader compatibility path and visible panels in the highest-risk tools. Remaining work is self-hosted asset mirrors and deeper fixture-backed failure simulation.
+- Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder`, now probe unknown frame counts, and still enforce frame/pixel budgets.
+- STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The worker now uses grid prefiltering and partial reports, but the result remains a sampling estimate rather than slicer or industrial inspection truth.
 
 ## Recommended Next Iterations
 
 1. Improve runtime loader UI adoption:
-   Continue surfacing cached/loading/retry/error state inside sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and MediaPipe panels.
+   Add optional self-hosted mirrors and fixture-backed 404/timeout/offline simulations for CDN-backed engines.
 
 2. Expand per-tool tests:
-   Add focused tests for scratchpad persistence/quota behavior, runtime loader timeout/retry, SQL formatting, SVG sanitizer, and JWT worker auditing.
+   Add more fixture-backed tests for scratchpad quota edge cases, SQL formatting, SVG sanitizer, JWT worker auditing, APNG/WebP probing, and STL wall-thickness high-face models.
 
 3. Improve offline resilience:
    Add local `public/vendor` mirrors for self-hostable browser assets where licenses allow.
 
 4. Harden product feature stages:
-   Add fixtures and browser tests for APNG/WebP frame extraction and STL wall-thickness fast/precise modes.
+   Add real media/STL fixture suites for APNG/WebP frame extraction and STL wall-thickness fast/precise numeric diagnostics.
 
 5. Tighten CI over time:
-   Add mobile viewport Playwright coverage for the scratchpad drawer and key Studio tabs.
+   Broaden mobile viewport Playwright coverage beyond the scratchpad drawer to key Studio tabs and long-running worker cancellation flows.

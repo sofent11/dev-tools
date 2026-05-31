@@ -60,8 +60,8 @@
 - 图片主色与色板提取
 - 图片文字水印
 - 贴纸图 / 素材图自动切片，并支持单图或 ZIP 下载
-- GIF、Lottie JSON、APNG 与 animated WebP 动画帧提取；APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力
-- 大头照提取：基于 MediaPipe 自动识别人脸并生成裁剪图
+- GIF、Lottie JSON、APNG 与 animated WebP 动画帧提取；APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，并带帧数探测、内存预算、批量导出进度与取消
+- 大头照提取：基于 MediaPipe 自动识别人脸并生成裁剪图，MediaPipe WASM/模型加载会展示缓存、进度、错误和重试状态
 - PDF 合并
 - PDF 页面转 PNG 图片
 - 本地 WebGL 换脸工具
@@ -87,7 +87,7 @@
 
 - AI 首饰文字定制：加载字体、生成可制造的文字轮廓，支持拖拽、缩放、旋转、工艺参数调整和 SVG 导出
 - 小学几何解题工作区：加载 / 保存题目 JSON，支持交互画辅助线、移动端点、撤销、清空，以及教学模式展示
-- STL 修复工具提供壁厚热力图、快速/精细采样模式与 PBR 环境预览；壁厚结果是浏览器端工程辅助估算，打印前仍建议用切片软件复核
+- STL 修复工具提供壁厚热力图、快速/精细采样模式、Worker 局部报告、网格预筛与 PBR 环境预览；壁厚结果是浏览器端工程辅助估算，打印前仍建议用切片软件复核
 
 ### AI 助手
 

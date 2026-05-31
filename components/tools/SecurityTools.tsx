@@ -995,6 +995,9 @@ export const PasswordGenTool: React.FC = () => {
 };
 
 // ================= GPG/PGP Offline Keymaster Tool =================
+const OPENPGP_VERSION = '5.11.3';
+const OPENPGP_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/openpgp@${OPENPGP_VERSION}/dist/openpgp.min.js`;
+
 export const PgpKeymasterTool: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'generate' | 'crypto' | 'sign-verify'>('generate');
   const [openpgpLoaded, setOpenpgpLoaded] = useState(false);
@@ -1003,8 +1006,8 @@ export const PgpKeymasterTool: React.FC = () => {
   const [openpgpRuntimeState, setOpenpgpRuntimeState] = useState<RuntimeAssetLoaderState>({
     status: 'idle',
     label: 'OpenPGP',
-    version: '5.11.2',
-    source: 'https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js',
+    version: OPENPGP_VERSION,
+    source: OPENPGP_SCRIPT_URL,
   });
   
   // Generation state
@@ -1041,9 +1044,9 @@ export const PgpKeymasterTool: React.FC = () => {
       Promise.resolve().then(() => setOpenpgpLoaded(true));
       return;
     }
-    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js', {
+    loadScriptWithCache(OPENPGP_SCRIPT_URL, {
       label: 'OpenPGP',
-      version: '5.11.2',
+      version: OPENPGP_VERSION,
       onStatus: event => setOpenpgpRuntimeState({
         status: event.status,
         label: event.label,

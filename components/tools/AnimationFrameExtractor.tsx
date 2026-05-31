@@ -94,6 +94,30 @@ export const sanitizeArchiveFileName = (name: string) =>
     .replace(/^\.+/, '')
     .slice(0, 80) || 'animation';
 
+export type ImageDecoderFrameCountSource = 'metadata' | 'probe';
+
+export const getImageDecoderFramePlan = (frameCount?: number): {
+  frameCount: number;
+  frameCountSource: ImageDecoderFrameCountSource;
+} => {
+  if (typeof frameCount === 'number' && Number.isFinite(frameCount) && frameCount > 1) {
+    return { frameCount, frameCountSource: 'metadata' };
+  }
+  return { frameCount: MAX_DECODED_FRAMES, frameCountSource: 'probe' };
+};
+
+const isImageDecoderEndError = (err: unknown) => {
+  const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+  const name = err instanceof Error ? err.name.toLowerCase() : '';
+  return name.includes('index') ||
+    name.includes('range') ||
+    message.includes('frame') ||
+    message.includes('index') ||
+    message.includes('range') ||
+    message.includes('past the end') ||
+    message.includes('out of bounds');
+};
+
 export const AnimationFrameExtractor: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<'lottie' | 'gif' | 'webp' | 'apng' | null>(null);
@@ -244,18 +268,25 @@ export const AnimationFrameExtractor: React.FC = () => {
     }
 
     const decoder = new window.ImageDecoder({ data: uploadedFile, type: mimeType });
-    const frameCount = decoder.tracks?.selectedTrack?.frameCount || 1;
-    if (frameCount > MAX_DECODED_FRAMES) {
-      throw new Error(`检测到 ${frameCount} 帧，超过当前安全上限 ${MAX_DECODED_FRAMES} 帧。请截取较短片段后重试。`);
+    const framePlan = getImageDecoderFramePlan(decoder.tracks?.selectedTrack?.frameCount);
+    if (framePlan.frameCount > MAX_DECODED_FRAMES) {
+      throw new Error(`检测到 ${framePlan.frameCount} 帧，超过当前安全上限 ${MAX_DECODED_FRAMES} 帧。请截取较短片段后重试。`);
     }
     const parsedFrames: FrameData[] = [];
     let totalPixels = 0;
 
     try {
-      for (let index = 0; index < frameCount; index += 1) {
+      for (let index = 0; index < framePlan.frameCount; index += 1) {
         if (signal.aborted) throw new DOMException('用户已取消解析', 'AbortError');
-        setStatus(`正在解码 ${mimeType.includes('webp') ? 'WebP' : 'APNG'} 第 ${index + 1} / ${frameCount} 帧...`);
-        const { image } = await decoder.decode({ frameIndex: index });
+        const totalLabel = framePlan.frameCountSource === 'probe' ? '探测中' : framePlan.frameCount;
+        setStatus(`正在${framePlan.frameCountSource === 'probe' ? '探测并' : ''}解码 ${mimeType.includes('webp') ? 'WebP' : 'APNG'} 第 ${index + 1} / ${totalLabel} 帧...`);
+        let image: VideoFrame;
+        try {
+          ({ image } = await decoder.decode({ frameIndex: index }));
+        } catch (err) {
+          if (framePlan.frameCountSource === 'probe' && index > 0 && isImageDecoderEndError(err)) break;
+          throw err;
+        }
         const canvas = document.createElement('canvas');
         canvas.width = image.displayWidth;
         canvas.height = image.displayHeight;
@@ -275,6 +306,10 @@ export const AnimationFrameExtractor: React.FC = () => {
       }
     } finally {
       decoder.close();
+    }
+
+    if (framePlan.frameCountSource === 'probe') {
+      setStatus(`帧数探测完成，共检测到 ${parsedFrames.length} 帧。`);
     }
 
     return parsedFrames;
