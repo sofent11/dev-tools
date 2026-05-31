@@ -14,12 +14,42 @@ interface MockRule {
     delay: number;
 }
 
+type RequestBodyMode = 'raw' | 'form-data';
+
+const stripMatchingQuotes = (value: string) => {
+    if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+    ) {
+        return value.slice(1, -1);
+    }
+    return value;
+};
+
+const parseFormBodyLines = (input: string) =>
+    input
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map(line => {
+            const separatorIndex = line.indexOf('=');
+            if (separatorIndex === -1) {
+                return [line, ''] as const;
+            }
+            return [
+                line.slice(0, separatorIndex).trim(),
+                line.slice(separatorIndex + 1).trim()
+            ] as const;
+        })
+        .filter(([key]) => key);
+
 const parseCurlCommand = (curlCmd: string) => {
-    const cleanCmd = curlCmd.trim().replace(/\\\s*\n/g, ' '); 
+    const cleanCmd = curlCmd.trim().replace(/\\\s*\n/g, ' ');
     let method = 'GET';
     let url = '';
     const parsedHeaders: Record<string, string> = {};
     let body = '';
+    const formBodyLines: string[] = [];
 
     const urlRegex = /(?:https?:\/\/[^\s'"]+)/i;
     const urlMatch = cleanCmd.match(urlRegex);
@@ -50,22 +80,50 @@ const parseCurlCommand = (curlCmd: string) => {
 
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
-        if (token === '-X' || token === '--request') {
-            method = tokens[i + 1]?.toUpperCase() || 'GET';
-            i++;
-        } else if (token === '-H' || token === '--header') {
-            const headerStr = tokens[i + 1] || '';
-            const colonIndex = headerStr.indexOf(':');
+        if (token === '-X' || token === '--request' || token.startsWith('--request=')) {
+            const nextMethod = token.startsWith('--request=') ? token.slice('--request='.length) : tokens[i + 1];
+            method = nextMethod?.toUpperCase() || 'GET';
+            if (!token.startsWith('--request=')) i++;
+        } else if (token === '-H' || token === '--header' || token.startsWith('--header=')) {
+            const headerStr = token.startsWith('--header=') ? token.slice('--header='.length) : (tokens[i + 1] || '');
+            const normalizedHeaderStr = stripMatchingQuotes(headerStr);
+            const colonIndex = normalizedHeaderStr.indexOf(':');
             if (colonIndex > 0) {
-                const key = headerStr.slice(0, colonIndex).trim();
-                const value = headerStr.slice(colonIndex + 1).trim();
+                const key = normalizedHeaderStr.slice(0, colonIndex).trim();
+                const value = normalizedHeaderStr.slice(colonIndex + 1).trim();
                 parsedHeaders[key] = value;
             }
-            i++;
-        } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary') {
-            body = tokens[i + 1] || '';
+            if (!token.startsWith('--header=')) i++;
+        } else if (
+            token === '-d' ||
+            token === '--data' ||
+            token === '--data-raw' ||
+            token === '--data-binary' ||
+            token.startsWith('--data=') ||
+            token.startsWith('--data-raw=') ||
+            token.startsWith('--data-binary=')
+        ) {
+            const payload = token.includes('=') ? token.slice(token.indexOf('=') + 1) : (tokens[i + 1] || '');
+            body = stripMatchingQuotes(payload);
             if (method === 'GET') method = 'POST';
-            i++;
+            if (!token.includes('=')) i++;
+        } else if (
+            token === '-F' ||
+            token === '--form' ||
+            token === '--form-string' ||
+            token.startsWith('--form=') ||
+            token.startsWith('--form-string=')
+        ) {
+            const formToken = token.includes('=') ? token.slice(token.indexOf('=') + 1) : (tokens[i + 1] || '');
+            const normalizedFormToken = stripMatchingQuotes(formToken);
+            const separatorIndex = normalizedFormToken.indexOf('=');
+            if (separatorIndex > 0) {
+                const key = normalizedFormToken.slice(0, separatorIndex).trim();
+                const value = stripMatchingQuotes(normalizedFormToken.slice(separatorIndex + 1).trim());
+                formBodyLines.push(`${key}=${value}`);
+            }
+            if (method === 'GET') method = 'POST';
+            if (!token.includes('=')) i++;
         }
     }
 
@@ -74,7 +132,12 @@ const parseCurlCommand = (curlCmd: string) => {
         if (httpToken) url = httpToken;
     }
 
-    return { method, url, headers: JSON.stringify(parsedHeaders, null, 2), body };
+    const bodyMode: RequestBodyMode = formBodyLines.length > 0 ? 'form-data' : 'raw';
+    if (bodyMode === 'form-data') {
+        body = formBodyLines.join('\n');
+    }
+
+    return { method, url, headers: JSON.stringify(parsedHeaders, null, 2), body, bodyMode };
 };
 
 export const HttpBuilderTool: React.FC = () => {
@@ -82,6 +145,7 @@ export const HttpBuilderTool: React.FC = () => {
     const [url, setUrl] = useState('');
     const [headers, setHeaders] = useState('{\n  "Content-Type": "application/json"\n}');
     const [body, setBody] = useState('');
+    const [bodyMode, setBodyMode] = useState<RequestBodyMode>('raw');
     const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
     const [showCurlModal, setShowCurlModal] = useState(false);
@@ -106,6 +170,7 @@ export const HttpBuilderTool: React.FC = () => {
             setUrl(parsed.url);
             setHeaders(parsed.headers);
             setBody(parsed.body);
+            setBodyMode(parsed.bodyMode);
             setShowCurlModal(false);
             setCurlInput('');
         } catch (e) {
@@ -117,32 +182,48 @@ export const HttpBuilderTool: React.FC = () => {
         let parsedHeaders: Record<string, string> = {};
         try {
             parsedHeaders = JSON.parse(headers || '{}');
-        } catch (e) {
+        } catch {
             // Ignore JSON parsing errors
         }
 
-        const hasBody = method !== 'GET' && method !== 'HEAD' && body;
+        const hasFormBody = method !== 'GET' && method !== 'HEAD' && bodyMode === 'form-data' && body.trim();
+        const hasRawBody = method !== 'GET' && method !== 'HEAD' && bodyMode === 'raw' && body;
+        const hasBody = Boolean(hasFormBody || hasRawBody);
+        const formEntries = hasFormBody ? parseFormBodyLines(body) : [];
+        const normalizedHeaders = { ...parsedHeaders };
+        delete normalizedHeaders['content-length'];
+        if (hasFormBody) {
+            delete normalizedHeaders['Content-Type'];
+            delete normalizedHeaders['content-type'];
+        }
         const targetUrl = url || 'https://api.example.com/data';
 
         switch (exportLang) {
             case 'fetch': {
                 let optsStr = `{\n  method: '${method}',\n`;
-                if (Object.keys(parsedHeaders).length > 0) {
-                    optsStr += `  headers: ${JSON.stringify(parsedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
+                if (Object.keys(normalizedHeaders).length > 0) {
+                    optsStr += `  headers: ${JSON.stringify(normalizedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
                 }
-                if (hasBody) {
+                if (hasFormBody) {
+                    optsStr += `  body: formData,\n`;
+                } else if (hasRawBody) {
                     optsStr += `  body: JSON.stringify(${body.trim() || '{}'}),\n`;
                 }
                 if (optsStr.endsWith(',\n')) optsStr = optsStr.slice(0, -2) + '\n';
                 optsStr += '}';
-                return `fetch('${targetUrl}', ${optsStr})\n  .then(res => res.json())\n  .then(data => console.log(data))\n  .catch(err => console.error(err));`;
+                const formPrefix = hasFormBody
+                    ? `const formData = new FormData();\n${formEntries.map(([k, v]) => `formData.append(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n')}\n\n`
+                    : '';
+                return `${formPrefix}fetch('${targetUrl}', ${optsStr})\n  .then(res => res.json())\n  .then(data => console.log(data))\n  .catch(err => console.error(err));`;
             }
             case 'axios': {
                 let configStr = `{\n  method: '${method.toLowerCase()}',\n  url: '${targetUrl}',\n`;
-                if (Object.keys(parsedHeaders).length > 0) {
-                    configStr += `  headers: ${JSON.stringify(parsedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
+                if (Object.keys(normalizedHeaders).length > 0) {
+                    configStr += `  headers: ${JSON.stringify(normalizedHeaders, null, 4).replace(/\n/g, '\n  ')},\n`;
                 }
-                if (hasBody) {
+                if (hasFormBody) {
+                    configStr += `  data: formData,\n`;
+                } else if (hasRawBody) {
                     try {
                         const parsedBody = JSON.parse(body);
                         configStr += `  data: ${JSON.stringify(parsedBody, null, 4).replace(/\n/g, '\n  ')},\n`;
@@ -152,26 +233,37 @@ export const HttpBuilderTool: React.FC = () => {
                 }
                 if (configStr.endsWith(',\n')) configStr = configStr.slice(0, -2) + '\n';
                 configStr += '}';
-                return `import axios from 'axios';\n\naxios(${configStr})\n  .then(res => {\n    console.log(res.data);\n  })\n  .catch(err => {\n    console.error(err);\n  });`;
+                const formPrefix = hasFormBody
+                    ? `import axios from 'axios';\n\nconst formData = new FormData();\n${formEntries.map(([k, v]) => `formData.append(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n')}\n\n`
+                    : `import axios from 'axios';\n\n`;
+                return `${formPrefix}axios(${configStr})\n  .then(res => {\n    console.log(res.data);\n  })\n  .catch(err => {\n    console.error(err);\n  });`;
             }
             case 'curl': {
                 let curl = `curl -X ${method} "${targetUrl}"`;
-                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                Object.entries(normalizedHeaders).forEach(([k, v]) => {
                     curl += ` \\\n  -H "${k}: ${v}"`;
                 });
-                if (hasBody) {
+                if (hasFormBody) {
+                    formEntries.forEach(([k, v]) => {
+                        curl += ` \\\n  -F "${k}=${v.replace(/"/g, '\\"')}"`;
+                    });
+                } else if (hasRawBody) {
                     curl += ` \\\n  -d '${body.replace(/'/g, "'\\''")}'`;
                 }
                 return curl;
             }
             case 'python': {
                 let code = `import requests\nimport json\n\nurl = "${targetUrl}"\n`;
-                if (Object.keys(parsedHeaders).length > 0) {
-                    code += `headers = ${JSON.stringify(parsedHeaders, null, 4)}\n`;
+                if (Object.keys(normalizedHeaders).length > 0) {
+                    code += `headers = ${JSON.stringify(normalizedHeaders, null, 4)}\n`;
                 } else {
                     code += `headers = {}\n`;
                 }
-                if (hasBody) {
+                if (hasFormBody) {
+                    const formObject = Object.fromEntries(formEntries);
+                    code += `data = ${JSON.stringify(formObject, null, 4)}\n`;
+                    code += `response = requests.${method.toLowerCase()}(url, headers=headers, data=data)\n`;
+                } else if (hasRawBody) {
                     try {
                         const parsedBody = JSON.parse(body);
                         code += `data = ${JSON.stringify(parsedBody, null, 4)}\n`;
@@ -188,14 +280,19 @@ export const HttpBuilderTool: React.FC = () => {
             }
             case 'go': {
                 let headersCode = '';
-                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                Object.entries(normalizedHeaders).forEach(([k, v]) => {
                     headersCode += `\treq.Header.Add("${k}", "${v}")\n`;
                 });
 
                 let bodyReader = 'nil';
                 let importBody = '';
                 let bodyDef = '';
-                if (hasBody) {
+                if (hasFormBody) {
+                    importBody = '\n\t"bytes"\n\t"mime/multipart"';
+                    bodyDef = `\tvar payload bytes.Buffer\n\twriter := multipart.NewWriter(&payload)\n${formEntries.map(([k, v]) => `\t_ = writer.WriteField(${JSON.stringify(k)}, ${JSON.stringify(v)})\n`).join('')}\twriter.Close()\n`;
+                    bodyReader = '&payload';
+                    headersCode = `\treq.Header.Set("Content-Type", writer.FormDataContentType())\n${headersCode}`;
+                } else if (hasRawBody) {
                     importBody = '\n\t"strings"';
                     bodyDef = `\tpayload := strings.NewReader(\`${body}\`)\n`;
                     bodyReader = 'payload';
@@ -205,12 +302,17 @@ export const HttpBuilderTool: React.FC = () => {
             }
             case 'java': {
                 let headersCode = '';
-                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                Object.entries(normalizedHeaders).forEach(([k, v]) => {
                     headersCode += `      .addHeader("${k.replace(/"/g, '\\"')}", "${v.replace(/"/g, '\\"')}")\n`;
                 });
 
                 let bodyCode = '';
-                if (hasBody) {
+                if (hasFormBody) {
+                    bodyCode = `    RequestBody body = new MultipartBody.Builder()\n` +
+                               `      .setType(MultipartBody.FORM)\n` +
+                               `${formEntries.map(([k, v]) => `      .addFormDataPart("${k.replace(/"/g, '\\"')}", "${v.replace(/"/g, '\\"')}")\n`).join('')}` +
+                               `      .build();\n`;
+                } else if (hasRawBody) {
                     bodyCode = `    MediaType mediaType = MediaType.parse("${parsedHeaders['Content-Type'] || 'application/json'}");\n` +
                                `    RequestBody body = RequestBody.create(mediaType, "${body.replace(/"/g, '\\"').replace(/\n/g, '\\n')}");\n`;
                 } else {
@@ -290,12 +392,24 @@ export const HttpBuilderTool: React.FC = () => {
         setShowCorsAlert(false);
         try {
             const h = JSON.parse(headers);
+            const normalizedHeaders = { ...h };
             const options: RequestInit = {
                 method,
-                headers: h,
+                headers: normalizedHeaders,
             };
             if (method !== 'GET' && method !== 'HEAD') {
-                options.body = body;
+                if (bodyMode === 'form-data') {
+                    const formData = new FormData();
+                    parseFormBodyLines(body).forEach(([key, value]) => {
+                        formData.append(key, value);
+                    });
+                    delete normalizedHeaders['Content-Type'];
+                    delete normalizedHeaders['content-type'];
+                    delete normalizedHeaders['content-length'];
+                    options.body = formData;
+                } else {
+                    options.body = body;
+                }
             }
 
             // Apply CORS Proxy redirection if checked
@@ -442,12 +556,28 @@ export const HttpBuilderTool: React.FC = () => {
                             />
                         </div>
                         <div className="flex flex-col gap-1.5 min-h-[120px]">
-                            <FieldLabel>Request Body (String / Raw)</FieldLabel>
+                            <div className="flex items-center justify-between gap-2">
+                                <FieldLabel>{bodyMode === 'form-data' ? 'Form Data Body' : 'Request Body (String / Raw)'}</FieldLabel>
+                                <select
+                                    className="p-1.5 border rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-[11px] font-semibold focus:outline-none"
+                                    value={bodyMode}
+                                    onChange={e => setBodyMode(e.target.value as RequestBodyMode)}
+                                >
+                                    <option value="raw">Raw Body</option>
+                                    <option value="form-data">multipart/form-data</option>
+                                </select>
+                            </div>
                             <textarea
                                 className="flex-1 w-full p-2.5 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
                                 value={body}
+                                placeholder={bodyMode === 'form-data' ? 'layout=earring_text\nartifact=dxf\ntext=Mimi' : 'Raw request payload'}
                                 onChange={e => setBody(e.target.value)}
                             />
+                            {bodyMode === 'form-data' && (
+                                <p className="text-[11px] text-slate-500 leading-relaxed">
+                                    每行使用 <code>key=value</code>，发送时会自动转换成 <code>multipart/form-data</code>。
+                                </p>
+                            )}
                         </div>
                     </div>
                 </div>
