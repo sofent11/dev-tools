@@ -1,13 +1,13 @@
-import { lazy } from 'react';
+import { lazy, type ComponentType } from 'react';
 import {
   FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
-const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
+const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   loader: () => Promise<T>,
   exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<any> }));
+) => lazy(async () => ({ default: (await loader())[exportName] as ComponentType<Record<string, never>> }));
 
 // Import consolidated Studios
 const JsonFormatStudio = lazyNamed(() => import('./studios/JsonFormatStudio'), 'JsonFormatStudio');

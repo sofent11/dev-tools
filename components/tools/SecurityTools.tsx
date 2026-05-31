@@ -1414,7 +1414,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
     try {
       const isValid = (window as any).smCrypto.sm2.doVerifySignature(sm2SignPlain, sm2SignatureHex, sm2Pub, { hash: true, der: true });
       setSm2VerifyResult(isValid ? 'valid' : 'invalid');
-    } catch (e) {
+    } catch {
       setSm2VerifyResult('invalid');
     }
   };

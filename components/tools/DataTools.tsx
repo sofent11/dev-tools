@@ -309,7 +309,6 @@ export const JsonDiffTool: React.FC = () => {
   const handleMergeLeft = useCallback((node: DiffNode) => {
     try {
       const leftJson = JSON.parse(left);
-      const rightJson = JSON.parse(right);
       const pathSegments = parsePath(node.path);
 
       let newLeft = leftJson;
@@ -325,11 +324,10 @@ export const JsonDiffTool: React.FC = () => {
     } catch (e) {
       alert('合并至左侧失败: ' + (e as Error).message);
     }
-  }, [left, right]);
+  }, [left]);
 
   const handleMergeRight = useCallback((node: DiffNode) => {
     try {
-      const leftJson = JSON.parse(left);
       const rightJson = JSON.parse(right);
       const pathSegments = parsePath(node.path);
 
@@ -346,7 +344,7 @@ export const JsonDiffTool: React.FC = () => {
     } catch (e) {
       alert('合并至右侧失败: ' + (e as Error).message);
     }
-  }, [left, right]);
+  }, [right]);
 
   const jsonPatchText = useMemo(() => {
     if (!result.diff) return '[]';
