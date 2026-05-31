@@ -200,19 +200,105 @@ const parsePem = (pem: string): PemParseResult => {
   };
 };
 
+const extractLargeIntegers = (der: Uint8Array): string[] => {
+  const results: string[] = [];
+  let pos = 0;
+  while (pos < der.length - 4) {
+    if (der[pos] === 0x02) { // INTEGER
+      pos++;
+      let len = der[pos++];
+      if (len & 0x80) {
+        const numBytes = len & 0x7f;
+        len = 0;
+        for (let i = 0; i < numBytes; i++) {
+          len = (len << 8) | der[pos++];
+        }
+      }
+      if (len >= 100 && pos + len <= der.length) {
+        const block = der.slice(pos, pos + len);
+        const start = block[0] === 0x00 ? 1 : 0;
+        const hex = Array.from(block.slice(start)).map(b => b.toString(16).padStart(2, '0')).join('');
+        results.push(hex);
+      }
+      pos += len;
+    } else {
+      pos++;
+    }
+  }
+  return results;
+};
+
 export const CertificateParserTool: React.FC = () => {
   const [pem, setPem] = useState('-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----');
+  const [privateKeyPem, setPrivateKeyPem] = useState('');
   const result = useMemo(() => parsePem(pem), [pem]);
+
+  const matchStatus = useMemo(() => {
+    if (!pem || !privateKeyPem) return 'none';
+    try {
+      const certMatches = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/) || [];
+      const privMatches = privateKeyPem.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]+?-----END (?:RSA )?PRIVATE KEY-----/) || [];
+      if (certMatches.length === 0 || privMatches.length === 0) return 'mismatched';
+
+      const certDerBase64 = certMatches[0].replace(/-----BEGIN CERTIFICATE-----|-----END CERTIFICATE-----|\s/g, '');
+      const privDerBase64 = privMatches[0].replace(/-----BEGIN (?:RSA )?PRIVATE KEY-----|-----END (?:RSA )?PRIVATE KEY-----|\s/g, '');
+
+      const certBin = atob(certDerBase64);
+      const certBytes = new Uint8Array(certBin.length);
+      for (let i = 0; i < certBin.length; i++) certBytes[i] = certBin.charCodeAt(i);
+
+      const privBin = atob(privDerBase64);
+      const privBytes = new Uint8Array(privBin.length);
+      for (let i = 0; i < privBin.length; i++) privBytes[i] = privBin.charCodeAt(i);
+
+      const certInts = extractLargeIntegers(certBytes);
+      const privInts = extractLargeIntegers(privBytes);
+
+      if (certInts.length === 0 || privInts.length === 0) return 'mismatched';
+
+      const isPair = certInts.some(ci => privInts.includes(ci));
+      return isPair ? 'matched' : 'mismatched';
+    } catch {
+      return 'mismatched';
+    }
+  }, [pem, privateKeyPem]);
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="证书/密钥文本解析器" description="解析 PEM 格式证书、RSA/EC 私钥及 CSR 请求包结构，100% 浏览器本地化处理。" />
+      <CardHeader title="证书/密钥文本解析与一致性校验" description="解析 PEM 格式证书、RSA/EC 私钥结构，并支持 SSL 数字证书公私钥对一致性离线断言配对校验。" />
       <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_24rem]">
-        <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel hint="支持 CERTIFICATE, PRIVATE KEY, RSA/EC KEY, CERTIFICATE REQUEST 等 PEM 文本">PEM 证书或密钥块</FieldLabel>
-          <Textarea className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" value={pem} onChange={event => setPem(event.target.value)} />
+        <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex-1 flex min-h-0 flex-col gap-2">
+            <FieldLabel hint="支持 CERTIFICATE, CERTIFICATE REQUEST 等 PEM 文本">X.509 公钥证书 (Certificate PEM)</FieldLabel>
+            <Textarea className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" value={pem} onChange={event => setPem(event.target.value)} />
+          </div>
+          <div className="flex-1 flex min-h-0 flex-col gap-2">
+            <FieldLabel hint="支持 RSA / PKCS#8 格式私钥对配对一致性校验">配套私钥 (Private Key PEM - 用于配对验证)</FieldLabel>
+            <Textarea 
+              className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" 
+              value={privateKeyPem} 
+              onChange={event => setPrivateKeyPem(event.target.value)} 
+              placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...粘贴配套私钥块以验证与证书公钥是否匹配...&#10;-----END RSA PRIVATE KEY-----"
+            />
+          </div>
         </div>
         <div className="app-scrollbar overflow-auto space-y-3 pr-1">
+          {matchStatus !== 'none' && (
+            <div className={`p-4 rounded-xl border ${
+              matchStatus === 'matched' 
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400' 
+                : 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400'
+            }`}>
+              <div className="font-bold text-xs mb-1.5 uppercase">证书配对诊断</div>
+              <div className="text-[11px] leading-relaxed font-semibold font-mono">
+                {matchStatus === 'matched' 
+                  ? '🟢 配对成功：当前 SSL 数字证书的公钥 Modulus 与所填 PEM 私钥完全配对吻合！可安全部署于网络服务器。'
+                  : '❌ 诊断失败：当前 SSL 数字证书的公钥与所填私钥不一致，无法形成完整的 TLS 加密通道通道！'
+                }
+              </div>
+            </div>
+          )}
+
           <div className="tool-panel p-4">
             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">检测类型</div>
             <div className="break-all font-mono text-base font-bold text-slate-900">{result.type}</div>

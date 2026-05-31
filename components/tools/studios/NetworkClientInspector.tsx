@@ -1,8 +1,9 @@
 import React from 'react';
-import { Send, Globe, Monitor, FileVideo, Activity } from 'lucide-react';
+import { Send, Globe, Monitor, FileVideo, Activity, Wifi } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const HttpBuilderTool = lazyNamed(() => import('../NetworkTools'), 'HttpBuilderTool');
+const WebSocketSseSandboxTool = lazyNamed(() => import('../NetworkTools'), 'WebSocketSseSandboxTool');
 const UrlParser = lazyNamed(() => import('../UrlParser'), 'UrlParser');
 const UserAgentTool = lazyNamed(() => import('../NetworkTools'), 'UserAgentTool');
 const IpInfoTool = lazyNamed(() => import('../NetworkTools'), 'IpInfoTool');
@@ -12,6 +13,7 @@ const PingAnalyzerTool = lazyNamed(() => import('../NetworkTools'), 'PingAnalyze
 
 const subTools: SubTool[] = [
   { id: 'http', name: 'HTTP 请求', description: '简易 HTTP Client', icon: Send, component: HttpBuilderTool },
+  { id: 'websocket-sse', name: 'WebSocket & SSE 沙箱', description: '实时双向长连接调试', icon: Wifi, component: WebSocketSseSandboxTool },
   { id: 'ping', name: 'Ping 延迟诊断', description: '本地网络时延与抖动探针', icon: Activity, component: PingAnalyzerTool },
   { id: 'urlparser', name: 'URL 解析器', description: '解析 URL 结构', icon: Globe, component: UrlParser },
   { id: 'useragent', name: 'User Agent', description: 'UA 解析', icon: Monitor, component: UserAgentTool },

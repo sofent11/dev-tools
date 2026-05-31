@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Terminal, Info } from 'lucide-react';
+import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Terminal, Info, Search, ShieldAlert, FileArchive, Cpu } from 'lucide-react';
 import { format as formatSql, supportedDialects } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -921,6 +921,441 @@ export const SqliteSandboxTool: React.FC = () => {
             )}
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// --- Binary Hex Viewer & Magic-Number File Analyzer ---
+
+export const BinaryHexViewerTool: React.FC = () => {
+  const [fileData, setFileData] = useState<Uint8Array | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState(0);
+  const [magicMime, setMagicMime] = useState('');
+  const [magicName, setMagicName] = useState('');
+  const [safetyStatus, setSafetyStatus] = useState<'safe' | 'alert' | 'unknown'>('unknown');
+  
+  // Grid Pagination
+  const [currentPage, setCurrentPage] = useState(0);
+  const pageSize = 512; // 32 rows of 16 bytes each
+  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+
+  // High-frequency Search matching
+  const [searchQuery, setSearchQuery] = useState('');
+  const [matches, setMatches] = useState<Set<number>>(new Set());
+
+  // Handle local file uploads
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+  };
+
+  const processFile = (file: File) => {
+    if (file.size > 10 * 1024 * 1024) {
+      alert('为了浏览器本地运行流畅，当前限制文件大小最高为 10MB 🚀');
+      return;
+    }
+
+    setFileName(file.name);
+    setFileSize(file.size);
+    setSelectedIdx(null);
+    setCurrentPage(0);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const arrayBuffer = event.target?.result as ArrayBuffer;
+      const uint8 = new Uint8Array(arrayBuffer);
+      setFileData(uint8);
+      
+      // Compute magic header
+      detectMagicHeader(uint8, file.name);
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const detectMagicHeader = (bytes: Uint8Array, name: string) => {
+    if (bytes.length < 3) {
+      setMagicMime('未知');
+      setMagicName('微小文件 / 无签名特征');
+      setSafetyStatus('unknown');
+      return;
+    }
+
+    // Extract first 4 bytes as Hex representation
+    const hexArr = Array.from(bytes.slice(0, 4)).map(b => b.toString(16).padStart(2, '0').toUpperCase());
+    const signature4 = hexArr.join(' ');
+    const signature3 = hexArr.slice(0, 3).join(' ');
+
+    let mime = '';
+    let label = '';
+    let status: 'safe' | 'alert' | 'unknown' = 'safe';
+
+    if (signature4.startsWith('89 50 4E 47')) {
+      mime = 'image/png';
+      label = 'PNG 图像格式';
+    } else if (signature3.startsWith('FF D8 FF')) {
+      mime = 'image/jpeg';
+      label = 'JPEG/JPG 图像格式';
+    } else if (signature4.startsWith('47 49 46 38')) {
+      mime = 'image/gif';
+      label = 'GIF 动图格式';
+    } else if (signature4.startsWith('25 50 44 46')) {
+      mime = 'application/pdf';
+      label = 'PDF 文档数据';
+    } else if (signature4.startsWith('50 4B 03 04')) {
+      mime = 'application/zip';
+      label = 'ZIP 离线压缩包';
+    } else if (signature4.startsWith('52 61 72 21')) {
+      mime = 'application/x-rar-compressed';
+      label = 'RAR 离线压缩包';
+    } else if (signature4.startsWith('37 7A BC AF')) {
+      mime = 'application/x-7z-compressed';
+      label = '7Z 压缩分包';
+    } else {
+      mime = '';
+      label = '通用/纯文本二进制数据流';
+      status = 'unknown';
+    }
+
+    setMagicMime(mime || '未知 Mime');
+    setMagicName(label);
+
+    if (mime) {
+      const ext = name.split('.').pop()?.toLowerCase();
+      if (mime === 'image/png' && ext !== 'png') status = 'alert';
+      else if (mime === 'image/jpeg' && ext !== 'jpg' && ext !== 'jpeg') status = 'alert';
+      else if (mime === 'image/gif' && ext !== 'gif') status = 'alert';
+      else if (mime === 'application/pdf' && ext !== 'pdf') status = 'alert';
+      else if (mime === 'application/zip' && ext !== 'zip') status = 'alert';
+      else if (mime === 'application/x-rar-compressed' && ext !== 'rar') status = 'alert';
+      else if (mime === 'application/x-7z-compressed' && ext !== '7z') status = 'alert';
+      else status = 'safe';
+    }
+
+    setSafetyStatus(status);
+  };
+
+  // Perform multi-match search highlighting
+  useEffect(() => {
+    if (!fileData || !searchQuery.trim()) {
+      Promise.resolve().then(() => setMatches(new Set()));
+      return;
+    }
+
+    const query = searchQuery.trim();
+    const isHexSearch = /^[0-9a-fA-F\s]+$/.test(query) && query.replace(/\s/g, '').length % 2 === 0;
+    const newMatches = new Set<number>();
+
+    if (isHexSearch) {
+      // Hex block match
+      const cleanHex = query.replace(/\s/g, '').toUpperCase();
+      const hexBytes: number[] = [];
+      for (let i = 0; i < cleanHex.length; i += 2) {
+        hexBytes.push(parseInt(cleanHex.substring(i, i + 2), 16));
+      }
+
+      // Scan file
+      for (let idx = 0; idx <= fileData.length - hexBytes.length; idx++) {
+        let isMatch = true;
+        for (let j = 0; j < hexBytes.length; j++) {
+          if (fileData[idx + j] !== hexBytes[j]) {
+            isMatch = false;
+            break;
+          }
+        }
+        if (isMatch) {
+          for (let j = 0; j < hexBytes.length; j++) {
+            newMatches.add(idx + j);
+          }
+        }
+      }
+    } else {
+      // Normal string match
+      const charArr = Array.from(query).map(c => c.charCodeAt(0));
+      for (let idx = 0; idx <= fileData.length - charArr.length; idx++) {
+        let isMatch = true;
+        for (let j = 0; j < charArr.length; j++) {
+          if (fileData[idx + j] !== charArr[j]) {
+            isMatch = false;
+            break;
+          }
+        }
+        if (isMatch) {
+          for (let j = 0; j < charArr.length; j++) {
+            newMatches.add(idx + j);
+          }
+        }
+      }
+    }
+
+    Promise.resolve().then(() => setMatches(newMatches));
+  }, [searchQuery, fileData]);
+
+  // Derived Grid calculations
+  const totalPages = fileData ? Math.ceil(fileData.length / pageSize) : 0;
+  const currentChunk = useMemo(() => {
+    if (!fileData) return new Uint8Array(0);
+    const start = currentPage * pageSize;
+    return fileData.slice(start, start + pageSize);
+  }, [fileData, currentPage]);
+
+  const rows: { offset: number; bytes: number[] }[] = [];
+  for (let i = 0; i < currentChunk.length; i += 16) {
+    const rowOffset = currentPage * pageSize + i;
+    const rowBytes = Array.from(currentChunk.slice(i, i + 16));
+    rows.push({ offset: rowOffset, bytes: rowBytes });
+  }
+
+  // File download helper
+  const handleDownload = () => {
+    if (!fileData) return;
+    const blob = new Blob([fileData], { type: magicMime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `exported_${fileName || 'file.bin'}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <Card className="h-full flex flex-col">
+      <CardHeader 
+        title="二进制十六进制查看器 (Binary Hex Viewer)" 
+        description="本地离线读取并解析二进制文件结构，提供十六进制字节码、ASCII 可读字符格栅对照、全局特征字节搜索及魔数木马后门篡改预警。" 
+      />
+      <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0">
+        
+        {/* Top bar: Upload zone and details */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start flex-none">
+          <div className="p-4 border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 rounded-2xl flex flex-col items-center justify-center gap-3">
+            <Upload className="w-8 h-8 text-primary-500 animate-pulse" />
+            <div className="text-center">
+              <span className="text-[11px] font-bold text-slate-500 block">拖放或选择二进制文件</span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">支持任意格式，最高 10MB</span>
+            </div>
+            <label className="relative cursor-pointer">
+              <input 
+                type="file" 
+                onChange={handleFileUpload} 
+                className="hidden" 
+              />
+              <span className="bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm block text-center">
+                选取本地文件
+              </span>
+            </label>
+          </div>
+
+          {fileData ? (
+            <div className="p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-2xl space-y-2 lg:col-span-2 text-xs">
+              <div className="flex justify-between items-center border-b pb-2 border-slate-100 dark:border-slate-900">
+                <span className="font-bold text-slate-700 dark:text-slate-300">当前文件:</span>
+                <span className="font-mono text-slate-600 dark:text-slate-400 break-all pl-4 text-right">{fileName}</span>
+              </div>
+              <div className="flex justify-between border-b pb-2 border-slate-100 dark:border-slate-900">
+                <span className="font-bold text-slate-700 dark:text-slate-300">文件大小:</span>
+                <span className="font-mono text-slate-600 dark:text-slate-400">
+                  {fileSize < 1024 ? `${fileSize} Bytes` : fileSize < 1024 * 1024 ? `${(fileSize / 1024).toFixed(2)} KB` : `${(fileSize / (1024 * 1024)).toFixed(2)} MB`}
+                </span>
+              </div>
+              <div className="flex justify-between border-b pb-2 border-slate-100 dark:border-slate-900">
+                <span className="font-bold text-slate-700 dark:text-slate-300">底层签名类型 (魔数检测):</span>
+                <span className="font-bold text-primary-500">{magicName}</span>
+              </div>
+              
+              {/* Threat warning card */}
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-700 dark:text-slate-300">安全风险诊断:</span>
+                {safetyStatus === 'safe' ? (
+                  <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
+                    后缀契合 🟢 安全
+                  </span>
+                ) : safetyStatus === 'alert' ? (
+                  <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 animate-bounce">
+                    <ShieldAlert className="w-3.5 h-3.5" /> 隐写篡改风险 ⚠️ 
+                  </span>
+                ) : (
+                  <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
+                    未分析后缀匹配度
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="lg:col-span-2 border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/20 flex flex-col items-center justify-center p-6 text-slate-400 text-xs gap-2">
+              <Cpu className="w-8 h-8 stroke-1 animate-pulse" />
+              <span>载入二进制文件后自动开展魔数头及十六进制比对</span>
+            </div>
+          )}
+        </div>
+
+        {fileData && (
+          <div className="flex-1 flex flex-col gap-3 min-h-0">
+            {/* Search and Navigation Bar */}
+            <div className="p-3 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3 text-xs flex-none">
+              <div className="relative w-full md:w-80">
+                <input 
+                  type="text"
+                  placeholder="搜索 ASCII(如 PNG) 或 HEX(如 89 50)"
+                  className="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                />
+                <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-400" />
+              </div>
+
+              {/* Pagination controls */}
+              <div className="flex items-center gap-3">
+                <button
+                  disabled={currentPage === 0}
+                  onClick={() => {
+                    setCurrentPage(prev => Math.max(0, prev - 1));
+                    setSelectedIdx(null);
+                  }}
+                  className="px-2.5 py-1 border rounded-lg bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 hover:bg-slate-50 disabled:opacity-40 text-[10px] font-bold"
+                >
+                  上一页
+                </button>
+                <span className="font-mono font-bold text-[10px] text-slate-500">
+                  PAGE {currentPage + 1} / {totalPages} (字节范围: {currentPage * pageSize} - {Math.min(fileData.length, (currentPage + 1) * pageSize) - 1})
+                </span>
+                <button
+                  disabled={currentPage === totalPages - 1}
+                  onClick={() => {
+                    setCurrentPage(prev => Math.min(totalPages - 1, prev + 1));
+                    setSelectedIdx(null);
+                  }}
+                  className="px-2.5 py-1 border rounded-lg bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 hover:bg-slate-50 disabled:opacity-40 text-[10px] font-bold"
+                >
+                  下一页
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleDownload} icon={<Download className="w-3.5 h-3.5" />}>
+                  下载该文件
+                </Button>
+              </div>
+            </div>
+
+            {/* Main Hex Viewer Grid */}
+            <div className="flex-1 flex gap-4 min-h-0 bg-slate-950 p-4 rounded-2xl overflow-auto border border-slate-900 scrollbar-thin">
+              {/* Left pane: Hex Grid */}
+              <div className="flex-1 min-w-[480px]">
+                <table className="w-full border-collapse font-mono text-[11px] leading-relaxed">
+                  <thead>
+                    <tr className="text-slate-500 border-b border-slate-900 text-left">
+                      <th className="py-1 font-bold text-center pr-3">OFFSET</th>
+                      {Array.from({ length: 16 }).map((_, idx) => (
+                        <th key={idx} className="py-1 font-bold text-center">
+                          {idx.toString(16).toUpperCase().padStart(2, '0')}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, rowIdx) => (
+                      <tr key={rowIdx} className="hover:bg-slate-900/40">
+                        {/* Offset label */}
+                        <td className="text-slate-500 text-center pr-3 font-semibold select-none">
+                          {row.offset.toString(16).padStart(8, '0').toUpperCase()}
+                        </td>
+                        
+                        {/* 16 bytes values */}
+                        {Array.from({ length: 16 }).map((_, byteIdx) => {
+                          const byte = row.bytes[byteIdx];
+                          const absoluteIdx = row.offset + byteIdx;
+                          const hasByte = byte !== undefined;
+                          const isMatch = matches.has(absoluteIdx);
+                          const isSelected = selectedIdx === absoluteIdx;
+
+                          return (
+                            <td 
+                              key={byteIdx}
+                              onClick={() => {
+                                if (hasByte) setSelectedIdx(absoluteIdx);
+                              }}
+                              className={`text-center py-1 cursor-pointer rounded-md font-semibold select-all transition-all ${
+                                !hasByte ? 'opacity-0 pointer-events-none' : 
+                                isSelected ? 'bg-primary-500 text-white font-bold scale-105 shadow' :
+                                isMatch ? 'bg-rose-500/20 text-rose-400 font-bold border border-rose-500/40' :
+                                'text-slate-300 hover:bg-slate-800'
+                              }`}
+                            >
+                              {hasByte ? byte.toString(16).padStart(2, '0').toUpperCase() : ''}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Split Line */}
+              <div className="w-[1px] bg-slate-900 self-stretch"></div>
+
+              {/* Right pane: Printable ASCII translation */}
+              <div className="w-56 font-mono text-[11px] leading-relaxed text-slate-400 flex flex-col justify-between">
+                <div>
+                  <div className="text-slate-500 border-b border-slate-900 pb-1 font-bold select-none mb-1 text-center">
+                    PRINTABLE ASCII
+                  </div>
+                  {rows.map((row, rowIdx) => (
+                    <div key={rowIdx} className="flex hover:bg-slate-900/40 py-1 font-semibold justify-center">
+                      {Array.from({ length: 16 }).map((_, byteIdx) => {
+                        const byte = row.bytes[byteIdx];
+                        const absoluteIdx = row.offset + byteIdx;
+                        const hasByte = byte !== undefined;
+                        const isMatch = matches.has(absoluteIdx);
+                        const isSelected = selectedIdx === absoluteIdx;
+
+                        // Check printable character (ASCII 32 to 126)
+                        const isPrintable = hasByte && byte >= 32 && byte <= 126;
+                        const charStr = isPrintable ? String.fromCharCode(byte) : '.';
+
+                        return (
+                          <span 
+                            key={byteIdx}
+                            onClick={() => {
+                              if (hasByte) setSelectedIdx(absoluteIdx);
+                            }}
+                            className={`w-3.5 text-center cursor-pointer transition-all ${
+                              !hasByte ? 'opacity-0' :
+                              isSelected ? 'text-primary-400 font-bold underline' :
+                              isMatch ? 'text-rose-400 font-bold' :
+                              isPrintable ? 'text-emerald-500 hover:text-emerald-400' : 'text-slate-600'
+                            }`}
+                          >
+                            {charStr}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+
+                {selectedIdx !== null && fileData && (
+                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-850 space-y-1.5 animate-in fade-in duration-200 mt-4">
+                    <span className="text-[10px] font-bold text-slate-500 block uppercase">选定字节明细</span>
+                    <div className="grid grid-cols-2 text-[10px] gap-y-1">
+                      <span className="text-slate-500">位置 (Index):</span>
+                      <span className="text-slate-300 font-bold">{selectedIdx}</span>
+                      <span className="text-slate-500">十六进制:</span>
+                      <span className="text-primary-400 font-bold">0x{fileData[selectedIdx].toString(16).toUpperCase()}</span>
+                      <span className="text-slate-500">二进制:</span>
+                      <span className="text-slate-300 font-mono">{fileData[selectedIdx].toString(2).padStart(8, '0')}</span>
+                      <span className="text-slate-500">十进制 (DEC):</span>
+                      <span className="text-slate-300">{fileData[selectedIdx]}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

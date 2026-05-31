@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, HelpCircle, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
+import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel } from '../ui/ToolUi';
@@ -24,7 +24,7 @@ export const HttpBuilderTool: React.FC = () => {
 
     // Code snippet exporter states
     const [resTab, setResTab] = useState<'response' | 'export'>('response');
-    const [exportLang, setExportLang] = useState<'fetch' | 'axios' | 'curl' | 'python' | 'go'>('fetch');
+    const [exportLang, setExportLang] = useState<'fetch' | 'axios' | 'curl' | 'python' | 'go' | 'java'>('fetch');
     const [copiedSnippet, setCopiedSnippet] = useState(false);
 
     const handleCopySnippet = async (snippet: string) => {
@@ -122,6 +122,25 @@ export const HttpBuilderTool: React.FC = () => {
                 }
 
                 return `package main\n\nimport (\n\t"fmt"\n\t"io"\n\t"net/http"${importBody}\n)\n\nfunc main() {\n\turl := "${targetUrl}"\n${bodyDef}\treq, _ := http.NewRequest("${method}", url, ${bodyReader})\n${headersCode}\n\tclient := &http.Client{}\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\tpanic(err)\n\t}\n\tdefer resp.Body.Close()\n\n\tbody, _ := io.ReadAll(resp.Body)\n\tfmt.Println(resp.Status)\n\tfmt.Println(string(body))\n}`;
+            }
+            case 'java': {
+                let headersCode = '';
+                Object.entries(parsedHeaders).forEach(([k, v]) => {
+                    headersCode += `      .addHeader("${k.replace(/"/g, '\\"')}", "${v.replace(/"/g, '\\"')}")\n`;
+                });
+
+                let bodyCode = '';
+                if (hasBody) {
+                    bodyCode = `    MediaType mediaType = MediaType.parse("${parsedHeaders['Content-Type'] || 'application/json'}");\n` +
+                               `    RequestBody body = RequestBody.create(mediaType, "${body.replace(/"/g, '\\"').replace(/\n/g, '\\n')}");\n`;
+                } else {
+                    bodyCode = `    RequestBody body = null;\n`;
+                }
+
+                const reqBodyArg = (method === 'GET' || method === 'HEAD') ? '' : 'body';
+                const methodCall = `      .method("${method}", ${reqBodyArg ? 'body' : 'null'})\n`;
+
+                return `import okhttp3.*;\nimport java.io.IOException;\n\npublic class HttpClient {\n  public static void main(String[] args) throws IOException {\n    OkHttpClient client = new OkHttpClient().newBuilder().build();\n${bodyCode}    Request request = new Request.Builder()\n      .url("${targetUrl}")\n${methodCall}${headersCode}      .build();\n    try (Response response = client.newCall(request).execute()) {\n      System.out.println(response.code());\n      System.out.println(response.body().string());\n    }\n  }\n}`;
             }
             default:
                 return '';
@@ -435,7 +454,7 @@ export const HttpBuilderTool: React.FC = () => {
                             <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
                                 {/* Language selection buttons */}
                                 <div className="flex flex-wrap gap-1.5 mb-2 flex-none">
-                                    {(['fetch', 'axios', 'curl', 'python', 'go'] as const).map(lang => (
+                                    {(['fetch', 'axios', 'curl', 'python', 'go', 'java'] as const).map(lang => (
                                         <button
                                             key={lang}
                                             onClick={() => setExportLang(lang)}
@@ -890,6 +909,386 @@ export const PingAnalyzerTool: React.FC = () => {
                     </div>
                 </div>
 
+            </CardContent>
+        </Card>
+    );
+};
+
+// --- WebSocket & SSE Real-time Communication Sandbox ---
+
+interface LogItem {
+    id: string;
+    time: string;
+    type: 'info' | 'send' | 'recv' | 'error' | 'success';
+    msg: string;
+}
+
+export const WebSocketSseSandboxTool: React.FC = () => {
+    const [mode, setMode] = useState<'ws' | 'sse'>('ws');
+    const [wsUrl, setWsUrl] = useState('wss://echo.websocket.org');
+    const [sseUrl, setSseUrl] = useState('https://html5demos.com/sse-demo.php');
+    const [protocols, setProtocols] = useState('');
+    const [message, setMessage] = useState('{\n  "message": "Hello DevToolbox Pro!"\n}');
+    const [logs, setLogs] = useState<LogItem[]>([]);
+    const [isConnected, setIsConnected] = useState(false);
+    
+    // Heartbeat configuration
+    const [enableHeartbeat, setEnableHeartbeat] = useState(false);
+    const [heartbeatInterval, setHeartbeatInterval] = useState(10); // in seconds
+    const [heartbeatText, setHeartbeatText] = useState('ping');
+
+    const wsRef = useRef<WebSocket | null>(null);
+    const sseRef = useRef<EventSource | null>(null);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const consoleEndRef = useRef<HTMLDivElement | null>(null);
+
+    const addLog = (type: LogItem['type'], msg: string) => {
+        const timeStr = new Date().toLocaleTimeString();
+        setLogs(prev => [
+            ...prev,
+            { id: Date.now().toString() + Math.random().toString(36).substring(2, 7), time: timeStr, type, msg }
+        ].slice(-100)); // cap at 100 logs
+    };
+
+    // Auto scroll down console logs
+    useEffect(() => {
+        if (consoleEndRef.current) {
+            consoleEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [logs]);
+
+    // Close connections on unmount
+    useEffect(() => {
+        return () => {
+            if (wsRef.current) wsRef.current.close();
+            if (sseRef.current) sseRef.current.close();
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, []);
+
+    // Heartbeat timer logic safely deferred
+    useEffect(() => {
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+        }
+
+        if (isConnected && mode === 'ws' && enableHeartbeat && wsRef.current?.readyState === WebSocket.OPEN) {
+            timerRef.current = setInterval(() => {
+                if (wsRef.current?.readyState === WebSocket.OPEN) {
+                    wsRef.current.send(heartbeatText);
+                    addLog('send', `[心跳 Ping] ${heartbeatText}`);
+                }
+            }, heartbeatInterval * 1000);
+        }
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [isConnected, mode, enableHeartbeat, heartbeatInterval, heartbeatText]);
+
+    const handleConnectWs = () => {
+        if (isConnected) {
+            if (wsRef.current) {
+                wsRef.current.close();
+            }
+            return;
+        }
+
+        try {
+            addLog('info', `正在连接 WebSocket: ${wsUrl}...`);
+            const protoArgs = protocols ? protocols.split(',').map(s => s.trim()) : undefined;
+            const ws = new WebSocket(wsUrl, protoArgs);
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                Promise.resolve().then(() => {
+                    setIsConnected(true);
+                    addLog('success', `WebSocket 连接建立成功 🟢`);
+                });
+            };
+
+            ws.onmessage = (event) => {
+                Promise.resolve().then(() => {
+                    addLog('recv', `[收到数据] ${event.data}`);
+                });
+            };
+
+            ws.onerror = () => {
+                Promise.resolve().then(() => {
+                    addLog('error', `WebSocket 发生错误 ❌`);
+                });
+            };
+
+            ws.onclose = (event) => {
+                Promise.resolve().then(() => {
+                    setIsConnected(false);
+                    wsRef.current = null;
+                    addLog('info', `WebSocket 连接关闭 (代码: ${event.code}, 原因: ${event.reason || '无'}) 🔴`);
+                });
+            };
+
+        } catch (e) {
+            addLog('error', `初始化 WebSocket 失败: ${(e as Error).message}`);
+        }
+    };
+
+    const handleSendMsg = () => {
+        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+            addLog('error', `发送失败: WebSocket 未处于连接状态。`);
+            return;
+        }
+        wsRef.current.send(message);
+        addLog('send', `[已发送] ${message}`);
+    };
+
+    const handleToggleSse = () => {
+        if (isConnected) {
+            if (sseRef.current) {
+                sseRef.current.close();
+                sseRef.current = null;
+            }
+            setIsConnected(false);
+            addLog('info', `SSE 监听已断开 🔴`);
+            return;
+        }
+
+        try {
+            addLog('info', `正在连接 SSE 事件源: ${sseUrl}...`);
+            const sse = new EventSource(sseUrl);
+            sseRef.current = sse;
+            setIsConnected(true);
+            addLog('success', `SSE 长连接监听成功，等待服务器推送事件... 🟢`);
+
+            sse.onmessage = (event) => {
+                Promise.resolve().then(() => {
+                    addLog('recv', `[收到事件] ${event.data}`);
+                });
+            };
+
+            sse.onerror = () => {
+                Promise.resolve().then(() => {
+                    addLog('error', `SSE 事件流发生错误或重连中...`);
+                });
+            };
+
+            // Common custom events support
+            sse.addEventListener('ping', (event: any) => {
+                Promise.resolve().then(() => {
+                    addLog('recv', `[自定义事件: ping] ${event.data}`);
+                });
+            });
+        } catch (e) {
+            addLog('error', `初始化 SSE 事件源失败: ${(e as Error).message}`);
+        }
+    };
+
+    const getLogBadgeColor = (type: LogItem['type']) => {
+        switch (type) {
+            case 'send': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
+            case 'recv': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+            case 'error': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+            case 'success': return 'bg-teal-500/10 text-teal-400 border-teal-500/20';
+            default: return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
+        }
+    };
+
+    return (
+        <Card className="h-full flex flex-col">
+            <CardHeader 
+                title="WebSocket & SSE 实时双向通信沙箱" 
+                description="100% 浏览器离线连接调试，支持 WebSocket 双向数据收发、自定义 Subprotocols、心跳包配置以及 Server-Sent Events (SSE) 流式推送监听。" 
+            />
+            <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
+                {/* Left Side: Connection & Configuration Panel */}
+                <div className="flex-1 flex flex-col gap-4 min-h-0">
+                    <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex gap-3 text-xs">
+                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                            <input 
+                                type="radio" name="mode" checked={mode === 'ws'} 
+                                onChange={() => {
+                                    if (isConnected) {
+                                        if (wsRef.current) wsRef.current.close();
+                                        if (sseRef.current) sseRef.current.close();
+                                        setIsConnected(false);
+                                    }
+                                    setMode('ws');
+                                    setLogs([]);
+                                }}
+                                className="text-primary-600 focus:ring-primary-400" 
+                            />
+                            <span>WebSocket 客户端</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                            <input 
+                                type="radio" name="mode" checked={mode === 'sse'} 
+                                onChange={() => {
+                                    if (isConnected) {
+                                        if (wsRef.current) wsRef.current.close();
+                                        if (sseRef.current) sseRef.current.close();
+                                        setIsConnected(false);
+                                    }
+                                    setMode('sse');
+                                    setLogs([]);
+                                }}
+                                className="text-primary-600 focus:ring-primary-400" 
+                            />
+                            <span>SSE (Server-Sent Events)</span>
+                        </label>
+                    </div>
+
+                    {mode === 'ws' ? (
+                        <div className="space-y-4">
+                            <div className="flex gap-2">
+                                <input
+                                    className="flex-1 p-2.5 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
+                                    placeholder="wss://echo.websocket.org"
+                                    value={wsUrl}
+                                    onChange={e => setWsUrl(e.target.value)}
+                                    disabled={isConnected}
+                                />
+                                <Button 
+                                    onClick={handleConnectWs} 
+                                    className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                >
+                                    {isConnected ? '断开连接' : '建立连接'}
+                                </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1.5">
+                                    <FieldLabel>子协议 (Subprotocols, 逗号分隔)</FieldLabel>
+                                    <input
+                                        className="p-2 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
+                                        placeholder="mqtt, soap (可选)"
+                                        value={protocols}
+                                        onChange={e => setProtocols(e.target.value)}
+                                        disabled={isConnected}
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <FieldLabel>请求头 (Headers) 提示</FieldLabel>
+                                    <div className="p-2 border rounded-xl text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                                        💡 浏览器标准 WebSocket API 处于安全沙箱限制，不支持在握手阶段配置自定义 Headers。如需验证鉴权，请将其置于 URL Query 参数中。
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Send Message Area */}
+                            <div className="flex flex-col gap-1.5">
+                                <FieldLabel>发送消息负荷 (Message Body)</FieldLabel>
+                                <textarea
+                                    className="w-full h-36 p-2.5 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
+                                    value={message}
+                                    onChange={e => setMessage(e.target.value)}
+                                />
+                                <div className="flex justify-end">
+                                    <Button onClick={handleSendMsg} disabled={!isConnected} icon={<Send className="w-3.5 h-3.5" />}>
+                                        发送数据帧
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Heartbeat Controls */}
+                            <div className="p-3 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 rounded-xl space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="flex items-center gap-2 font-bold cursor-pointer text-xs">
+                                        <input 
+                                            type="checkbox" checked={enableHeartbeat} 
+                                            onChange={e => setEnableHeartbeat(e.target.checked)}
+                                            className="rounded text-primary-600 focus:ring-primary-400" 
+                                        />
+                                        <span>开启本地定时心跳保活帧 (Ping Heartbeat)</span>
+                                    </label>
+                                </div>
+                                {enableHeartbeat && (
+                                    <div className="grid grid-cols-2 gap-3 text-xs animate-in fade-in duration-200">
+                                        <div className="space-y-1">
+                                            <span className="text-slate-400">发送间隔 (秒):</span>
+                                            <input 
+                                                type="number" className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
+                                                value={heartbeatInterval}
+                                                onChange={e => setHeartbeatInterval(Math.max(1, Number(e.target.value)))}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-slate-400">心跳帧载荷 (文本):</span>
+                                            <input 
+                                                className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
+                                                value={heartbeatText}
+                                                onChange={e => setHeartbeatText(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex gap-2">
+                                <input
+                                    className="flex-1 p-2.5 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
+                                    placeholder="https://html5demos.com/sse-demo.php"
+                                    value={sseUrl}
+                                    onChange={e => setSseUrl(e.target.value)}
+                                    disabled={isConnected}
+                                />
+                                <Button 
+                                    onClick={handleToggleSse} 
+                                    className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
+                                >
+                                    {isConnected ? '停止监听' : '开启监听'}
+                                </Button>
+                            </div>
+                            <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs space-y-1">
+                                <span className="font-bold">📢 SSE 长连接协议特性:</span>
+                                <p className="text-amber-700 leading-relaxed text-[11px]">
+                                    Server-Sent Events 属于单向推送网络协议，浏览器通过 `EventSource` 请求建立并持续监听数据流响应。百宝箱已内置了针对 `onmessage` 默认推送事件以及自定义 `ping` 事件的异步捕获机制。
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Right Side: Log Time-Grid Grid View Console */}
+                <div className="w-full lg:w-[480px] flex flex-col border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden min-h-[360px] shrink-0 bg-slate-950">
+                    <div className="px-4 py-2.5 border-b border-slate-850 flex justify-between items-center flex-none">
+                        <div className="flex items-center gap-2">
+                            <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">长连接事件诊断控制台</span>
+                        </div>
+                        <button 
+                            onClick={clearLogs}
+                            className="text-[10px] px-2 py-0.5 border border-slate-800 hover:border-slate-700 rounded text-slate-500 hover:text-slate-300 font-bold transition-all"
+                        >
+                            清屏
+                        </button>
+                    </div>
+
+                    <div className="flex-1 p-3 font-mono text-[10px] leading-relaxed overflow-y-auto space-y-2 select-text scrollbar-thin">
+                        {logs.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 select-none">
+                                <Activity className="w-8 h-8 stroke-1 animate-pulse" />
+                                <p>等待网络连接建立以捕获长数据交互帧...</p>
+                            </div>
+                        ) : (
+                            logs.map(log => (
+                                <div key={log.id} className="border-b border-slate-900 pb-1.5 animate-in slide-in-from-bottom-1 duration-150">
+                                    <div className="flex items-center gap-1.5 mb-1 text-slate-500">
+                                        <span className="font-semibold text-slate-600">[{log.time}]</span>
+                                        <span className={`px-1.5 py-0.2 rounded border text-[8px] font-bold tracking-wider uppercase ${getLogBadgeColor(log.type)}`}>
+                                            {log.type}
+                                        </span>
+                                    </div>
+                                    <pre className="text-slate-300 whitespace-pre-wrap break-all font-mono leading-relaxed pl-1">
+                                        {log.msg}
+                                    </pre>
+                                </div>
+                            ))
+                        )}
+                        <div ref={consoleEndRef}></div>
+                    </div>
+                </div>
             </CardContent>
         </Card>
     );
