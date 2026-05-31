@@ -149,7 +149,7 @@ const platformHints: Record<Platform, string> = {
 
 const sampleUrl = 'https://vimeo.com/76979871';
 const WORKER_ENDPOINT_STORAGE_KEY = 'video-catch-worker-endpoint';
-const DEFAULT_WORKER_ENDPOINT = '';
+export const DEFAULT_WORKER_ENDPOINT = 'https://api-dev.sopace.top';
 
 export const videoCapabilityBoundaries: VideoCapabilityBoundary[] = [
   {
@@ -705,7 +705,11 @@ export const VideoDownloader: React.FC = () => {
                 <div className={`mt-1 text-[11px] leading-5 ${
                   workerHealth === 'ready' ? 'text-emerald-700' : workerHealth === 'error' ? 'text-amber-700' : 'text-slate-500'
                 }`}>
-                  {workerHealthMessage || (workerEndpoint ? '填入后会优先调用您的私有 Worker；建议先点击检测。' : '默认不使用第三方 Worker，避免把解析流量发往未知服务。')}
+                  {workerHealthMessage || (workerEndpoint === DEFAULT_WORKER_ENDPOINT
+                    ? '默认使用 sopace 公共 Worker；您也可以替换为自己的 Cloudflare Worker，建议先点击检测。'
+                    : workerEndpoint
+                      ? '填入后会优先调用您配置的 Worker；建议先点击检测。'
+                      : '未配置 Worker 时仅使用浏览器本地能力，部分平台将受限于跨域报错。')}
                 </div>
               </div>
 
@@ -738,7 +742,7 @@ export const VideoDownloader: React.FC = () => {
                 >
                   <span className="flex items-center gap-2">
                     <Cpu className={`h-4 w-4 transition-transform duration-500 ${showWorkerInfo ? 'text-indigo-600 rotate-180' : 'text-slate-500'}`} />
-                    部署私有解析 Worker (推荐)
+                    配置解析 Worker
                   </span>
                   {showWorkerInfo ? (
                     <ChevronUp className="h-4 w-4 text-slate-500 transition-transform duration-300" />
@@ -750,7 +754,7 @@ export const VideoDownloader: React.FC = () => {
                 {showWorkerInfo ? (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
                     <p className="text-slate-500">
-                      多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制。私有 Cloudflare Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。
+                      默认提供 sopace 公共 Worker 作为开箱即用的解析端点；您也可以替换为自己的 Cloudflare Worker。多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制，Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。
                     </p>
                     <div className="grid gap-2 md:grid-cols-2">
                       {videoCapabilityBoundaries.map(item => (
@@ -800,7 +804,7 @@ export const VideoDownloader: React.FC = () => {
                   </div>
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    填入 Worker 域名后优先调用远程 API。未配置时仅使用浏览器本地能力，部分平台将受限于跨域报错。
+                    默认使用 sopace 公共 Worker；填入自有 Worker 域名后会优先调用您的配置。清空后仅使用浏览器本地能力，部分平台将受限于跨域报错。
                   </p>
                 )}
               </div>

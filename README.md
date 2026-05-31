@@ -70,7 +70,7 @@
 - 贴纸图 / 素材图自动切片，并支持单图或 ZIP 下载
 - GIF、Lottie JSON、APNG 与 animated WebP 动画帧提取；APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，并带帧数探测、内存预算、批量导出进度与取消
 - 大头照提取：基于 MediaPipe 自动识别人脸并生成裁剪图，MediaPipe WASM/模型加载会展示缓存、进度、错误和重试状态；模型不可用时可继续手动裁剪
-- 视频下载解析器采用本地能力优先：支持直链、页面源码扫描和部分公开视频配置提取；私有 Worker 仅用于改善 CORS 受限抓取，不绕过登录、DRM、地区、风控、版权或平台限制
+- 视频下载解析器采用本地能力优先，并默认提供 sopace 公共 Cloudflare Worker API；支持直链、页面源码扫描和部分公开视频配置提取，Worker 仅用于改善 CORS 受限抓取，不绕过登录、DRM、地区、风控、版权或平台限制
 
 ### 安全与密钥
 

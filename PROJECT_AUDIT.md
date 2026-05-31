@@ -52,7 +52,7 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Added stable vendor chunking for production builds and removed noisy chunk warnings.
 - Added a local favicon, Chinese document language, description, and theme color metadata.
 - Added GitHub Actions quality checks for typecheck, lint, and build.
-- Clarified video downloader capability boundaries: private Workers improve CORS-limited fetches but do not bypass login, DRM, region, anti-abuse, copyright, or platform policy limits.
+- Clarified video downloader capability boundaries: the default sopace public Worker and user-provided Workers improve CORS-limited fetches but do not bypass login, DRM, region, anti-abuse, copyright, or platform policy limits.
 - Removed remaining blocking `alert()` calls from tool components in favor of inline status and `notifyToast`, including PGP/SM crypto operations, animation batch failures, image compression, network parsing, and data tools.
 - Added explicit PGP key handoff controls so generated private keys are no longer auto-filled into decrypt/sign inputs; sensitive scratchpad outputs can now carry metadata such as `sensitive` and `originAction`.
 - Removed global `window.alert` / `window.confirm` monkey-patching from the i18n provider; tool feedback now stays explicit through toast or inline state.

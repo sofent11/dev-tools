@@ -28,7 +28,7 @@
 - Animation Frame Extractor for GIF, Lottie JSON, APNG, and animated WebP is integrated in the Image Studio with browser capability and memory-budget safeguards.
 - PDF.js, sql.js, OpenPGP, sm-crypto, zxcvbn, and Headshot/MediaPipe now expose shared runtime loader status, retry, cache, and failure states.
 - The browser-only WebGL face-swap tool has been removed after product review because its mesh-warping output was not reliable enough for a production toolbox.
-- The video downloader is local-first and documents Worker capability boundaries; private Workers improve CORS-limited parsing but do not bypass login, DRM, region, anti-abuse, copyright, or platform limits.
+- The video downloader is local-first, restores the default sopace public Cloudflare Worker API, and documents Worker capability boundaries; Workers improve CORS-limited parsing but do not bypass login, DRM, region, anti-abuse, copyright, or platform limits.
 - PGP key generation now requires explicit user action before generated private keys are loaded into decrypt/sign inputs, and sensitive scratchpad outputs can carry metadata.
 - HTML/SVG preview surfaces use allowlist sanitization instead of blacklist cleanup.
 - Runtime assets can report fallback source URLs and optional SHA-256 verification state; PDF.js, SQL.js, and OpenPGP use fallback metadata.

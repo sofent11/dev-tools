@@ -87,8 +87,8 @@ const stalePatterns = [
   },
   {
     file: 'components/tools/VideoDownloader.tsx',
-    pattern: /api-dev\.sopace\.top/i,
-    message: 'VideoDownloader should not default to a third-party Worker endpoint.',
+    pattern: /DEFAULT_WORKER_ENDPOINT\s*=\s*['"`](?!https:\/\/api-dev\.sopace\.top['"`])/,
+    message: 'VideoDownloader should keep the approved sopace public Worker endpoint as its default.',
   },
   {
     file: 'components/tools',
