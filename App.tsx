@@ -3,7 +3,7 @@ import {
   LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { useScratchpadStore } from './components/tools/shared/scratchpadStore';
+import { useScratchpadStore, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 
@@ -45,14 +45,6 @@ const getToolIdFromLocation = () => {
 
 const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}`;
 
-interface ScratchpadItem {
-  id: string;
-  name: string;
-  type: string;
-  content: string;
-  timestamp: number;
-}
-
 const sanitizeSvgPreview = (svg: string) => {
   const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
   const svgEl = doc.querySelector('svg');
@@ -72,6 +64,21 @@ const sanitizeSvgPreview = (svg: string) => {
   return svgEl.outerHTML;
 };
 
+const normalizeScratchpadFileName = (name: string, fallbackExt: string) => {
+  const fallbackName = `scratchpad-item${fallbackExt}`;
+  const baseName = name
+    .split(/[\\/]/)
+    .pop()
+    ?.replace(/[<>:"|?*]/g, '_')
+    .trim();
+
+  const withoutControlChars = baseName
+    ? Array.from(baseName).map(char => (char.charCodeAt(0) < 32 ? '_' : char)).join('')
+    : '';
+
+  return withoutControlChars || fallbackName;
+};
+
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
@@ -87,6 +94,10 @@ export default function App() {
   const scratchpadItems = useScratchpadStore((state) => state.items);
   const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
   const clearScratchpad = useScratchpadStore((state) => state.clearAll);
+  const validSelectedIds = useMemo(() => {
+    const availableIds = new Set(scratchpadItems.map(item => item.id));
+    return selectedIds.filter(id => availableIds.has(id));
+  }, [scratchpadItems, selectedIds]);
 
   const handleExportZip = async (itemsToExport: typeof scratchpadItems) => {
     if (itemsToExport.length === 0) return;
@@ -99,7 +110,7 @@ export default function App() {
         else if (item.type === 'jsx' || item.name.endsWith('.jsx')) ext = '';
         else if (item.type === 'tsx' || item.name.endsWith('.tsx')) ext = '';
         
-        const fileName = item.name.includes('.') ? item.name : `${item.name}${ext}`;
+        const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
         zip.file(fileName, item.content);
       });
       const blobContent = await zip.generateAsync({ type: 'blob' });
@@ -124,6 +135,17 @@ export default function App() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    if (!isScratchpadOpen) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsScratchpadOpen(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isScratchpadOpen]);
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
@@ -325,6 +347,7 @@ export default function App() {
               onClick={() => setIsScratchpadOpen(true)}
               className="relative p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
               title="打开全局数据暂存箱"
+              aria-label="打开全局数据暂存箱"
             >
               <ClipboardList className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               {scratchpadItems.length > 0 && (
@@ -388,6 +411,7 @@ export default function App() {
               <button 
                 onClick={() => setIsScratchpadOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
+                aria-label="关闭全局数据暂存箱"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -410,7 +434,7 @@ export default function App() {
                   <div className="flex gap-1.5">
                     <button
                       onClick={() => {
-                        if (selectedIds.length === scratchpadItems.length) {
+                        if (validSelectedIds.length === scratchpadItems.length) {
                           setSelectedIds([]);
                         } else {
                           setSelectedIds(scratchpadItems.map(item => item.id));
@@ -418,18 +442,18 @@ export default function App() {
                       }}
                       className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-250 transition-colors"
                     >
-                      {selectedIds.length === scratchpadItems.length ? '取消' : '全选'}
+                      {validSelectedIds.length === scratchpadItems.length ? '取消' : '全选'}
                     </button>
                     <button
                       onClick={() => {
-                        const itemsToZip = scratchpadItems.filter(item => selectedIds.includes(item.id));
+                        const itemsToZip = scratchpadItems.filter(item => validSelectedIds.includes(item.id));
                         handleExportZip(itemsToZip);
                       }}
-                      disabled={selectedIds.length === 0}
+                      disabled={validSelectedIds.length === 0}
                       className="px-2.5 py-1 rounded bg-primary-600 text-white font-bold disabled:bg-slate-200 disabled:dark:bg-slate-850 disabled:text-slate-400 hover:bg-primary-700 transition-colors flex items-center gap-1 active:scale-95 transition-transform"
                     >
                       <FolderArchive className="w-3.5 h-3.5" />
-                      <span>ZIP ({selectedIds.length})</span>
+                      <span>ZIP ({validSelectedIds.length})</span>
                     </button>
                   </div>
                 )}
@@ -452,7 +476,7 @@ export default function App() {
                     item={item} 
                     onRemove={removeScratchpadItem} 
                     isMultiSelectMode={isMultiSelectMode}
-                    isSelected={selectedIds.includes(item.id)}
+                    isSelected={validSelectedIds.includes(item.id)}
                     onToggleSelect={() => {
                       if (selectedIds.includes(item.id)) {
                         setSelectedIds(selectedIds.filter(id => id !== item.id));
