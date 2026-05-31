@@ -680,6 +680,7 @@ export const StlRepairTool: React.FC = () => {
       indices,
       threshold: wallThicknessThreshold,
       mode: wallThicknessMode,
+      maxAnalysisMs: wallThicknessMode === 'precise' ? 6500 : 2500,
     }, [positions.buffer, indices.buffer]);
   };
 
@@ -929,6 +930,7 @@ export const StlRepairTool: React.FC = () => {
               <FieldLabel>壁厚分析模式</FieldLabel>
               <Select
                 value={wallThicknessMode}
+                aria-label="壁厚分析模式"
                 disabled={!wallThicknessEnabled}
                 onChange={event => setWallThicknessMode(event.target.value as WallThicknessMode)}
               >
@@ -970,8 +972,14 @@ export const StlRepairTool: React.FC = () => {
               <div className="mt-1 leading-5">
                 已采样 {formatNumber(wallReport.sampledFaces)} 个面，低于 {formatSize(wallReport.threshold)} mm 的风险面 {formatNumber(wallReport.thinFaces)} 个；
                 最小估算厚度 {wallReport.minThickness === null ? '未命中对向面' : `${formatSize(wallReport.minThickness)} mm`}；
-                采样率 {(wallReport.sampleRate * 100).toFixed(1)}%，置信度 {wallReport.confidence}，耗时 {Math.round(wallReport.elapsedMs)} ms。
+                采样率 {(wallReport.sampleRate * 100).toFixed(1)}%，置信度 {wallReport.confidence}，耗时 {Math.round(wallReport.elapsedMs)} ms；
+                估算工作量 {formatNumber(wallReport.estimatedWork || 0)} 次射线测试。
               </div>
+              {wallReport.partial && (
+                <div className="mt-1 leading-5 text-amber-700">
+                  已达到浏览器预算上限，本次结果为局部采样报告；可切换快速模式或降低模型面数后复检。
+                </div>
+              )}
               <div className="mt-1 leading-5 text-amber-700">
                 该分析是浏览器端工程辅助估算，不等价专业切片软件或工业级测厚结果。
               </div>

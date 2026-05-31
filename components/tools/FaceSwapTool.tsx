@@ -1,9 +1,11 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import FaceSwapCanvas from './faceswap-core/components/FaceSwapCanvas';
 import { processModelImage, processSourceImage } from './faceswap-core/utils/faceProcessor';
 import { ModelFacePack, SourceFacePack } from './faceswap-core/types';
 import { MODELS, SOURCES } from './faceswap-core/utils/mockData';
 import { loadScriptWithCache } from './shared/cdnCacheManager';
+import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 
 /**
  * Wrapper component that integrates faceswap-core as a tool panel.
@@ -26,6 +28,10 @@ const revokeObjectUrl = (url: string | null) => {
 export const FaceSwapTool: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [scriptsError, setScriptsError] = useState<string | null>(null);
+    const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>({
+        status: 'idle',
+        label: 'FaceSwap 依赖',
+    });
 
     const [modelPack, setModelPack] = useState<ModelFacePack>(MODELS[0]);
     const [sourcePack, setSourcePack] = useState<SourceFacePack>(SOURCES[0]);
@@ -41,22 +47,48 @@ export const FaceSwapTool: React.FC = () => {
         };
     }, []);
 
+    const loadDependencies = useCallback(async () => {
+        setIsLoading(true);
+        setScriptsError(null);
+        try {
+            await loadScriptWithCache(SCRIPT_URLS.faceMesh, {
+                label: 'MediaPipe FaceMesh',
+                version: 'latest',
+                onStatus: event => setRuntimeState({
+                    status: event.status,
+                    label: event.label,
+                    version: event.version,
+                    source: event.src,
+                    attempt: event.attempt,
+                    progress: event.progress,
+                    error: event.message,
+                }),
+            });
+            await loadScriptWithCache(SCRIPT_URLS.delaunator, {
+                label: 'Delaunator',
+                version: '5.0.0',
+                onStatus: event => setRuntimeState({
+                    status: event.status,
+                    label: event.label,
+                    version: event.version,
+                    source: event.src,
+                    attempt: event.attempt,
+                    progress: event.progress,
+                    error: event.message,
+                }),
+            });
+            setRuntimeState(previous => ({ ...previous, status: 'ready', progress: 100 }));
+            setIsLoading(false);
+        } catch (err) {
+            setScriptsError(getErrorMessage(err));
+            setIsLoading(false);
+        }
+    }, []);
+
     // Load external scripts on mount
     useEffect(() => {
-        const loadDependencies = async () => {
-            try {
-                await Promise.all([
-                    loadScriptWithCache(SCRIPT_URLS.faceMesh),
-                    loadScriptWithCache(SCRIPT_URLS.delaunator)
-                ]);
-                setIsLoading(false);
-            } catch (err) {
-                setScriptsError(getErrorMessage(err));
-                setIsLoading(false);
-            }
-        };
         loadDependencies();
-    }, []);
+    }, [loadDependencies]);
 
     const handleBaseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const input = e.currentTarget;
@@ -104,6 +136,9 @@ export const FaceSwapTool: React.FC = () => {
                 <div className="text-center">
                     <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
                     <p className="text-slate-500">加载 MediaPipe 人脸识别模型...</p>
+                    <div className="mt-4 w-80 max-w-full">
+                        <RuntimeAssetStatusPanel state={runtimeState} compact />
+                    </div>
                 </div>
             </div>
         );
@@ -115,6 +150,9 @@ export const FaceSwapTool: React.FC = () => {
                 <div className="status-error max-w-md p-6 text-center">
                     <p className="text-red-600 font-medium mb-2">加载依赖失败</p>
                     <p className="text-red-500 text-sm">{scriptsError}</p>
+                    <div className="mt-4">
+                        <RuntimeAssetStatusPanel state={runtimeState} onRetry={loadDependencies} compact />
+                    </div>
                 </div>
             </div>
         );

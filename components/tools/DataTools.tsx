@@ -1,7 +1,9 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Search, ShieldAlert, Cpu } from 'lucide-react';
-import { useScratchpadStore, getScratchpadItemContent } from './shared/scratchpadStore';
 import { loadScriptWithCache } from './shared/cdnCacheManager';
+import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import { ScratchpadPicker, isScratchpadBinaryLike } from './shared/ScratchpadControls';
+import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -855,6 +857,12 @@ export const JsonSchemaTool: React.FC = () => {
 export const SqliteSandboxTool: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>({
+    status: 'idle',
+    label: 'SQL.js',
+    source: 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js',
+    version: '1.8.0',
+  });
   const [db, setDb] = useState<SqlDatabase | null>(null);
   const [sql, setSql] = useState(
     `-- 这是一个 WebAssembly SQLite 离线沙箱。\n-- 您可以点击左下角载入测试表，也可以在这里输入并执行任意 SQL 查询。\nSELECT * FROM users;`
@@ -932,20 +940,36 @@ export const SqliteSandboxTool: React.FC = () => {
     }
   }, [refreshSchema]);
 
-  useEffect(() => {
+  const loadSqlRuntime = useCallback(() => {
     if (getSqlJsInitializer()) {
       Promise.resolve().then(() => initDatabase());
       return;
     }
 
     Promise.resolve().then(() => setIsLoading(true));
-    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js')
+    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js', {
+      label: 'SQL.js',
+      version: '1.8.0',
+      onStatus: event => setRuntimeState({
+        status: event.status,
+        label: event.label,
+        version: event.version,
+        source: event.src,
+        attempt: event.attempt,
+        progress: event.progress,
+        error: event.message,
+      }),
+    })
       .then(() => initDatabase())
       .catch(() => {
         setError('加载 SQLite WebAssembly 库失败，请检查网络连接。');
         setIsLoading(false);
       });
   }, [initDatabase]);
+
+  useEffect(() => {
+    loadSqlRuntime();
+  }, [loadSqlRuntime]);
 
   const handleExecute = () => {
     if (!db) return;
@@ -1044,6 +1068,9 @@ export const SqliteSandboxTool: React.FC = () => {
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="lg:col-span-2">
+          <RuntimeAssetStatusPanel state={runtimeState} onRetry={loadSqlRuntime} compact />
+        </div>
         {/* Left column: Schema Browser & Boilerplates */}
         <div className="flex flex-col gap-4 border-r border-slate-200 dark:border-slate-800 pr-4 overflow-auto max-h-full">
           <div>
@@ -1217,40 +1244,34 @@ export const BinaryHexViewerTool: React.FC = () => {
   const [magicName, setMagicName] = useState('');
   const [safetyStatus, setSafetyStatus] = useState<'safe' | 'alert' | 'unknown'>('unknown');
   
-  const scratchpadItems = useScratchpadStore((state) => state.items);
-
-  const loadFromScratchpad = async (itemId: string) => {
-    const matched = scratchpadItems.find(item => item.id === itemId);
-    if (matched) {
-      const content = await getScratchpadItemContent(matched);
-      let uint8: Uint8Array;
-      if (content instanceof Blob) {
-        const buffer = await content.arrayBuffer();
-        uint8 = new Uint8Array(buffer);
-      } else if (content instanceof ArrayBuffer) {
-        uint8 = new Uint8Array(content);
-      } else if (typeof content === 'string') {
-        if (content.startsWith('data:')) {
-          const base64 = content.split(',')[1];
-          const binaryString = atob(base64);
-          uint8 = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            uint8[i] = binaryString.charCodeAt(i);
-          }
-        } else {
-          uint8 = new TextEncoder().encode(content);
+  const loadScratchpadContent = async (content: string | Blob | ArrayBuffer, name: string) => {
+    let uint8: Uint8Array;
+    if (content instanceof Blob) {
+      const buffer = await content.arrayBuffer();
+      uint8 = new Uint8Array(buffer);
+    } else if (content instanceof ArrayBuffer) {
+      uint8 = new Uint8Array(content);
+    } else if (typeof content === 'string') {
+      if (content.startsWith('data:')) {
+        const base64 = content.split(',')[1];
+        const binaryString = atob(base64);
+        uint8 = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          uint8[i] = binaryString.charCodeAt(i);
         }
       } else {
-        return;
+        uint8 = new TextEncoder().encode(content);
       }
-      
-      setFileName(matched.name);
-      setFileSize(uint8.length);
-      setSelectedIdx(null);
-      setCurrentPage(0);
-      setFileData(uint8);
-      detectMagicHeader(uint8, matched.name);
+    } else {
+      return;
     }
+
+    setFileName(name);
+    setFileSize(uint8.length);
+    setSelectedIdx(null);
+    setCurrentPage(0);
+    setFileData(uint8);
+    detectMagicHeader(uint8, name);
   };
   
   // Grid Pagination
@@ -1464,25 +1485,12 @@ export const BinaryHexViewerTool: React.FC = () => {
                   选取本地文件
                 </span>
               </label>
-              {scratchpadItems.length > 0 && (
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      loadFromScratchpad(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="text-[9px] font-bold text-primary-600 dark:text-primary-400 bg-transparent border-0 outline-none w-full text-center mt-1 cursor-pointer"
-                  defaultValue=""
-                >
-                  <option value="" disabled>📂 从暂存箱载入文件...</option>
-                  {scratchpadItems.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <ScratchpadPicker
+                label="暂存箱文件"
+                placeholder="📂 从暂存箱载入文件..."
+                filter={item => isScratchpadBinaryLike(item) || item.type === 'text'}
+                onLoad={(content, item) => loadScratchpadContent(content, item.name)}
+              />
             </div>
           </div>
 

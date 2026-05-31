@@ -28,3 +28,28 @@ test('HTTP tool imports cURL into request fields', async ({ page }) => {
   await expect(page.getByText('"X-Trace": "abc"')).toBeVisible();
   await expect(page.getByText('{"name":"Ada"}')).toBeVisible();
 });
+
+test('mobile scratchpad drawer opens from the header', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/tools/json-studio#json-diff');
+  await page.getByLabel(/打开全局数据暂存箱|Open global scratchpad/).click();
+  await expect(page.getByRole('heading', { name: /全局数据暂存箱|Global Scratchpad/ })).toBeVisible();
+  await expect(page.getByText(/暂存箱暂无内容|scratchpad is empty/i)).toBeVisible();
+});
+
+test('animation frame tool documents APNG and WebP browser limits', async ({ page }) => {
+  await page.goto('/tools/image-studio#animation-frame');
+  await expect(page.getByText(/支持上传标准 GIF、APNG、animated WebP/)).toBeVisible();
+  await expect(page.getByText(/WebCodecs ImageDecoder/)).toBeVisible();
+});
+
+test('STL repair exposes wall thickness fast and precise controls', async ({ page }) => {
+  await page.goto('/tools/cad-3d-studio#stl-repair');
+  await expect(page.getByLabel('开启壁厚热力图')).toBeVisible();
+  await page.getByLabel('开启壁厚热力图').check();
+  const modeSelect = page.getByLabel('壁厚分析模式');
+  await expect(modeSelect).toBeVisible();
+  await expect(modeSelect).toHaveValue('fast');
+  await modeSelect.selectOption('precise');
+  await expect(modeSelect).toHaveValue('precise');
+});

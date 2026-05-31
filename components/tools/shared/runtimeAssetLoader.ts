@@ -40,6 +40,20 @@ const emit = (options: RuntimeAssetOptions, state: Omit<RuntimeAssetLoaderState,
 
 const delay = (ms: number) => new Promise(resolve => window.setTimeout(resolve, ms));
 
+const withRuntimeTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, label: string) => {
+  let timeoutId: number | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(`${label} 加载超时，请检查网络后重试。`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+  }
+};
+
 const getRuntimeCache = async () => {
   if (typeof window === 'undefined' || !window.caches) return undefined;
   return caches.open(CACHE_NAME);
@@ -183,12 +197,11 @@ export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions
         for (let attempt = 1; attempt <= attempts; attempt += 1) {
           emit(options, { status: 'loading', attempt, progress: 0 });
           try {
-            const module = await Promise.race([
+            const module = await withRuntimeTimeout(
               import(/* @vite-ignore */ options.url),
-              new Promise<never>((_, reject) => {
-                window.setTimeout(() => reject(new Error(`${options.label} 加载超时，请检查网络后重试。`)), options.timeoutMs ?? 15000);
-              }),
-            ]);
+              options.timeoutMs ?? 15000,
+              options.label,
+            );
             emit(options, { status: 'ready', attempt, progress: 100 });
             return module;
           } catch (err) {
@@ -235,4 +248,13 @@ export const notifyRuntimeAssetProgress = (url: string, progress: number) => {
   for (const [key, listener] of progressListeners.entries()) {
     if (url.includes(key)) listener(progress);
   }
+};
+
+export const __runtimeAssetLoaderTestUtils = {
+  clearCaches: () => {
+    moduleCache.clear();
+    scriptCache.clear();
+    progressListeners.clear();
+  },
+  withRuntimeTimeout,
 };

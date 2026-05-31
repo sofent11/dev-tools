@@ -35,6 +35,13 @@ interface FrameData {
   dataUrl?: string;
 }
 
+interface FrameBatchState {
+  kind: 'exportZip' | 'stashScratchpad';
+  progress: number;
+  current: number;
+  total: number;
+}
+
 const MAX_DECODED_FRAMES = 500;
 const MAX_FRAME_PIXELS = 4096 * 4096;
 const MAX_TOTAL_PIXELS = 160_000_000;
@@ -80,6 +87,13 @@ const getFrameBlob = async (frame: FrameData) => {
   return res.blob();
 };
 
+export const sanitizeArchiveFileName = (name: string) =>
+  name
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/^\.+/, '')
+    .slice(0, 80) || 'animation';
+
 export const AnimationFrameExtractor: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<'lottie' | 'gif' | 'webp' | 'apng' | null>(null);
@@ -93,6 +107,7 @@ export const AnimationFrameExtractor: React.FC = () => {
   const [frames, setFrames] = useState<FrameData[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState('');
+  const [frameBatch, setFrameBatch] = useState<FrameBatchState | null>(null);
 
   // Success indicator
   const [stashedIndex, setStashedIndex] = useState<number | null>(null);
@@ -102,6 +117,7 @@ export const AnimationFrameExtractor: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const exportAbortControllerRef = useRef<AbortController | null>(null);
   const objectUrlsRef = useRef<string[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lottieAnimRef = useRef<any>(null);
@@ -165,7 +181,9 @@ export const AnimationFrameExtractor: React.FC = () => {
 
   const cleanUpPlayer = () => {
     abortControllerRef.current?.abort();
+    exportAbortControllerRef.current?.abort();
     abortControllerRef.current = null;
+    exportAbortControllerRef.current = null;
     setIsPlaying(false);
     if (playIntervalRef.current) {
       clearInterval(playIntervalRef.current);
@@ -180,12 +198,40 @@ export const AnimationFrameExtractor: React.FC = () => {
     setTotalFrames(0);
     setCurrentFrame(0);
     setExtractError('');
+    setFrameBatch(null);
   };
 
   useEffect(() => () => {
     abortControllerRef.current?.abort();
+    exportAbortControllerRef.current?.abort();
     clearFrameObjectUrls();
   }, [clearFrameObjectUrls]);
+
+  const runFrameBatchTask = async (
+    kind: FrameBatchState['kind'],
+    task: (signal: AbortSignal, update: (current: number, total: number) => void) => Promise<void>,
+  ) => {
+    const controller = new AbortController();
+    exportAbortControllerRef.current = controller;
+    setIsExtracting(true);
+    setFrameBatch({ kind, progress: 0, current: 0, total: totalFrames });
+    try {
+      await task(controller.signal, (current, total) => {
+        setFrameBatch({
+          kind,
+          current,
+          total,
+          progress: total > 0 ? Math.round((current / total) * 100) : 0,
+        });
+      });
+    } finally {
+      if (exportAbortControllerRef.current === controller) {
+        exportAbortControllerRef.current = null;
+      }
+      setFrameBatch(null);
+      setIsExtracting(false);
+    }
+  };
 
   const decodeAnimatedImageFrames = async (uploadedFile: File, mimeType: string, signal: AbortSignal) => {
     if (!window.ImageDecoder) {
@@ -476,43 +522,46 @@ export const AnimationFrameExtractor: React.FC = () => {
   // Stash ALL frames to Global Scratchpad
   const handleStashAllFrames = async () => {
     if (!file || totalFrames === 0) return;
-    setIsExtracting(true);
     setStatus('正在将所有帧推送到全局暂存箱，请稍候...');
 
     try {
-      const baseName = file.name.split('.').shift() || 'animation';
+      const baseName = sanitizeArchiveFileName(file.name.split('.').shift() || 'animation');
 
-      if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
-        for (const frame of frames) {
-          const blob = await getFrameBlob(frame);
-          const name = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
-          await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
-        }
-      } else if (fileType === 'lottie' && lottieAnimRef.current) {
-        // Sequentially render Lottie frames to canvas and stash them
-        const anim = lottieAnimRef.current;
-        for (let i = 0; i < totalFrames; i++) {
-          anim.goToAndStop(i, true);
-          const internalCanvas = containerRef.current?.querySelector('canvas');
-          if (internalCanvas) {
-            const blob = await new Promise<Blob | null>((resolve) => internalCanvas.toBlob(resolve, 'image/png'));
-            if (blob) {
-              const name = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
-              await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
-            }
+      await runFrameBatchTask('stashScratchpad', async (signal, update) => {
+        if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
+          for (const frame of frames) {
+            if (signal.aborted) throw new DOMException('用户已取消批量暂存', 'AbortError');
+            const blob = await getFrameBlob(frame);
+            const name = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
+            await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
+            update(frame.index + 1, frames.length);
           }
+        } else if (fileType === 'lottie' && lottieAnimRef.current) {
+          const anim = lottieAnimRef.current;
+          for (let i = 0; i < totalFrames; i++) {
+            if (signal.aborted) throw new DOMException('用户已取消批量暂存', 'AbortError');
+            anim.goToAndStop(i, true);
+            const internalCanvas = containerRef.current?.querySelector('canvas');
+            if (internalCanvas) {
+              const blob = await new Promise<Blob | null>((resolve) => internalCanvas.toBlob(resolve, 'image/png'));
+              if (blob) {
+                const name = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
+                await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
+              }
+            }
+            update(i + 1, totalFrames);
+          }
+          renderLottieFrame(currentFrame);
         }
-        // Restore current frame
-        renderLottieFrame(currentFrame);
-      }
+      });
 
       setStashedAll(true);
       setTimeout(() => setStashedAll(false), 2000);
       setStatus('所有帧已安全送入暂存箱！');
     } catch (err) {
-      alert('批量送入暂存箱失败: ' + (err as Error).message);
-    } finally {
-      setIsExtracting(false);
+      const message = (err as Error).name === 'AbortError' ? '已取消批量送入暂存箱' : '批量送入暂存箱失败: ' + (err as Error).message;
+      setStatus(message);
+      if ((err as Error).name !== 'AbortError') alert(message);
     }
   };
 
@@ -536,48 +585,53 @@ export const AnimationFrameExtractor: React.FC = () => {
   // Export ALL frames as ZIP archive
   const handleExportAllZip = async () => {
     if (!file || totalFrames === 0) return;
-    setIsExtracting(true);
     setStatus('正在打包所有帧为 ZIP 压缩包，请稍候...');
     
     try {
       const zip = new JSZip();
-      const baseName = file.name.split('.').shift() || 'animation';
+      const baseName = sanitizeArchiveFileName(file.name.split('.').shift() || 'animation');
 
-      if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
-        for (const frame of frames) {
-          const blob = await getFrameBlob(frame);
-          const fileName = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
-          zip.file(fileName, blob);
-        }
-      } else if (fileType === 'lottie' && lottieAnimRef.current) {
-        const anim = lottieAnimRef.current;
-        for (let i = 0; i < totalFrames; i++) {
-          anim.goToAndStop(i, true);
-          const internalCanvas = containerRef.current?.querySelector('canvas');
-          if (internalCanvas) {
-            const blob = await new Promise<Blob | null>((resolve) => internalCanvas.toBlob(resolve, 'image/png'));
-            if (blob) {
-              const fileName = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
-              zip.file(fileName, blob);
-            }
+      await runFrameBatchTask('exportZip', async (signal, update) => {
+        if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
+          for (const frame of frames) {
+            if (signal.aborted) throw new DOMException('用户已取消 ZIP 导出', 'AbortError');
+            const blob = await getFrameBlob(frame);
+            const fileName = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
+            zip.file(fileName, blob);
+            update(frame.index + 1, frames.length);
           }
+        } else if (fileType === 'lottie' && lottieAnimRef.current) {
+          const anim = lottieAnimRef.current;
+          for (let i = 0; i < totalFrames; i++) {
+            if (signal.aborted) throw new DOMException('用户已取消 ZIP 导出', 'AbortError');
+            anim.goToAndStop(i, true);
+            const internalCanvas = containerRef.current?.querySelector('canvas');
+            if (internalCanvas) {
+              const blob = await new Promise<Blob | null>((resolve) => internalCanvas.toBlob(resolve, 'image/png'));
+              if (blob) {
+                const fileName = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
+                zip.file(fileName, blob);
+              }
+            }
+            update(i + 1, totalFrames);
+          }
+          renderLottieFrame(currentFrame);
         }
-        // Restore visual frame
-        renderLottieFrame(currentFrame);
-      }
 
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(zipBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${baseName}_frames.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        if (signal.aborted) throw new DOMException('用户已取消 ZIP 导出', 'AbortError');
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${baseName}_frames.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+      });
       setStatus('ZIP 文件导出完成');
     } catch (err) {
-      alert('打包 ZIP 失败: ' + (err as Error).message);
-    } finally {
-      setIsExtracting(false);
+      const message = (err as Error).name === 'AbortError' ? '已取消 ZIP 导出' : '打包 ZIP 失败: ' + (err as Error).message;
+      setStatus(message);
+      if ((err as Error).name !== 'AbortError') alert(message);
     }
   };
 
@@ -612,14 +666,24 @@ export const AnimationFrameExtractor: React.FC = () => {
             <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{status}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">正在使用 Canvas / WebCodecs 管道提取帧，已启用内存预算保护</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                {frameBatch
+                  ? `${frameBatch.kind === 'exportZip' ? 'ZIP 导出' : '批量暂存'}：${frameBatch.current}/${frameBatch.total} (${frameBatch.progress}%)`
+                  : '正在使用 Canvas / WebCodecs 管道提取帧，已启用内存预算保护'}
+              </p>
+              {frameBatch && (
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full bg-primary-500 transition-all" style={{ width: `${frameBatch.progress}%` }} />
+                </div>
+              )}
             </div>
             <button
               type="button"
               onClick={() => {
                 abortControllerRef.current?.abort();
+                exportAbortControllerRef.current?.abort();
                 setIsExtracting(false);
-                setStatus('已取消当前解析任务');
+                setStatus(frameBatch ? '已取消当前批量任务' : '已取消当前解析任务');
               }}
               className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-50"
             >

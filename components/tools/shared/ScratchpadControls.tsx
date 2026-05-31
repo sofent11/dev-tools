@@ -18,6 +18,12 @@ export const isScratchpadImageLike = (item: ScratchpadItem) =>
 export const isScratchpadPdfLike = (item: ScratchpadItem) =>
   item.type === 'pdf' || item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf');
 
+export const isScratchpadBinaryLike = (item: ScratchpadItem) =>
+  item.isBinary ||
+  isScratchpadImageLike(item) ||
+  isScratchpadPdfLike(item) ||
+  ['binary', 'file', 'archive'].includes(item.type);
+
 export const isScratchpadKeyLike = (item: ScratchpadItem) =>
   isScratchpadTextLike(item) && (
     item.type === 'json' ||
@@ -31,11 +37,13 @@ export const ScratchpadPicker: React.FC<{
   label?: string;
   placeholder?: string;
   filter?: ScratchpadFilter;
+  onError?: (error: Error, item?: ScratchpadItem) => void;
   onLoad: (content: string | Blob | ArrayBuffer, item: ScratchpadItem) => void | Promise<void>;
 }> = ({
   label = '从暂存箱载入',
   placeholder = '选择暂存内容...',
   filter = defaultFilter,
+  onError,
   onLoad,
 }) => {
   const items = useScratchpadStore(state => state.items);
@@ -54,9 +62,22 @@ export const ScratchpadPicker: React.FC<{
         onChange={async event => {
           const selected = compatibleItems.find(item => item.id === event.target.value);
           if (!selected) return;
-          const content = await getScratchpadItemContent(selected);
-          await onLoad(content, selected);
-          event.target.value = '';
+          try {
+            const content = await getScratchpadItemContent(selected);
+            await onLoad(content, selected);
+          } catch (err) {
+            const error = err instanceof Error ? err : new Error('暂存箱载入失败');
+            onError?.(error, selected);
+            window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
+              detail: {
+                title: '暂存箱载入失败',
+                description: error.message,
+                tone: 'error',
+              },
+            }));
+          } finally {
+            event.target.value = '';
+          }
         }}
       >
         <option value="" disabled>{placeholder}</option>

@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel, Input, Select } from '../ui/ToolUi';
 import { loadScriptWithCache } from './shared/cdnCacheManager';
+import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -85,6 +87,46 @@ type CryptoWindow = Window & {
 };
 
 const cryptoWindow = () => window as CryptoWindow;
+
+type PasswordOptions = {
+  uppercase: boolean;
+  lowercase: boolean;
+  numbers: boolean;
+  symbols: boolean;
+};
+
+export const buildPasswordCharset = (opts: PasswordOptions) => {
+  const chars = {
+    uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+    lowercase: 'abcdefghijklmnopqrstuvwxyz',
+    numbers: '0123456789',
+    symbols: '!@#$%^&*()_+~`|}{[]:;?><,./-=',
+  };
+
+  let charSet = '';
+  if (opts.uppercase) charSet += chars.uppercase;
+  if (opts.lowercase) charSet += chars.lowercase;
+  if (opts.numbers) charSet += chars.numbers;
+  if (opts.symbols) charSet += chars.symbols;
+  return charSet;
+};
+
+export const generateUnbiasedPassword = (len: number, opts: PasswordOptions) => {
+  const charSet = buildPasswordCharset(opts);
+  if (!charSet) return '';
+
+  const maxUint32 = 0x100000000;
+  const maxUnbiased = Math.floor(maxUint32 / charSet.length) * charSet.length;
+  let result = '';
+
+  while (result.length < len) {
+    const randomValue = crypto.getRandomValues(new Uint32Array(1))[0];
+    if (randomValue >= maxUnbiased) continue;
+    result += charSet[randomValue % charSet.length];
+  }
+
+  return result;
+};
 
 // --- JWT Tool ---
 // --- JWT Tool ---
@@ -736,41 +778,43 @@ export const PasswordGenTool: React.FC = () => {
     const [password, setPassword] = useState('');
     const [copied, setCopied] = useState(false);
     const [zxcvbnLoaded, setZxcvbnLoaded] = useState(false);
+    const [optionWarning, setOptionWarning] = useState('');
+    const [zxcvbnRuntimeState, setZxcvbnRuntimeState] = useState<RuntimeAssetLoaderState>({
+        status: 'idle',
+        label: 'zxcvbn',
+        version: '4.4.2',
+        source: 'https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js',
+    });
 
-    // Dynamic injection of zxcvbn.js
-    useEffect(() => {
+    const loadZxcvbn = useCallback(() => {
         if (cryptoWindow().zxcvbn) {
             Promise.resolve().then(() => setZxcvbnLoaded(true));
             return;
         }
-        loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js')
+        loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js', {
+            label: 'zxcvbn',
+            version: '4.4.2',
+            onStatus: event => setZxcvbnRuntimeState({
+                status: event.status,
+                label: event.label,
+                version: event.version,
+                source: event.src,
+                attempt: event.attempt,
+                progress: event.progress,
+                error: event.message,
+            }),
+        })
             .then(() => setZxcvbnLoaded(true))
             .catch((err) => console.error('Failed to load zxcvbn script', err));
     }, []);
 
+    // Dynamic injection of zxcvbn.js
+    useEffect(() => {
+        loadZxcvbn();
+    }, [loadZxcvbn]);
+
     const generatePassword = useCallback((len: number, opts: typeof options) => {
-        const chars = {
-            uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-            lowercase: 'abcdefghijklmnopqrstuvwxyz',
-            numbers: '0123456789',
-            symbols: '!@#$%^&*()_+~`|}{[]:;?><,./-=',
-        };
-        
-        let charSet = '';
-        if (opts.uppercase) charSet += chars.uppercase;
-        if (opts.lowercase) charSet += chars.lowercase;
-        if (opts.numbers) charSet += chars.numbers;
-        if (opts.symbols) charSet += chars.symbols;
-
-        if (charSet === '') return '';
-
-        let res = '';
-        const array = new Uint32Array(len);
-        crypto.getRandomValues(array);
-        for (let i = 0; i < len; i++) {
-            res += charSet[array[i] % charSet.length];
-        }
-        return res;
+        return generateUnbiasedPassword(len, opts);
     }, []);
 
     // Initial password generation on mount or load
@@ -804,6 +848,11 @@ export const PasswordGenTool: React.FC = () => {
 
     const handleOptionChange = (key: keyof typeof options) => {
         const newOpts = {...options, [key]: !options[key]};
+        if (!buildPasswordCharset(newOpts)) {
+            setOptionWarning('至少需要保留一种字符类型。');
+            return;
+        }
+        setOptionWarning('');
         setOptions(newOpts);
         setPassword(generatePassword(length, newOpts));
     };
@@ -835,6 +884,7 @@ export const PasswordGenTool: React.FC = () => {
                 actions={<Button size="sm" onClick={generate} icon={<RefreshCcw className="w-4 h-4"/>}>刷新</Button>}
             />
             <CardContent className="flex-1 overflow-auto space-y-6">
+                <RuntimeAssetStatusPanel state={zxcvbnRuntimeState} onRetry={loadZxcvbn} compact />
                 <div className="relative">
                     <input 
                         type="text"
@@ -882,6 +932,7 @@ export const PasswordGenTool: React.FC = () => {
                                 </label>
                             ))}
                         </div>
+                        {optionWarning && <div className="status-warning p-2 text-xs">{optionWarning}</div>}
                     </div>
 
                     {/* Live Entropy Estimations */}
@@ -931,7 +982,9 @@ export const PasswordGenTool: React.FC = () => {
                             </div>
                         ) : (
                             <div className="text-xs text-slate-400 italic">
-                                {zxcvbnLoaded ? '输入或生成密码以运行安全审计...' : '正在加载密码强度审计计算库...'}
+                                {zxcvbnRuntimeState.status === 'error'
+                                    ? '密码生成器仍可离线使用；强度审计库加载失败，可点击上方重试。'
+                                    : zxcvbnLoaded ? '输入或生成密码以运行安全审计...' : '正在加载密码强度审计计算库...'}
                             </div>
                         )}
                     </div>
@@ -947,6 +1000,12 @@ export const PgpKeymasterTool: React.FC = () => {
   const [openpgpLoaded, setOpenpgpLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [openpgpRuntimeState, setOpenpgpRuntimeState] = useState<RuntimeAssetLoaderState>({
+    status: 'idle',
+    label: 'OpenPGP',
+    version: '5.11.2',
+    source: 'https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js',
+  });
   
   // Generation state
   const [genName, setGenName] = useState('Alice Vance');
@@ -977,15 +1036,31 @@ export const PgpKeymasterTool: React.FC = () => {
   const { copied: cryptoResultCopied, copy: copyCryptoResult } = useCopyToClipboard();
   const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard();
 
-  useEffect(() => {
+  const loadOpenPgp = useCallback(() => {
     if (cryptoWindow().openpgp) {
       Promise.resolve().then(() => setOpenpgpLoaded(true));
       return;
     }
-    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js')
+    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js', {
+      label: 'OpenPGP',
+      version: '5.11.2',
+      onStatus: event => setOpenpgpRuntimeState({
+        status: event.status,
+        label: event.label,
+        version: event.version,
+        source: event.src,
+        attempt: event.attempt,
+        progress: event.progress,
+        error: event.message,
+      }),
+    })
       .then(() => setOpenpgpLoaded(true))
       .catch(() => setError('加载 OpenPGP 库失败，请检查网络连接。'));
   }, []);
+
+  useEffect(() => {
+    loadOpenPgp();
+  }, [loadOpenPgp]);
 
   const handleGenerateKeys = async () => {
     if (!openpgpLoaded) return;
@@ -1151,6 +1226,9 @@ export const PgpKeymasterTool: React.FC = () => {
         title="GPG / PGP 离线安全密钥加解密中心"
         description="100% 浏览器本地离线运行的 OpenPGP 军事级密码库，支持 ECC/RSA 密钥生成、消息签名、数字签名核验及文本加解密。"
       />
+      <div className="px-4 pt-4">
+        <RuntimeAssetStatusPanel state={openpgpRuntimeState} onRetry={loadOpenPgp} compact />
+      </div>
       <div className="flex border-b border-slate-200 dark:border-slate-800 px-4">
         {([
           ['generate', '生成密钥对'],
@@ -1438,6 +1516,12 @@ export const PgpKeymasterTool: React.FC = () => {
 export const SmCryptoSuiteTool: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'sm2' | 'sm3' | 'sm4'>('sm2');
   const [loaded, setLoaded] = useState(false);
+  const [smRuntimeState, setSmRuntimeState] = useState<RuntimeAssetLoaderState>({
+    status: 'idle',
+    label: 'sm-crypto',
+    version: '0.3.12',
+    source: 'https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js',
+  });
 
   // SM2 states
   const [sm2Pub, setSm2Pub] = useState('');
@@ -1460,15 +1544,31 @@ export const SmCryptoSuiteTool: React.FC = () => {
   const [sm4Mode, setSm4Mode] = useState<'ecb' | 'cbc'>('cbc');
 
   // Load sm-crypto dynamically to keep Vite bundle extremely light
-  useEffect(() => {
+  const loadSmCrypto = useCallback(() => {
     if (cryptoWindow().smCrypto) {
       Promise.resolve().then(() => setLoaded(true));
       return;
     }
-    loadScriptWithCache('https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js')
+    loadScriptWithCache('https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js', {
+      label: 'sm-crypto',
+      version: '0.3.12',
+      onStatus: event => setSmRuntimeState({
+        status: event.status,
+        label: event.label,
+        version: event.version,
+        source: event.src,
+        attempt: event.attempt,
+        progress: event.progress,
+        error: event.message,
+      }),
+    })
       .then(() => setLoaded(true))
       .catch((err) => console.error('Failed to dynamically load sm-crypto CDN library.', err));
   }, []);
+
+  useEffect(() => {
+    loadSmCrypto();
+  }, [loadSmCrypto]);
 
   // SM2 Generators
   const handleSm2Generate = () => {
@@ -1605,6 +1705,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
         description="支持中国国家商用密码套件：SM2 椭圆曲线非对称密钥对与签名体检验、SM3 杂凑算法特征码比对及 SM4 分组对称加密（ECB/CBC 模式）的 100% 本地离线处理。" 
       />
       <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0 text-slate-700 dark:text-slate-200">
+        <RuntimeAssetStatusPanel state={smRuntimeState} onRetry={loadSmCrypto} compact />
         
         {!loaded && (
           <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-amber-800 dark:text-amber-400 text-xs flex items-center gap-2 animate-pulse">

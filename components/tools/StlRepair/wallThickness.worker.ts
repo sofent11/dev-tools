@@ -4,6 +4,7 @@ export interface WallThicknessWorkerRequest {
   indices: Uint32Array;
   threshold: number;
   mode: 'fast' | 'precise';
+  maxAnalysisMs?: number;
 }
 
 export interface WallThicknessWorkerReport {
@@ -15,6 +16,9 @@ export interface WallThicknessWorkerReport {
   confidence: 'low' | 'medium' | 'high';
   elapsedMs: number;
   sampleRate: number;
+  partial?: boolean;
+  estimatedWork?: number;
+  abortedByBudget?: boolean;
 }
 
 export type WallThicknessWorkerResponse =
@@ -81,7 +85,7 @@ const rayTriangleDistance = (
 
 self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
   const started = performance.now();
-  const { id, positions, indices, threshold, mode } = event.data;
+  const { id, positions, indices, threshold, mode, maxAnalysisMs } = event.data;
 
   try {
     const faceCount = Math.floor(indices.length / 3);
@@ -94,9 +98,13 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
 
     const maxSamples = mode === 'precise' ? 2400 : 700;
     const step = Math.max(1, Math.floor(faceCount / maxSamples));
+    const targetStep = mode === 'precise' ? 1 : Math.max(1, Math.floor(faceCount / 5000));
+    const estimatedWork = Math.ceil(faceCount / step) * Math.ceil(faceCount / targetStep);
+    const budgetMs = maxAnalysisMs ?? (mode === 'precise' ? 6500 : 2500);
     let sampledFaces = 0;
     let thinFaces = 0;
     let minThickness: number | null = null;
+    let abortedByBudget = false;
 
     for (let faceIndex = 0; faceIndex < faceCount; faceIndex += step) {
       const ia = indices[faceIndex * 3];
@@ -125,7 +133,6 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
       ];
 
       let best: number | null = null;
-      const targetStep = mode === 'precise' ? 1 : Math.max(1, Math.floor(faceCount / 5000));
       for (let targetFace = 0; targetFace < faceCount; targetFace += targetStep) {
         if (targetFace === faceIndex) continue;
         const ta = getVertex(positions, indices[targetFace * 3]);
@@ -153,6 +160,10 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
       if (sampledFaces % 80 === 0) {
         self.postMessage({ id, type: 'progress', progress: Math.min(95, Math.round((faceIndex / faceCount) * 100)) } satisfies WallThicknessWorkerResponse);
       }
+      if (performance.now() - started > budgetMs) {
+        abortedByBudget = true;
+        break;
+      }
     }
 
     const sampleRate = faceCount > 0 ? sampledFaces / faceCount : 0;
@@ -165,6 +176,9 @@ self.onmessage = (event: MessageEvent<WallThicknessWorkerRequest>) => {
       confidence: mode === 'precise' ? 'high' : sampleRate > 0.2 ? 'medium' : 'low',
       elapsedMs: performance.now() - started,
       sampleRate,
+      partial: abortedByBudget,
+      estimatedWork,
+      abortedByBudget,
     };
 
     self.postMessage({ id, type: 'success', report, colors }, [colors.buffer]);

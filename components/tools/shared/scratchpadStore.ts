@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { saveEntity, deleteEntity, getEntity, clearEntities } from './scratchpadDb';
 
+export type ScratchpadStorageStatus = 'ok' | 'degraded' | 'error';
+
 export interface ScratchpadItem {
   id: string;
   name: string;
@@ -30,8 +32,11 @@ export interface ScratchpadPayload {
 
 interface ScratchpadState {
   items: ScratchpadItem[];
+  storageStatus: ScratchpadStorageStatus;
+  lastStorageError?: string;
   addItem: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
   addItemAsync: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
+  estimateQuota: () => Promise<StorageEstimate | null>;
   updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool'>>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
@@ -154,6 +159,8 @@ export const useScratchpadStore = create<ScratchpadState>()(
   persist(
     (set, get) => ({
       items: [],
+      storageStatus: 'ok',
+      lastStorageError: undefined,
 
       addItem: (nameOrPayload, content = '', type = 'text', mimeType) => {
         get().addItemAsync(nameOrPayload, content, type, mimeType).catch((err) => {
@@ -189,7 +196,17 @@ export const useScratchpadStore = create<ScratchpadState>()(
           }
         }
 
-        await saveEntity(id, payload.content);
+        try {
+          await saveEntity(id, payload.content);
+          set({ storageStatus: 'ok', lastStorageError: undefined });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '暂存箱 IndexedDB 写入失败';
+          const canDegradeToMetadata = typeof payload.content === 'string' && !isLarge;
+          set({ storageStatus: canDegradeToMetadata ? 'degraded' : 'error', lastStorageError: message });
+          if (!canDegradeToMetadata) {
+            throw new Error(`暂存箱存储失败：${message}`);
+          }
+        }
 
         set((state) => {
           const resolvedName = createVersionedScratchpadName(payload.name, new Set(state.items.map(item => item.name)));
@@ -213,6 +230,17 @@ export const useScratchpadStore = create<ScratchpadState>()(
         return id;
       },
 
+      estimateQuota: async () => {
+        if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return null;
+        try {
+          return await navigator.storage.estimate();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '无法读取浏览器存储配额';
+          set({ storageStatus: 'degraded', lastStorageError: message });
+          return null;
+        }
+      },
+
       updateItem: (id, updates) => set((state) => ({
         items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
       })),
@@ -229,6 +257,7 @@ export const useScratchpadStore = create<ScratchpadState>()(
       clearAll: () => {
         clearEntities().catch((err) => {
           console.error('Failed to clear scratchpad IndexedDB entries', err);
+          set({ storageStatus: 'degraded', lastStorageError: err instanceof Error ? err.message : '清空 IndexedDB 失败' });
         });
         set({ items: [] });
       },
@@ -237,6 +266,8 @@ export const useScratchpadStore = create<ScratchpadState>()(
       name: 'devtoolbox-scratchpad-storage',
       partialize: (state) => ({
         items: state.items,
+        storageStatus: state.storageStatus,
+        lastStorageError: state.lastStorageError,
       }),
     },
   ),
