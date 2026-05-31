@@ -152,6 +152,8 @@ const enExact: Record<string, string> = {
   '本地 Markdown 文档即时渲染、HTML 结构美化压缩及 HTML-Markdown 智能双向转换': 'Local Markdown rendering, HTML formatting/minification, and smart HTML-Markdown conversion',
   'Markdown 预览': 'Markdown Preview',
   'Markdown 转 HTML': 'Markdown to HTML',
+  'Markdown 转 HTML 实时预览': 'Live Markdown to HTML preview',
+  '实时预览': 'Live preview',
   'HTML 转 Markdown': 'HTML to Markdown',
   'HTML 片段转 Markdown': 'HTML snippet to Markdown',
   'HTML 格式化/压缩器': 'HTML Formatter / Minifier',
@@ -248,7 +250,7 @@ const enExact: Record<string, string> = {
   '文本/WiFi/名片生成器': 'Text, Wi-Fi, and vCard generator',
 };
 
-const enPhraseReplacements: Array<[RegExp, string]> = [
+const enStructuralReplacements: Array<[RegExp, string]> = [
   [/JSON & 数据格式化工作室/g, 'JSON & Data Formatting Studio'],
   [/集成 JSON 格式化、转换、Diff、常用数据库格式化以及离线 SQLite WebAssembly 数据库沙箱的一站式数据处理中心/g, 'An all-in-one data workspace for JSON formatting, conversion, diffing, SQL formatting, and an offline SQLite WebAssembly sandbox'],
   [/安全与加密中心工作室/g, 'Security & Cryptography Center'],
@@ -267,6 +269,9 @@ const enPhraseReplacements: Array<[RegExp, string]> = [
   [/(.+?)\s*-\s*程序员百宝箱/g, '$1 - Dev Toolbox'],
   [/(\d+)\s*字符/g, '$1 chars'],
   [/第\s*(\d+)\s*次/g, 'Run $1'],
+];
+
+const enUiTermReplacements: Array<[RegExp, string]> = [
   [/已复制/g, 'Copied'],
   [/复制结果/g, 'Copy result'],
   [/复制签名/g, 'Copy signature'],
@@ -340,10 +345,21 @@ export const translateText = (value: string, locale: Locale): string => {
   if (exact) return preserveOuterWhitespace(value, exact);
 
   let translated = value;
+  let matchedKnownUiPhrase = false;
   for (const [source, replacement] of Object.entries(enExact).sort((a, b) => b[0].length - a[0].length)) {
-    translated = translated.split(source).join(replacement);
+    if (translated.includes(source)) {
+      translated = translated.split(source).join(replacement);
+      matchedKnownUiPhrase = true;
+    }
   }
-  for (const [pattern, replacement] of enPhraseReplacements) {
+  for (const [pattern, replacement] of enStructuralReplacements) {
+    const next = translated.replace(pattern, replacement);
+    if (next !== translated) matchedKnownUiPhrase = true;
+    translated = next;
+  }
+  if (!matchedKnownUiPhrase) return value;
+
+  for (const [pattern, replacement] of enUiTermReplacements) {
     translated = translated.replace(pattern, replacement);
   }
   return translated;
