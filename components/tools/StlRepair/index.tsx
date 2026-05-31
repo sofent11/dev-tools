@@ -16,10 +16,12 @@ import {
   BufferGeometry,
   Color,
   DirectionalLight,
+  DoubleSide,
   GridHelper,
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
+  Raycaster,
   Scene,
   Vector3,
   WebGLRenderer,
@@ -107,6 +109,95 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default'
   );
 };
 
+interface WallThicknessReport {
+  sampledFaces: number;
+  thinFaces: number;
+  minThickness: number | null;
+  threshold: number;
+}
+
+type EnvironmentPreset = 'studio' | 'warm' | 'cool' | 'contrast';
+
+const environmentPresets: Record<EnvironmentPreset, {
+  background: number;
+  ambient: [number, number];
+  key: [number, number];
+  fill: [number, number];
+}> = {
+  studio: { background: 0xf8fafc, ambient: [0xffffff, 0.55], key: [0xffffff, 1.4], fill: [0x67e8f9, 0.55] },
+  warm: { background: 0xfffbeb, ambient: [0xfff7ed, 0.72], key: [0xffedd5, 1.55], fill: [0xfacc15, 0.38] },
+  cool: { background: 0xeff6ff, ambient: [0xdbeafe, 0.65], key: [0xbfdbfe, 1.35], fill: [0x22d3ee, 0.62] },
+  contrast: { background: 0x111827, ambient: [0xffffff, 0.28], key: [0xffffff, 1.9], fill: [0x38bdf8, 0.9] },
+};
+
+const getThicknessColor = (thickness: number | null, threshold: number) => {
+  if (thickness === null) return new Color(0x94a3b8);
+  if (thickness < threshold * 0.65) return new Color(0xef4444);
+  if (thickness < threshold) return new Color(0xf97316);
+  return new Color(0x22c55e);
+};
+
+const analyzeWallThickness = (
+  object: Mesh,
+  geometry: BufferGeometry,
+  mesh: MeshPreviewData,
+  threshold: number,
+): WallThicknessReport => {
+  const position = geometry.getAttribute('position');
+  const normal = geometry.getAttribute('normal');
+  const colors = new Float32Array(position.count * 3);
+  const indices = mesh.indices;
+  const faceCount = Math.floor(indices.length / 3);
+  const step = Math.max(1, Math.floor(faceCount / 900));
+  const raycaster = new Raycaster();
+  raycaster.near = 0.00001;
+  raycaster.far = threshold * 8;
+
+  const center = new Vector3();
+  const direction = new Vector3();
+  const tempNormal = new Vector3();
+  const vertex = new Vector3();
+  let sampledFaces = 0;
+  let thinFaces = 0;
+  let minThickness: number | null = null;
+
+  for (let faceIndex = 0; faceIndex < faceCount; faceIndex += step) {
+    const ia = indices[faceIndex * 3];
+    const ib = indices[faceIndex * 3 + 1];
+    const ic = indices[faceIndex * 3 + 2];
+
+    center.set(0, 0, 0);
+    direction.set(0, 0, 0);
+    for (const index of [ia, ib, ic]) {
+      vertex.fromBufferAttribute(position, index);
+      center.add(vertex);
+      tempNormal.fromBufferAttribute(normal, index);
+      direction.add(tempNormal);
+    }
+    center.multiplyScalar(1 / 3).applyMatrix4(object.matrixWorld);
+    direction.normalize().multiplyScalar(-1);
+
+    raycaster.set(center.clone().addScaledVector(direction, 0.0001), direction);
+    const hit = raycaster.intersectObject(object, false).find(item => item.distance > 0.0005 && item.faceIndex !== faceIndex);
+    const thickness = hit?.distance ?? null;
+    if (thickness !== null) {
+      minThickness = minThickness === null ? thickness : Math.min(minThickness, thickness);
+      if (thickness < threshold) thinFaces += 1;
+    }
+
+    const color = getThicknessColor(thickness, threshold);
+    for (const index of [ia, ib, ic]) {
+      colors[index * 3] = color.r;
+      colors[index * 3 + 1] = color.g;
+      colors[index * 3 + 2] = color.b;
+    }
+    sampledFaces += 1;
+  }
+
+  geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  return { sampledFaces, thinFaces, minThickness, threshold };
+};
+
 const BoundsLine: React.FC<{ bounds: MeshBounds }> = ({ bounds }) => (
   <span>
     {formatSize(bounds.size[0])} x {formatSize(bounds.size[1])} x {formatSize(bounds.size[2])}
@@ -151,7 +242,22 @@ const MeshPreview: React.FC<{
   isProcessing: boolean;
   materialType: 'default' | 'gold' | 'silver' | 'jade' | 'glass';
   showDiagnostics: boolean;
-}> = ({ mesh, isProcessing, materialType, showDiagnostics }) => {
+  wallThicknessEnabled: boolean;
+  wallThicknessThreshold: number;
+  environmentPreset: EnvironmentPreset;
+  softShadows: boolean;
+  onWallReport: (report: WallThicknessReport | null) => void;
+}> = ({
+  mesh,
+  isProcessing,
+  materialType,
+  showDiagnostics,
+  wallThicknessEnabled,
+  wallThicknessThreshold,
+  environmentPreset,
+  softShadows,
+  onWallReport,
+}) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
@@ -159,17 +265,21 @@ const MeshPreview: React.FC<{
   const controlsRef = useRef<OrbitControls | null>(null);
   const meshRef = useRef<Mesh | null>(null);
   const lineRef = useRef<LineSegments | null>(null);
+  const ambientLightRef = useRef<AmbientLight | null>(null);
+  const keyLightRef = useRef<DirectionalLight | null>(null);
+  const fillLightRef = useRef<DirectionalLight | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const scene = new Scene();
-    scene.background = new Color(0xf8fafc);
+    scene.background = new Color(environmentPresets.studio.background);
 
     const renderer = new WebGLRenderer({ antialias: true, alpha: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth || 640, container.clientHeight || 420, true);
+    renderer.shadowMap.enabled = true;
     renderer.domElement.className = 'absolute inset-0 h-full w-full';
     container.appendChild(renderer.domElement);
 
@@ -183,15 +293,20 @@ const MeshPreview: React.FC<{
     const grid = new GridHelper(240, 24, 0x94a3b8, 0xe2e8f0);
     grid.rotation.x = Math.PI / 2;
     scene.add(grid);
-    scene.add(new AmbientLight(0xffffff, 0.55));
+    const ambientLight = new AmbientLight(0xffffff, 0.55);
+    scene.add(ambientLight);
 
     const keyLight = new DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(90, -120, 180);
+    keyLight.castShadow = true;
     scene.add(keyLight);
 
     const fillLight = new DirectionalLight(0x67e8f9, 0.55);
     fillLight.position.set(-120, 90, 100);
     scene.add(fillLight);
+    ambientLightRef.current = ambientLight;
+    keyLightRef.current = keyLight;
+    fillLightRef.current = fillLight;
 
     sceneRef.current = scene;
     rendererRef.current = renderer;
@@ -250,6 +365,25 @@ const MeshPreview: React.FC<{
 
   useEffect(() => {
     const scene = sceneRef.current;
+    const renderer = rendererRef.current;
+    const ambientLight = ambientLightRef.current;
+    const keyLight = keyLightRef.current;
+    const fillLight = fillLightRef.current;
+    if (!scene || !renderer || !ambientLight || !keyLight || !fillLight) return;
+
+    const preset = environmentPresets[environmentPreset];
+    scene.background = new Color(preset.background);
+    ambientLight.color.setHex(preset.ambient[0]);
+    ambientLight.intensity = preset.ambient[1];
+    keyLight.color.setHex(preset.key[0]);
+    keyLight.intensity = preset.key[1];
+    fillLight.color.setHex(preset.fill[0]);
+    fillLight.intensity = preset.fill[1];
+    renderer.shadowMap.enabled = softShadows;
+  }, [environmentPreset, softShadows]);
+
+  useEffect(() => {
+    const scene = sceneRef.current;
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!scene || !camera || !controls) return;
@@ -276,7 +410,10 @@ const MeshPreview: React.FC<{
       lineRef.current = null;
     }
 
-    if (!mesh) return;
+    if (!mesh) {
+      onWallReport(null);
+      return;
+    }
 
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(mesh.positions, 3));
@@ -284,20 +421,25 @@ const MeshPreview: React.FC<{
     geometry.computeVertexNormals();
     geometry.computeBoundingBox();
 
+    const materialCommon = {
+      flatShading: false,
+      vertexColors: wallThicknessEnabled,
+      side: wallThicknessEnabled ? DoubleSide : undefined,
+    };
     let material: MeshStandardMaterial;
     if (materialType === 'gold') {
       material = new MeshStandardMaterial({
         color: 0xffd700,
         roughness: 0.12,
         metalness: 0.96,
-        flatShading: false,
+        ...materialCommon,
       });
     } else if (materialType === 'silver') {
       material = new MeshStandardMaterial({
         color: 0xe5e7eb,
         roughness: 0.15,
         metalness: 0.90,
-        flatShading: false,
+        ...materialCommon,
       });
     } else if (materialType === 'jade') {
       material = new MeshStandardMaterial({
@@ -306,7 +448,7 @@ const MeshPreview: React.FC<{
         metalness: 0.05,
         emissive: 0x064e3b,
         emissiveIntensity: 0.12,
-        flatShading: false,
+        ...materialCommon,
       });
     } else if (materialType === 'glass') {
       material = new MeshStandardMaterial({
@@ -315,14 +457,14 @@ const MeshPreview: React.FC<{
         metalness: 0.1,
         transparent: true,
         opacity: 0.35,
-        flatShading: false,
+        ...materialCommon,
       });
     } else {
       material = new MeshStandardMaterial({
         color: 0xd8f3dc,
         roughness: 0.72,
         metalness: 0.05,
-        flatShading: false,
+        ...materialCommon,
       });
     }
 
@@ -336,6 +478,16 @@ const MeshPreview: React.FC<{
     const maxDim = Math.max(size.x, size.y, size.z, 1);
     const distance = maxDim * 2.2;
     object.position.set(-center.x, -center.y, -center.z);
+    object.castShadow = softShadows;
+    object.receiveShadow = softShadows;
+    object.updateMatrixWorld(true);
+
+    if (wallThicknessEnabled) {
+      onWallReport(analyzeWallThickness(object, geometry, mesh, wallThicknessThreshold));
+      material.needsUpdate = true;
+    } else {
+      onWallReport(null);
+    }
 
     if (showDiagnostics) {
       const boundaryIndices: number[] = [];
@@ -397,7 +549,7 @@ const MeshPreview: React.FC<{
     camera.updateProjectionMatrix();
     controls.target.set(0, 0, 0);
     controls.update();
-  }, [mesh, materialType, showDiagnostics]);
+  }, [mesh, materialType, showDiagnostics, wallThicknessEnabled, wallThicknessThreshold, softShadows, onWallReport]);
 
   return (
     <div ref={containerRef} className="relative min-h-[360px] flex-1 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
@@ -414,6 +566,11 @@ const MeshPreview: React.FC<{
         <div className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-lg border border-cyan-100 bg-white/90 px-3 py-2 text-xs font-medium text-cyan-800 shadow-sm backdrop-blur">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           处理中
+        </div>
+      )}
+      {wallThicknessEnabled && mesh && (
+        <div className="absolute left-3 top-3 z-20 rounded-lg border border-white/60 bg-white/90 px-3 py-2 text-[11px] font-semibold text-slate-700 shadow-sm backdrop-blur">
+          壁厚热力图：红色高风险 · 橙色临界 · 绿色安全
         </div>
       )}
     </div>
@@ -510,6 +667,11 @@ export const StlRepairTool: React.FC = () => {
   const [progressText, setProgressText] = useState('');
   const [materialType, setMaterialType] = useState<'default' | 'gold' | 'silver' | 'jade' | 'glass'>('default');
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [wallThicknessEnabled, setWallThicknessEnabled] = useState(false);
+  const [wallThicknessThreshold, setWallThicknessThreshold] = useState(0.8);
+  const [wallReport, setWallReport] = useState<WallThicknessReport | null>(null);
+  const [environmentPreset, setEnvironmentPreset] = useState<EnvironmentPreset>('studio');
+  const [softShadows, setSoftShadows] = useState(true);
 
   useEffect(() => {
     return () => {
@@ -536,6 +698,7 @@ export const StlRepairTool: React.FC = () => {
     setFile(nextFile);
     setMesh(null);
     setReport(null);
+    setWallReport(null);
     setStlBuffer(null);
     setError('');
   };
@@ -546,6 +709,7 @@ export const StlRepairTool: React.FC = () => {
     setProcessing(true);
     setError('');
     setReport(null);
+    setWallReport(null);
     setStlBuffer(null);
     setProgressPercent(0);
     setProgressText('已启动 Web Worker 线程...');
@@ -738,7 +902,49 @@ export const StlRepairTool: React.FC = () => {
               hint="自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。"
               onChange={checked => setShowDiagnostics(checked)}
             />
+            <CheckboxRow
+              checked={wallThicknessEnabled}
+              label="开启壁厚热力图"
+              hint="采样估算 3D 打印薄壁风险：红色低于阈值，橙色接近阈值，绿色相对安全。"
+              onChange={checked => setWallThicknessEnabled(checked)}
+            />
+            <div>
+              <FieldLabel hint={`${formatSize(wallThicknessThreshold)} mm`}>壁厚风险阈值</FieldLabel>
+              <Input
+                type="number"
+                min={0.1}
+                step={0.1}
+                value={wallThicknessThreshold}
+                disabled={!wallThicknessEnabled}
+                onChange={event => setWallThicknessThreshold(Math.max(0.1, Number(event.target.value) || 0.8))}
+              />
+            </div>
+            <div>
+              <FieldLabel>环境光预设</FieldLabel>
+              <Select value={environmentPreset} onChange={event => setEnvironmentPreset(event.target.value as EnvironmentPreset)}>
+                <option value="studio">明亮工作室</option>
+                <option value="warm">暖金展示台</option>
+                <option value="cool">冷蓝工程灯</option>
+                <option value="contrast">深色高对比</option>
+              </Select>
+            </div>
+            <CheckboxRow
+              checked={softShadows}
+              label="柔和阴影"
+              hint="为 PBR 预览启用更有空间感的阴影表现。"
+              onChange={checked => setSoftShadows(checked)}
+            />
           </div>
+
+          {wallReport && (
+            <div className={wallReport.thinFaces > 0 ? 'status-warning p-3 text-xs' : 'status-success p-3 text-xs'}>
+              <div className="font-semibold">壁厚采样诊断</div>
+              <div className="mt-1 leading-5">
+                已采样 {formatNumber(wallReport.sampledFaces)} 个面，低于 {formatSize(wallReport.threshold)} mm 的风险面 {formatNumber(wallReport.thinFaces)} 个；
+                最小估算厚度 {wallReport.minThickness === null ? '未命中对向面' : `${formatSize(wallReport.minThickness)} mm`}。
+              </div>
+            </div>
+          )}
 
           {error && <div className="status-error p-3 text-sm">{error}</div>}
 
@@ -771,7 +977,17 @@ export const StlRepairTool: React.FC = () => {
           }
         />
         <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-          <MeshPreview mesh={mesh} isProcessing={processing} materialType={materialType} showDiagnostics={showDiagnostics} />
+          <MeshPreview
+            mesh={mesh}
+            isProcessing={processing}
+            materialType={materialType}
+            showDiagnostics={showDiagnostics}
+            wallThicknessEnabled={wallThicknessEnabled}
+            wallThicknessThreshold={wallThicknessThreshold}
+            environmentPreset={environmentPreset}
+            softShadows={softShadows}
+            onWallReport={setWallReport}
+          />
           <ReportSummary report={report} outputSize={outputSize} />
         </CardContent>
       </Card>

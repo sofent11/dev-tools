@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
@@ -30,47 +30,54 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   tools,
   defaultTab,
 }) => {
-  const [activeTabId, setActiveTabId] = useState<string>(() => {
-    // 1. Check URL hash
+  const getFallbackTab = useCallback(() => (
+    defaultTab && tools.some(t => t.id === defaultTab)
+      ? defaultTab
+      : (tools[0]?.id || '')
+  ), [defaultTab, tools]);
+
+  const getTabFromLocation = useCallback(() => {
     const hash = window.location.hash.replace('#', '');
     if (hash && tools.some(t => t.id === hash)) {
       return hash;
     }
-    // 2. Check query param
+
     const params = new URLSearchParams(window.location.search);
     const queryTab = params.get('tab');
     if (queryTab && tools.some(t => t.id === queryTab)) {
       return queryTab;
     }
-    // 3. Fallback to defaultTab or first tool
-    return defaultTab && tools.some(t => t.id === defaultTab)
-      ? defaultTab
-      : (tools[0]?.id || '');
-  });
 
-  // Listen for hash and history changes to support back/forward navigation and deep links
+    return getFallbackTab();
+  }, [getFallbackTab, tools]);
+
+  const [activeTabId, setActiveTabId] = useState<string>(() => getTabFromLocation());
+
+  // Keep tab state aligned with hash navigation and history entries created by pushState.
   useEffect(() => {
-    const syncTabFromLocation = () => {
+    const syncActiveTabFromLocation = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash && tools.some(t => t.id === hash)) {
         setActiveTabId(hash);
         return;
       }
 
-      const params = new URLSearchParams(window.location.search);
-      const queryTab = params.get('tab');
-      if (queryTab && tools.some(t => t.id === queryTab)) {
-        setActiveTabId(queryTab);
+      const nextTab = getTabFromLocation();
+      setActiveTabId(nextTab);
+
+      if (hash && !tools.some(t => t.id === hash)) {
+        window.history.replaceState(null, '', `#${encodeURIComponent(nextTab)}`);
       }
     };
 
-    window.addEventListener('hashchange', syncTabFromLocation);
-    window.addEventListener('popstate', syncTabFromLocation);
+    syncActiveTabFromLocation();
+    window.addEventListener('hashchange', syncActiveTabFromLocation);
+    window.addEventListener('popstate', syncActiveTabFromLocation);
     return () => {
-      window.removeEventListener('hashchange', syncTabFromLocation);
-      window.removeEventListener('popstate', syncTabFromLocation);
+      window.removeEventListener('hashchange', syncActiveTabFromLocation);
+      window.removeEventListener('popstate', syncActiveTabFromLocation);
     };
-  }, [tools]);
+  }, [getTabFromLocation, tools]);
 
   const handleTabSelect = (id: string) => {
     setActiveTabId(id);

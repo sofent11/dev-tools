@@ -66,6 +66,23 @@ const getContentSize = (content: string | Blob | ArrayBuffer) => {
   return new Blob([content]).size;
 };
 
+const createVersionedScratchpadName = (name: string, existingNames: Set<string>) => {
+  if (!existingNames.has(name)) return name;
+
+  const extensionMatch = name.match(/(\.[^./\\]+)$/);
+  const extension = extensionMatch?.[1] || '';
+  const stem = extension ? name.slice(0, -extension.length) : name;
+  let index = 2;
+  let candidate = `${stem} (${index})${extension}`;
+
+  while (existingNames.has(candidate)) {
+    index += 1;
+    candidate = `${stem} (${index})${extension}`;
+  }
+
+  return candidate;
+};
+
 const generateImageThumbnail = (content: string | Blob): Promise<string | undefined> => {
   return new Promise((resolve) => {
     if (typeof window === 'undefined') {
@@ -175,9 +192,10 @@ export const useScratchpadStore = create<ScratchpadState>()(
         await saveEntity(id, payload.content);
 
         set((state) => {
+          const resolvedName = createVersionedScratchpadName(payload.name, new Set(state.items.map(item => item.name)));
           const newItem: ScratchpadItem = {
             id,
-            name: payload.name,
+            name: resolvedName,
             content: contentForZustand,
             type: itemType,
             timestamp,

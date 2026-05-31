@@ -17,7 +17,7 @@ import {
 import JSZip from 'jszip';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { loadScriptWithCache } from './shared/cdnCacheManager';
+import { loadScriptWithCache, type RemoteRuntimeEvent } from './shared/cdnCacheManager';
 import { useScratchpadStore } from './shared/scratchpadStore';
 
 const SCRIPT_URLS = {
@@ -31,9 +31,33 @@ interface FrameData {
   delay?: number;
 }
 
+interface ImageDecoderConstructor {
+  new(init: { data: Blob; type: string }): {
+    tracks?: { selectedTrack?: { frameCount?: number } };
+    decode: (options?: { frameIndex?: number }) => Promise<{ image: VideoFrame }>;
+    close: () => void;
+  };
+  isTypeSupported?: (type: string) => Promise<boolean>;
+}
+
+declare global {
+  interface Window {
+    ImageDecoder?: ImageDecoderConstructor;
+  }
+}
+
+const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(String(reader.result));
+  reader.onerror = () => reject(reader.error || new Error('读取帧图像失败'));
+  reader.readAsDataURL(blob);
+});
+
+const canvasToBlob = (canvas: HTMLCanvasElement) => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+
 export const AnimationFrameExtractor: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
-  const [fileType, setFileType] = useState<'lottie' | 'gif' | null>(null);
+  const [fileType, setFileType] = useState<'lottie' | 'gif' | 'webp' | 'apng' | null>(null);
   const [status, setStatus] = useState('请上传 GIF 动图或 Lottie JSON 动画文件');
   
   // Player state
@@ -59,14 +83,38 @@ export const AnimationFrameExtractor: React.FC = () => {
   // Global Scratchpad Store
   const stashItem = useScratchpadStore(state => state.addItem);
 
+  const handleRuntimeStatus = (event: RemoteRuntimeEvent) => {
+    if (event.status === 'cached') {
+      setStatus(`${event.label} ${event.version || ''} 命中本地缓存，正在启动...`);
+    } else if (event.status === 'loading') {
+      setStatus(`${event.label} ${event.version || ''} 加载中：${event.message || ''}`);
+    } else if (event.status === 'ready') {
+      setStatus(`${event.label} ${event.version || ''} 已就绪`);
+    } else if (event.status === 'error') {
+      setStatus(`${event.label} 加载失败：${event.message || '未知错误'}。正在重试或等待您稍后重试。`);
+    }
+  };
+
   // Load required JS packages dynamically and cache them
   const initDependencies = async (type: 'lottie' | 'gif') => {
     setStatus(`正在初始化本地 ${type === 'lottie' ? 'Lottie 渲染' : 'GIF 解码'}引擎...`);
     try {
       if (type === 'lottie') {
-        await loadScriptWithCache(SCRIPT_URLS.lottie);
+        await loadScriptWithCache(SCRIPT_URLS.lottie, {
+          label: 'Lottie 渲染引擎',
+          version: '5.12.2',
+          retries: 2,
+          timeoutMs: 15000,
+          onStatus: handleRuntimeStatus,
+        });
       } else {
-        await loadScriptWithCache(SCRIPT_URLS.gifuct);
+        await loadScriptWithCache(SCRIPT_URLS.gifuct, {
+          label: 'GIF 解码引擎',
+          version: '2.1.2',
+          retries: 2,
+          timeoutMs: 15000,
+          onStatus: handleRuntimeStatus,
+        });
       }
       setStatus('引擎加载就绪。正在解析动画数据...');
     } catch (err) {
@@ -89,6 +137,46 @@ export const AnimationFrameExtractor: React.FC = () => {
     setFrames([]);
     setTotalFrames(0);
     setCurrentFrame(0);
+  };
+
+  const decodeAnimatedImageFrames = async (uploadedFile: File, mimeType: string) => {
+    if (!window.ImageDecoder) {
+      throw new Error('当前浏览器暂不支持 WebCodecs ImageDecoder，请使用最新版 Chrome/Edge，或改用 GIF/Lottie 文件。');
+    }
+
+    const supported = await window.ImageDecoder.isTypeSupported?.(mimeType);
+    if (supported === false) {
+      throw new Error(`当前浏览器的 ImageDecoder 不支持 ${mimeType} 动图解码。`);
+    }
+
+    const decoder = new window.ImageDecoder({ data: uploadedFile, type: mimeType });
+    const frameCount = decoder.tracks?.selectedTrack?.frameCount || 1;
+    const parsedFrames: FrameData[] = [];
+
+    try {
+      for (let index = 0; index < frameCount; index += 1) {
+        setStatus(`正在解码 ${mimeType.includes('webp') ? 'WebP' : 'APNG'} 第 ${index + 1} / ${frameCount} 帧...`);
+        const { image } = await decoder.decode({ frameIndex: index });
+        const canvas = document.createElement('canvas');
+        canvas.width = image.displayWidth;
+        canvas.height = image.displayHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('当前浏览器无法创建 Canvas。');
+        ctx.drawImage(image, 0, 0);
+        image.close();
+        const blob = await canvasToBlob(canvas);
+        if (!blob) throw new Error('帧图像导出失败。');
+        parsedFrames.push({
+          index,
+          dataUrl: await blobToDataUrl(blob),
+          delay: 100,
+        });
+      }
+    } finally {
+      decoder.close();
+    }
+
+    return parsedFrames;
   };
 
   // Main file uploader parser
@@ -195,8 +283,28 @@ export const AnimationFrameExtractor: React.FC = () => {
         setStatus('解析 GIF 格式失败: ' + (err as Error).message);
         setIsExtracting(false);
       }
+    } else if (ext === 'webp' || ext === 'png' || ext === 'apng') {
+      const mimeType = ext === 'webp' ? 'image/webp' : 'image/png';
+      setFileType(ext === 'webp' ? 'webp' : 'apng');
+      try {
+        setStatus(`正在通过 WebCodecs 解码 ${ext === 'webp' ? 'animated WebP' : 'APNG'}...`);
+        const parsedFrames = await decodeAnimatedImageFrames(uploadedFile, mimeType);
+        if (parsedFrames.length === 0) throw new Error('未检测到有效动画帧。');
+        setFrames(parsedFrames);
+        setTotalFrames(parsedFrames.length);
+        setFps(10);
+        setCurrentFrame(0);
+        setTimeout(() => {
+          renderGifFrame(0, parsedFrames);
+          setIsExtracting(false);
+          setStatus(`${ext === 'webp' ? 'WebP' : 'APNG'} 动画帧解析完成`);
+        }, 100);
+      } catch (err) {
+        setStatus(`解析 ${ext === 'webp' ? 'WebP' : 'APNG'} 失败: ${(err as Error).message}`);
+        setIsExtracting(false);
+      }
     } else {
-      setStatus('暂不支持的文件格式，仅支持上传 GIF 或 JSON 文件。');
+      setStatus('暂不支持的文件格式，仅支持上传 GIF、APNG、WebP 或 Lottie JSON 文件。');
       setIsExtracting(false);
     }
   };
@@ -304,7 +412,7 @@ export const AnimationFrameExtractor: React.FC = () => {
     try {
       const baseName = file.name.split('.').shift() || 'animation';
 
-      if (fileType === 'gif') {
+      if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
         for (const frame of frames) {
           const res = await fetch(frame.dataUrl);
           const blob = await res.blob();
@@ -366,7 +474,7 @@ export const AnimationFrameExtractor: React.FC = () => {
       const zip = new JSZip();
       const baseName = file.name.split('.').shift() || 'animation';
 
-      if (fileType === 'gif') {
+      if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
         for (const frame of frames) {
           const res = await fetch(frame.dataUrl);
           const blob = await res.blob();
@@ -419,12 +527,12 @@ export const AnimationFrameExtractor: React.FC = () => {
             <FileVideo className="w-8 h-8 text-primary-500 animate-bounce" />
           </div>
           <div>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">上传 GIF 动图 或 Lottie JSON 文件</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">上传 GIF / APNG / WebP 动图 或 Lottie JSON 文件</p>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">本地读取，完全保护个人创意安全，无需传输服务器</p>
           </div>
           <input
             type="file"
-            accept=".gif,.json"
+            accept=".gif,.apng,.png,.webp,.json,image/gif,image/png,image/webp,application/json"
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
             onChange={handleFileChange}
           />
@@ -591,7 +699,7 @@ export const AnimationFrameExtractor: React.FC = () => {
             <AlertCircle className="w-12 h-12 stroke-1 text-slate-300 dark:text-slate-800" />
             <span className="font-bold">等待上传解析文件</span>
             <p className="text-[10px] text-slate-500 text-center max-w-[260px] leading-relaxed">
-              支持上传标准的 GIF 动图 (如 sticker.gif) 或标准的 Lottie 动画描述 (如 animation.json) 进行本地解码。
+              支持上传标准 GIF、APNG、animated WebP 或 Lottie JSON。APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，不支持时会给出明确降级提示。
             </p>
           </div>
         )}
