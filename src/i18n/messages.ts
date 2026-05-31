@@ -175,6 +175,7 @@ const enExact: Record<string, string> = {
   '本地网络时延与抖动探针': 'Local latency and jitter probe',
   'URL 解析器': 'URL Parser',
   '解析 URL 结构': 'Parse URL structure',
+  'UA 解析': 'UA parsing',
   'IP 信息': 'IP Info',
   '本机 IP 查询': 'Local IP lookup',
   '设备信息': 'Device Info',
@@ -184,6 +185,7 @@ const enExact: Record<string, string> = {
 
   'PX/REM 转换': 'PX / REM Converter',
   'CSS 单位计算': 'CSS unit calculation',
+  '集成 PX/REM 极速转换、多格式色值调配、玻璃拟态常用特效生成、SVG 的 CSS 嵌入转换、本地 SVG 智能无损压缩及 React 组件一键生成': 'A CSS workspace for fast PX/REM conversion, multi-format color tuning, glassmorphism effects, SVG CSS embedding, local SVG optimization, and one-click React component generation',
   '颜色转换': 'Color Converter',
   'CSS 可视化生成器': 'Visual CSS Generator',
   '阴影/渐变/圆角/毛玻璃': 'Shadows, gradients, radius, and glassmorphism',
@@ -197,6 +199,7 @@ const enExact: Record<string, string> = {
 
   '图片压缩/转换': 'Image Compression / Conversion',
   '压缩 / 格式转换': 'Compression and format conversion',
+  '集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸对齐及换脸的一站式多媒体图形中心': 'A multimedia workspace for image compression, smart color extraction, local background removal, face alignment, and face swapping',
   '智能本地抠图': 'Smart Local Background Removal',
   '本地高精度图片背景色去除与画笔边缘修正': 'Local high-precision background removal with brush edge refinement',
   '图片转 Base64': 'Image to Base64',
@@ -214,6 +217,7 @@ const enExact: Record<string, string> = {
 
   'PDF 工具箱': 'PDF Toolbox',
   '合并 / 转图片': 'Merge and convert to images',
+  '提供高安全的本地 PDF 合并转换、文件多维元属性与哈希检测，以及 MIME 速查工具': 'Secure local PDF merging/conversion, file metadata and hash inspection, and MIME lookup tools',
   '文件属性信息': 'File Properties',
   '大小/类型/哈希检测': 'Size, type, and hash detection',
   '文件名路径提取': 'Filename & Path Extractor',
