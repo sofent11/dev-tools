@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import FaceSwapCanvas from './faceswap-core/components/FaceSwapCanvas';
 import { processModelImage, processSourceImage } from './faceswap-core/utils/faceProcessor';
 import { ModelFacePack, SourceFacePack } from './faceswap-core/types';
@@ -15,6 +15,12 @@ const SCRIPT_URLS = {
 };
 
 const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const revokeObjectUrl = (url: string | null) => {
+    if (url?.startsWith('blob:')) {
+        URL.revokeObjectURL(url);
+    }
+};
 
 // Helper to load external scripts
 const loadScript = (src: string): Promise<void> => {
@@ -43,6 +49,13 @@ export const FaceSwapTool: React.FC = () => {
     const [isProcessingModel, setIsProcessingModel] = useState(false);
     const [isProcessingSource, setIsProcessingSource] = useState(false);
     const [error, setError] = useState('');
+    const modelObjectUrlRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        return () => {
+            revokeObjectUrl(modelObjectUrlRef.current);
+        };
+    }, []);
 
     // Load external scripts on mount
     useEffect(() => {
@@ -62,31 +75,41 @@ export const FaceSwapTool: React.FC = () => {
     }, []);
 
     const handleBaseUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.[0]) return;
+        const input = e.currentTarget;
+        const file = input.files?.[0];
+        if (!file) return;
         setIsProcessingModel(true);
         setError('');
+        const url = URL.createObjectURL(file);
         try {
-            const url = URL.createObjectURL(e.target.files[0]);
             const pack = await processModelImage(url);
+            revokeObjectUrl(modelObjectUrlRef.current);
+            modelObjectUrlRef.current = url;
             setModelPack(pack);
         } catch (err) {
+            URL.revokeObjectURL(url);
             setError("基础图片错误: " + getErrorMessage(err));
         } finally {
+            input.value = '';
             setIsProcessingModel(false);
         }
     };
 
     const handleFaceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files?.[0]) return;
+        const input = e.currentTarget;
+        const file = input.files?.[0];
+        if (!file) return;
         setIsProcessingSource(true);
         setError('');
+        const url = URL.createObjectURL(file);
         try {
-            const url = URL.createObjectURL(e.target.files[0]);
             const pack = await processSourceImage(url);
             setSourcePack(pack);
         } catch (err) {
             setError("人脸图片错误: " + getErrorMessage(err));
         } finally {
+            URL.revokeObjectURL(url);
+            input.value = '';
             setIsProcessingSource(false);
         }
     };
