@@ -250,7 +250,14 @@ const PdfMergeTool: React.FC = () => {
         link.click();
         URL.revokeObjectURL(url);
       } else {
-        await useScratchpadStore.getState().addItemAsync(name, blob, 'pdf', 'application/pdf');
+        await useScratchpadStore.getState().addItemAsync({
+          name,
+          content: blob,
+          type: 'pdf',
+          mimeType: 'application/pdf',
+          sourceTool: 'PDF 混编器',
+          originAction: 'compile-pdf',
+        });
         setStashed(true);
         notifyToast({ title: 'PDF 已送入暂存箱', description: name, tone: 'success' });
         setTimeout(() => setStashed(false), 2000);

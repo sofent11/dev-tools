@@ -6,6 +6,7 @@ import { FieldLabel, Input, Textarea, UploadPanel } from '../../ui/ToolUi';
 import { downloadBlob, readFileAsDataUrl } from '../shared/fileUtils';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
 import { useScratchpadStore } from '../shared/scratchpadStore';
+import { notifyToast } from '../shared/notifyToast';
 
 interface Swatch {
   hex: string;
@@ -379,7 +380,15 @@ export const ImageToBase64Tool: React.FC = () => {
   const stash = () => {
     if (!dataUrl) return;
     const name = fileName ? `${fileName.split('.').shift()}_base64.txt` : 'image_base64.txt';
-    useScratchpadStore.getState().addItem(name, dataUrl, 'text', 'text/plain');
+    useScratchpadStore.getState().addItem({
+      name,
+      content: dataUrl,
+      type: 'text',
+      mimeType: 'text/plain',
+      sourceTool: '图片转 Base64',
+      originAction: 'image-to-base64',
+    });
+    notifyToast({ title: 'Base64 图片文本已送入暂存箱', tone: 'success' });
     setStashed(true);
     setTimeout(() => setStashed(false), 2000);
   };
@@ -458,12 +467,15 @@ export const ImageWatermarkTool: React.FC = () => {
     canvasRef.current?.toBlob(blob => {
       if (blob) {
         const name = sourceName ? `${sourceName.split('.').shift()}_watermarked.png` : 'watermarked.png';
-        useScratchpadStore.getState().addItem(
+        useScratchpadStore.getState().addItem({
           name,
-          blob,
-          'image',
-          'image/png'
-        );
+          content: blob,
+          type: 'image',
+          mimeType: 'image/png',
+          sourceTool: '图片水印',
+          originAction: 'watermark-image',
+        });
+        notifyToast({ title: '水印图片已送入暂存箱', tone: 'success' });
         setStashed(true);
         setTimeout(() => setStashed(false), 2000);
       }

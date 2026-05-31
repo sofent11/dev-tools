@@ -148,12 +148,15 @@ export const AsymmetricKeyTool: React.FC = () => {
     const type = isJwk ? 'json' : 'text';
     const mime = isJwk ? 'application/json' : 'text/plain';
     
-    useScratchpadStore.getState().addItem(
-      `exported_key.${ext}`,
-      convertedResult,
+    useScratchpadStore.getState().addItem({
+      name: `exported_key.${ext}`,
+      content: convertedResult,
       type,
-      mime
-    );
+      mimeType: mime,
+      sourceTool: '非对称密钥转换',
+      sensitive: true,
+      originAction: 'convert-key',
+    });
     setStashed(true);
     setTimeout(() => setStashed(false), 2000);
   };

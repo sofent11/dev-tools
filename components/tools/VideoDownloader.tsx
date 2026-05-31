@@ -27,6 +27,12 @@ type ParseMode = 'url' | 'source';
 type ParseStatus = 'idle' | 'parsing' | 'success' | 'warning' | 'error';
 type WorkerHealthState = 'idle' | 'checking' | 'ready' | 'error';
 
+interface VideoCapabilityBoundary {
+  label: string;
+  support: string;
+  boundary: string;
+}
+
 interface VideoFormat {
   id: string;
   quality: string;
@@ -144,6 +150,29 @@ const platformHints: Record<Platform, string> = {
 const sampleUrl = 'https://vimeo.com/76979871';
 const WORKER_ENDPOINT_STORAGE_KEY = 'video-catch-worker-endpoint';
 const DEFAULT_WORKER_ENDPOINT = '';
+
+export const videoCapabilityBoundaries: VideoCapabilityBoundary[] = [
+  {
+    label: '直链 / HLS / DASH',
+    support: '本地识别 mp4、webm、m3u8、mpd 等媒体直链并生成下载命令。',
+    boundary: '无法绕过需要登录、签名 URL 或短时效鉴权的资源。',
+  },
+  {
+    label: '页面源码扫描',
+    support: '适合在跨域失败时粘贴 HTML/JSON，扫描 video/source 标签和常见媒体字段。',
+    boundary: '如果平台把真实地址放在加密脚本、接口鉴权或客户端运行态中，源码扫描可能为空。',
+  },
+  {
+    label: 'Vimeo / Bilibili 尝试解析',
+    support: '优先处理公开视频和可见页面配置，必要时给出 Referer/ffmpeg 建议。',
+    boundary: '私有视频、地区限制、风控、DRM、登录态和版权限制不会被绕过。',
+  },
+  {
+    label: '私有 Cloudflare Worker',
+    support: '可改善 CORS 受限页面的抓取与解析，并由用户自己控制访问端点。',
+    boundary: '它不是破解器，不绕过登录、DRM、地区、风控、版权或平台 ToS 限制。',
+  },
+];
 
 const decodeHtml = (value: string) => {
   const textarea = document.createElement('textarea');
@@ -721,8 +750,17 @@ export const VideoDownloader: React.FC = () => {
                 {showWorkerInfo ? (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
                     <p className="text-slate-500">
-                      大多数视频平台（如 Bilibili、抖音等）存在严格的跨域安全限制（CORS）。部署免费的 Cloudflare Worker 代理即可绕过限制，完美解锁全部解析功能。
+                      多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制。私有 Cloudflare Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。
                     </p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {videoCapabilityBoundaries.map(item => (
+                        <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-2.5">
+                          <div className="font-semibold text-slate-800">{item.label}</div>
+                          <div className="mt-1 text-slate-600">{item.support}</div>
+                          <div className="mt-1 text-amber-700">边界：{item.boundary}</div>
+                        </div>
+                      ))}
+                    </div>
                     <div className="rounded-lg bg-slate-50 p-2.5">
                       <div className="mb-1 font-semibold text-slate-800">极速部署步骤：</div>
                       <ol className="list-decimal pl-4 space-y-1 text-slate-600">

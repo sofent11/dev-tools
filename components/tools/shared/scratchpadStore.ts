@@ -15,6 +15,8 @@ export interface ScratchpadItem {
   mime?: string;
   mimeType?: string;
   sourceTool?: string;
+  sensitive?: boolean;
+  originAction?: string;
   isLarge?: boolean;
   isBinary?: boolean;
   thumbnail?: string;
@@ -28,6 +30,8 @@ export interface ScratchpadPayload {
   mime?: string;
   mimeType?: string;
   sourceTool?: string;
+  sensitive?: boolean;
+  originAction?: string;
   timestamp?: number;
 }
 
@@ -38,7 +42,7 @@ interface ScratchpadState {
   addItem: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
   addItemAsync: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
   estimateQuota: () => Promise<StorageEstimate | null>;
-  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool'>>) => void;
+  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool' | 'sensitive' | 'originAction'>>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 }
@@ -226,6 +230,8 @@ export const useScratchpadStore = create<ScratchpadState>()(
             mime: nextMime,
             mimeType: nextMime,
             sourceTool: payload.sourceTool,
+            sensitive: payload.sensitive,
+            originAction: payload.originAction,
             isLarge,
             isBinary,
             thumbnail,

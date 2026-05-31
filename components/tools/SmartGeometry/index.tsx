@@ -10,6 +10,7 @@ import { MOCK_QUESTION } from './data/mockData';
 import { cn } from './lib/utils';
 import { useGeometryStore } from './store/useGeometryStore';
 import type { GeometryQuestion } from './types';
+import { notifyToast } from '../shared/notifyToast';
 
 function isGeometryQuestion(value: unknown): value is GeometryQuestion {
   if (!value || typeof value !== 'object') return false;
@@ -74,7 +75,11 @@ export const SmartGeometryTool: React.FC = () => {
         setQuestion(parsed);
         setMode('interactive');
       } catch (error) {
-        window.alert('JSON 文件格式不正确，请检查题目结构。');
+        notifyToast({
+          title: 'JSON 文件格式不正确',
+          description: '请检查题目结构是否包含 points、lines、polygons、constraints 与 slides。',
+          tone: 'error',
+        });
         console.error(error);
       } finally {
         if (jsonInputRef.current) jsonInputRef.current.value = '';

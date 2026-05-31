@@ -3,6 +3,7 @@ import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, Copy, Chec
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel } from '../ui/ToolUi';
+import { notifyToast } from './shared/notifyToast';
 
 // --- HTTP Request Builder (Simplified) ---
 
@@ -328,7 +329,7 @@ export const HttpBuilderTool: React.FC = () => {
             setShowCurlModal(false);
             setCurlInput('');
         } catch (e) {
-            alert('cURL 解析失败: ' + (e as Error).message);
+            notifyToast({ title: 'cURL 解析失败', description: (e as Error).message, tone: 'error' });
         }
     };
 
@@ -959,7 +960,7 @@ export const IpInfoTool: React.FC = () => {
     const handleCopy = () => {
         if (data?.ip) {
             navigator.clipboard.writeText(data.ip);
-            alert('IP 地址已复制到剪贴板！');
+            notifyToast({ title: 'IP 地址已复制到剪贴板', tone: 'success' });
         }
     };
 

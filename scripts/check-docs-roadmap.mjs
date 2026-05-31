@@ -1,8 +1,27 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
 const read = path => readFileSync(join(root, path), 'utf8');
+const readTarget = path => {
+  const absolutePath = join(root, path);
+  const stats = statSync(absolutePath);
+  if (!stats.isDirectory()) return read(path);
+
+  const files = [];
+  const walk = current => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(fullPath);
+      } else if (/\.(tsx?|jsx?)$/.test(entry.name)) {
+        files.push(readFileSync(fullPath, 'utf8'));
+      }
+    }
+  };
+  walk(absolutePath);
+  return files.join('\n');
+};
 
 const stalePatterns = [
   {
@@ -40,9 +59,44 @@ const stalePatterns = [
     pattern: /Add mobile viewport Playwright coverage for the scratchpad drawer/i,
     message: 'PROJECT_AUDIT still lists completed scratchpad drawer mobile coverage as next work.',
   },
+  {
+    file: 'README.md',
+    pattern: /完美解锁全部解析功能/i,
+    message: 'README overpromises video parser support.',
+  },
+  {
+    file: 'PROJECT_AUDIT.md',
+    pattern: /完美解锁全部解析功能/i,
+    message: 'PROJECT_AUDIT overpromises video parser support.',
+  },
+  {
+    file: 'IMPLEMENTATION_PLAN.md',
+    pattern: /完美解锁全部解析功能/i,
+    message: 'IMPLEMENTATION_PLAN overpromises video parser support.',
+  },
+  {
+    file: 'components/tools/VideoDownloader.tsx',
+    pattern: /完美解锁全部解析功能/i,
+    message: 'VideoDownloader still claims a private Worker perfectly unlocks all parsing.',
+  },
+  {
+    file: 'components/tools/registry.ts',
+    pattern: /faceswap|face-swap|FaceSwap/i,
+    message: 'Registry still references the removed low-quality FaceSwap tool.',
+  },
+  {
+    file: 'components/tools/VideoDownloader.tsx',
+    pattern: /api-dev\.sopace\.top/i,
+    message: 'VideoDownloader should not default to a third-party Worker endpoint.',
+  },
+  {
+    file: 'components/tools',
+    pattern: /\b(?:window\.)?alert\s*\(/,
+    message: 'Tool components should use notifyToast or inline status instead of blocking alert().',
+  },
 ];
 
-const errors = stalePatterns.filter(item => item.pattern.test(read(item.file)));
+const errors = stalePatterns.filter(item => item.pattern.test(readTarget(item.file)));
 
 if (errors.length > 0) {
   console.error('Docs roadmap check failed:');

@@ -15,6 +15,7 @@
 - Scratchpad items carry metadata, size, source, MIME, thumbnails, and retain same-name versions.
 - Scratchpad cards support inline renaming and mobile-visible copy/download/delete actions.
 - Non-critical `alert` calls are routed into accessible toast feedback.
+- Tool components no longer use blocking `alert()` for ordinary failures; feedback is inline or via `notifyToast`, with optional recovery actions.
 - Studio tab history sync now responds to both hash and browser back/forward navigation.
 
 ## Stage 3: Feature Enhancements
@@ -25,6 +26,8 @@
 - Animation Frame Extractor for GIF, Lottie JSON, APNG, and animated WebP is integrated in the Image Studio with browser capability and memory-budget safeguards.
 - PDF.js, sql.js, OpenPGP, sm-crypto, zxcvbn, and Headshot/MediaPipe now expose shared runtime loader status, retry, cache, and failure states.
 - The browser-only WebGL face-swap tool has been removed after product review because its mesh-warping output was not reliable enough for a production toolbox.
+- The video downloader is local-first and documents Worker capability boundaries; private Workers improve CORS-limited parsing but do not bypass login, DRM, region, anti-abuse, copyright, or platform limits.
+- PGP key generation now requires explicit user action before generated private keys are loaded into decrypt/sign inputs, and sensitive scratchpad outputs can carry metadata.
 - Animation frame batch export/stash flows expose progress and cancellation; APNG/WebP decoding probes unknown WebCodecs frame counts under frame/pixel budgets.
 - STL repair includes browser-side wall-thickness heatmap sampling, fast/precise modes, cancellation, partial reports, grid prefiltering, and PBR material/environment controls.
 
@@ -39,6 +42,6 @@
 ## Next Iteration
 
 - Add optional self-hosted mirrors and fixture-backed offline/timeout simulations for CDN-backed engines.
-- Expand scratchpad quota and IndexedDB failure tests with browser-level fixtures.
+- Expand browser-level fixtures for IndexedDB failure, sensitive scratchpad metadata, video parser boundaries, and PGP/SM error states.
 - Add real APNG/WebP and STL fixture suites for numeric frame delay, unknown frame-count probing, and wall-thickness high-face diagnostics.
-- Broaden mobile viewport E2E coverage across key Studio tabs and long-running worker cancellation flows.
+- Broaden mobile viewport E2E coverage across key Studio tabs, sensitive crypto flows, and long-running worker cancellation flows.

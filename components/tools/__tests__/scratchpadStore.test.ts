@@ -46,4 +46,24 @@ describe('scratchpad store degraded persistence', () => {
     expect(useScratchpadStore.getState().storageStatus).toBe('error');
     expect(useScratchpadStore.getState().items).toHaveLength(0);
   });
+
+  it('preserves source, sensitive, and origin metadata', async () => {
+    vi.mocked(saveEntity).mockResolvedValueOnce(undefined);
+
+    await useScratchpadStore.getState().addItemAsync({
+      name: 'private.pem',
+      content: 'secret-key',
+      type: 'text',
+      mimeType: 'text/plain',
+      sourceTool: 'PGP',
+      sensitive: true,
+      originAction: 'generate-key',
+    });
+
+    expect(useScratchpadStore.getState().items[0]).toMatchObject({
+      sourceTool: 'PGP',
+      sensitive: true,
+      originAction: 'generate-key',
+    });
+  });
 });

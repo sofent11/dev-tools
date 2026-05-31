@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { Copy, Check, ShieldAlert, ArrowLeftRight, Sparkles, RefreshCw, FileUp, Binary, ChevronLeft, ChevronRight, FileCode } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
+import { useScratchpadStore } from './shared/scratchpadStore';
+import { notifyToast } from './shared/notifyToast';
 
 type DecodeMode = 'base64' | 'url' | 'html' | 'unicode' | 'hex';
 
@@ -281,7 +283,7 @@ export const StringEscaper: React.FC = () => {
   };
 
   // Send Hex raw/dump to Scratchpad Cabinet (Stage 4 setup)
-  const sendHexToScratchpad = () => {
+  const sendHexToScratchpad = async () => {
     if (!hexBytes || !hexFile) return;
     try {
       // Build standard Hex string representation
@@ -296,17 +298,21 @@ export const StringEscaper: React.FC = () => {
         hexDump += `\n... [数据过大，已截断前 ${maxDumpLength} 字节]`;
       }
       
-      const scratchEvent = new CustomEvent('add-scratchpad-item', {
-        detail: {
-          name: `hex-${hexFile.name}.txt`,
-          content: hexDump.trim(),
-          type: 'text'
-        }
+      await useScratchpadStore.getState().addItemAsync({
+        name: `hex-${hexFile.name}.txt`,
+        content: hexDump.trim(),
+        type: 'text',
+        mimeType: 'text/plain',
+        sourceTool: '字符串转义 / Hex 倾倒',
+        originAction: 'hex-dump',
       });
-      window.dispatchEvent(scratchEvent);
-      alert('已成功将文件 Hex 倾倒文本送入全局暂存箱！');
-    } catch {
-      alert('送入暂存箱失败');
+      notifyToast({ title: 'Hex 倾倒文本已送入暂存箱', tone: 'success' });
+    } catch (err) {
+      notifyToast({
+        title: '送入暂存箱失败',
+        description: err instanceof Error ? err.message : '浏览器本地存储不可用，请清理空间后重试。',
+        tone: 'error',
+      });
     }
   };
 

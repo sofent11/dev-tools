@@ -84,6 +84,8 @@ interface ToastMessage {
   title: string;
   description?: string;
   tone?: ToastTone;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 const translateTextForSearch = (
@@ -181,6 +183,8 @@ export default function App() {
         tone: detail?.tone || 'info',
         title: detail?.title || '',
         description: detail?.description,
+        actionLabel: detail?.actionLabel,
+        onAction: detail?.onAction,
       };
       if (!toast.title) return;
       setToasts(previous => [toast, ...previous].slice(0, 4));
@@ -583,6 +587,15 @@ export default function App() {
           >
             <div className="font-semibold">{t(toast.title)}</div>
             {toast.description && <div className="mt-1 text-xs opacity-80">{t(toast.description)}</div>}
+            {toast.actionLabel && toast.onAction && (
+              <button
+                type="button"
+                className="mt-2 rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-80 transition hover:opacity-100"
+                onClick={toast.onAction}
+              >
+                {t(toast.actionLabel)}
+              </button>
+            )}
           </div>
         ))}
       </div>

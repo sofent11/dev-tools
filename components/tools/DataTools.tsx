@@ -3,6 +3,7 @@ import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Search
 import { loadScriptWithCache } from './shared/cdnCacheManager';
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
 import { ScratchpadPicker, isScratchpadBinaryLike } from './shared/ScratchpadControls';
+import { notifyToast } from './shared/notifyToast';
 import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -417,7 +418,7 @@ export const JsonDiffTool: React.FC = () => {
 
       setLeft(JSON.stringify(newLeft, null, 2));
     } catch (e) {
-      alert('合并至左侧失败: ' + (e as Error).message);
+      notifyToast({ title: '合并至左侧失败', description: (e as Error).message, tone: 'error' });
     }
   }, [left]);
 
@@ -437,7 +438,7 @@ export const JsonDiffTool: React.FC = () => {
 
       setRight(JSON.stringify(newRight, null, 2));
     } catch (e) {
-      alert('合并至右侧失败: ' + (e as Error).message);
+      notifyToast({ title: '合并至右侧失败', description: (e as Error).message, tone: 'error' });
     }
   }, [right]);
 
@@ -998,7 +999,7 @@ export const SqliteSandboxTool: React.FC = () => {
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      alert('导出数据库失败: ' + (err as Error).message);
+      notifyToast({ title: '导出数据库失败', description: (err as Error).message, tone: 'error' });
     }
   };
 
@@ -1022,7 +1023,7 @@ export const SqliteSandboxTool: React.FC = () => {
         refreshSchema(newDb);
         setIsLoading(false);
       } catch (err) {
-        alert('加载 SQLite 文件失败: ' + (err as Error).message);
+        notifyToast({ title: '加载 SQLite 文件失败', description: (err as Error).message, tone: 'error' });
         setIsLoading(false);
       }
     };
@@ -1292,7 +1293,7 @@ export const BinaryHexViewerTool: React.FC = () => {
 
   const processFile = (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
-      alert('为了浏览器本地运行流畅，当前限制文件大小最高为 10MB 🚀');
+      notifyToast({ title: '文件过大', description: '为了浏览器本地运行流畅，当前限制文件大小最高为 10MB。', tone: 'error' });
       return;
     }
 

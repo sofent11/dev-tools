@@ -52,6 +52,9 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Added stable vendor chunking for production builds and removed noisy chunk warnings.
 - Added a local favicon, Chinese document language, description, and theme color metadata.
 - Added GitHub Actions quality checks for typecheck, lint, and build.
+- Clarified video downloader capability boundaries: private Workers improve CORS-limited fetches but do not bypass login, DRM, region, anti-abuse, copyright, or platform policy limits.
+- Removed remaining blocking `alert()` calls from tool components in favor of inline status and `notifyToast`, including PGP/SM crypto operations, animation batch failures, image compression, network parsing, and data tools.
+- Added explicit PGP key handoff controls so generated private keys are no longer auto-filled into decrypt/sign inputs; sensitive scratchpad outputs can now carry metadata such as `sensitive` and `originAction`.
 
 ## Remaining Known Issues
 
@@ -66,7 +69,7 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
    Add optional self-hosted mirrors and fixture-backed 404/timeout/offline simulations for CDN-backed engines.
 
 2. Expand per-tool tests:
-   Add more fixture-backed tests for scratchpad quota edge cases, SQL formatting, SVG sanitizer, JWT worker auditing, APNG/WebP probing, and STL wall-thickness high-face models.
+   Add more fixture-backed tests for SQL formatting, SVG sanitizer, JWT worker auditing, APNG/WebP probing, video parser boundaries, PGP/SM failure states, and STL wall-thickness high-face models.
 
 3. Improve offline resilience:
    Add local `public/vendor` mirrors for self-hostable browser assets where licenses allow.
@@ -75,4 +78,4 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
    Add real media/STL fixture suites for APNG/WebP frame extraction and STL wall-thickness fast/precise numeric diagnostics.
 
 5. Tighten CI over time:
-   Broaden mobile viewport Playwright coverage beyond the scratchpad drawer to key Studio tabs and long-running worker cancellation flows.
+   Broaden mobile viewport Playwright coverage beyond the scratchpad drawer to key Studio tabs, sensitive crypto flows, and long-running worker cancellation flows.

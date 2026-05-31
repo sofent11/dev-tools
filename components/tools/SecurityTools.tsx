@@ -6,7 +6,31 @@ import { Button } from '../ui/Button';
 import { FieldLabel, Input, Select } from '../ui/ToolUi';
 import { loadScriptWithCache } from './shared/cdnCacheManager';
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import { notifyToast } from './shared/notifyToast';
 import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
+
+type SecurityOperationStatus = 'idle' | 'validating' | 'running' | 'success' | 'error';
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const SecurityStatusPanel: React.FC<{
+  status: SecurityOperationStatus;
+  message: string;
+}> = ({ status, message }) => {
+  if (!message || status === 'idle') return null;
+
+  const styles = status === 'error'
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : status === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-blue-200 bg-blue-50 text-blue-700';
+
+  return (
+    <div className={`rounded-xl border p-3 text-xs leading-5 ${styles}`}>
+      {message}
+    </div>
+  );
+};
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -244,7 +268,7 @@ export const JwtTool: React.FC = () => {
   const handleSignToken = async () => {
     try {
       if (parseError) {
-        alert(parseError);
+        notifyToast({ title: 'JWT 解析失败', description: parseError, tone: 'error' });
         return;
       }
       const headerB64 = base64UrlEncode(JSON.stringify(headerObj));
@@ -275,7 +299,7 @@ export const JwtTool: React.FC = () => {
       setToken(newToken);
       setVerificationResult('valid');
     } catch (err) {
-      alert('签名签署失败: ' + (err as Error).message);
+      notifyToast({ title: '签名签署失败', description: getErrorMessage(err), tone: 'error' });
     }
   };
 
@@ -363,7 +387,9 @@ export const JwtTool: React.FC = () => {
       };
       worker.postMessage({ token, dictionary });
     } catch (e) {
-      alert('审计失败: ' + (e as Error).message);
+      const message = getErrorMessage(e);
+      setAuditMessage(`审计失败: ${message}`);
+      notifyToast({ title: 'JWT 审计失败', description: message, tone: 'error' });
       setIsAuditing(false);
     }
   };
@@ -1033,6 +1059,8 @@ export const PgpKeymasterTool: React.FC = () => {
   const [verifyPubKey, setVerifyPubKey] = useState('');
   const [verifySignature, setVerifySignature] = useState('');
   const [verifyStatus, setVerifyStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
+  const [operationStatus, setOperationStatus] = useState<SecurityOperationStatus>('idle');
+  const [operationMessage, setOperationMessage] = useState('');
 
   const { copied: genPubCopied, copy: copyGenPub } = useCopyToClipboard();
   const { copied: genPrivCopied, copy: copyGenPriv } = useCopyToClipboard();
@@ -1080,26 +1108,34 @@ export const PgpKeymasterTool: React.FC = () => {
       const { privateKey, publicKey } = await openpgp.generateKey(options);
       setGenPublicKey(publicKey);
       setGenPrivateKey(privateKey);
-      
-      // Auto-fill into other tabs for extremely smooth developer UX!
-      setCryptoPubKey(publicKey);
-      setCryptoPrivKey(privateKey);
-      setSignPrivKey(privateKey);
-      setVerifyPubKey(publicKey);
-      
+      setOperationStatus('success');
+      setOperationMessage('密钥对已生成。为避免私钥被意外带入其他操作区，请使用结果区的显式载入按钮。');
       setIsLoading(false);
     } catch (err) {
-      setError('生成密钥对失败: ' + (err as Error).message);
+      const message = getErrorMessage(err);
+      setError('生成密钥对失败: ' + message);
+      setOperationStatus('error');
+      setOperationMessage(`生成密钥对失败: ${message}`);
+      notifyToast({ title: '生成密钥对失败', description: message, tone: 'error' });
       setIsLoading(false);
     }
   };
 
   const handleEncrypt = async () => {
-    if (!openpgpLoaded || !cryptoPubKey) {
-      alert('请先输入收件人公钥！');
+    setOperationStatus('validating');
+    if (!openpgpLoaded) {
+      setOperationStatus('error');
+      setOperationMessage('OpenPGP 库尚未加载完成，请等待运行时面板显示 ready 后重试。');
+      return;
+    }
+    if (!cryptoPubKey) {
+      setOperationStatus('error');
+      setOperationMessage('请先输入收件人公钥！');
       return;
     }
     try {
+      setOperationStatus('running');
+      setOperationMessage('正在本地加密消息...');
       setIsLoading(true);
       const openpgp = cryptoWindow().openpgp;
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
@@ -1111,19 +1147,33 @@ export const PgpKeymasterTool: React.FC = () => {
         encryptionKeys: publicKeyObj
       });
       setCryptoResult(encrypted);
+      setOperationStatus('success');
+      setOperationMessage('消息已在浏览器本地完成加密。');
       setIsLoading(false);
     } catch (err) {
-      alert('加密失败: ' + (err as Error).message);
+      const message = getErrorMessage(err);
+      setOperationStatus('error');
+      setOperationMessage(`加密失败，请核对公钥格式或消息内容: ${message}`);
+      notifyToast({ title: 'PGP 加密失败', description: message, tone: 'error' });
       setIsLoading(false);
     }
   };
 
   const handleDecrypt = async () => {
-    if (!openpgpLoaded || !cryptoPrivKey) {
-      alert('请先输入您的私钥！');
+    setOperationStatus('validating');
+    if (!openpgpLoaded) {
+      setOperationStatus('error');
+      setOperationMessage('OpenPGP 库尚未加载完成，请等待运行时面板显示 ready 后重试。');
+      return;
+    }
+    if (!cryptoPrivKey) {
+      setOperationStatus('error');
+      setOperationMessage('请先输入您的私钥！');
       return;
     }
     try {
+      setOperationStatus('running');
+      setOperationMessage('正在本地解密消息...');
       setIsLoading(true);
       const openpgp = cryptoWindow().openpgp;
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
@@ -1142,19 +1192,33 @@ export const PgpKeymasterTool: React.FC = () => {
         decryptionKeys: privateKeyObj
       });
       setCryptoResult(decrypted);
+      setOperationStatus('success');
+      setOperationMessage('消息已完成解密。');
       setIsLoading(false);
     } catch (err) {
-      alert('解密失败（请检查私钥或密码是否正确）: ' + (err as Error).message);
+      const message = getErrorMessage(err);
+      setOperationStatus('error');
+      setOperationMessage(`解密失败，请检查私钥、保护密码或密文是否匹配: ${message}`);
+      notifyToast({ title: 'PGP 解密失败', description: message, tone: 'error' });
       setIsLoading(false);
     }
   };
 
   const handleSign = async () => {
-    if (!openpgpLoaded || !signPrivKey) {
-      alert('请先输入签署私钥！');
+    setOperationStatus('validating');
+    if (!openpgpLoaded) {
+      setOperationStatus('error');
+      setOperationMessage('OpenPGP 库尚未加载完成，请等待运行时面板显示 ready 后重试。');
+      return;
+    }
+    if (!signPrivKey) {
+      setOperationStatus('error');
+      setOperationMessage('请先输入签署私钥！');
       return;
     }
     try {
+      setOperationStatus('running');
+      setOperationMessage('正在生成本地脱水签名...');
       setIsLoading(true);
       const openpgp = cryptoWindow().openpgp;
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
@@ -1175,19 +1239,33 @@ export const PgpKeymasterTool: React.FC = () => {
       });
       setSignResultSignature(signature);
       setVerifySignature(signature);
+      setOperationStatus('success');
+      setOperationMessage('签名已生成。验证区已载入签名，但公钥仍需显式填写或载入。');
       setIsLoading(false);
     } catch (err) {
-      alert('签署失败: ' + (err as Error).message);
+      const message = getErrorMessage(err);
+      setOperationStatus('error');
+      setOperationMessage(`签署失败，请检查私钥、保护密码或消息内容: ${message}`);
+      notifyToast({ title: 'PGP 签署失败', description: message, tone: 'error' });
       setIsLoading(false);
     }
   };
 
   const handleVerify = async () => {
-    if (!openpgpLoaded || !verifyPubKey || !verifySignature) {
-      alert('请确保已填入验证公钥与待校验签名！');
+    setOperationStatus('validating');
+    if (!openpgpLoaded) {
+      setOperationStatus('error');
+      setOperationMessage('OpenPGP 库尚未加载完成，请等待运行时面板显示 ready 后重试。');
+      return;
+    }
+    if (!verifyPubKey || !verifySignature) {
+      setOperationStatus('error');
+      setOperationMessage('请确保已填入验证公钥与待校验签名！');
       return;
     }
     try {
+      setOperationStatus('running');
+      setOperationMessage('正在核验签名...');
       setIsLoading(true);
       const openpgp = cryptoWindow().openpgp;
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
@@ -1203,12 +1281,40 @@ export const PgpKeymasterTool: React.FC = () => {
       const { signatures } = verificationResult;
       const isValid = await signatures[0].verified;
       setVerifyStatus(isValid ? 'valid' : 'invalid');
+      setOperationStatus(isValid ? 'success' : 'error');
+      setOperationMessage(isValid ? '签名核验通过。' : '签名无效：公钥不匹配，或消息/签名已被修改。');
       setIsLoading(false);
     } catch (err) {
-      alert('签名验证失败: ' + (err as Error).message);
+      const message = getErrorMessage(err);
+      setOperationStatus('error');
+      setOperationMessage(`签名验证失败，请检查公钥、签名格式和消息内容: ${message}`);
+      notifyToast({ title: 'PGP 签名验证失败', description: message, tone: 'error' });
       setVerifyStatus('invalid');
       setIsLoading(false);
     }
+  };
+
+  const loadGeneratedKeysToCrypto = () => {
+    setCryptoPubKey(genPublicKey);
+    setCryptoPrivKey(genPrivateKey);
+    setOperationStatus('success');
+    setOperationMessage('已显式载入生成的公钥/私钥到加解密区。');
+  };
+
+  const loadGeneratedKeysToSignVerify = () => {
+    setSignPrivKey(genPrivateKey);
+    setVerifyPubKey(genPublicKey);
+    setOperationStatus('success');
+    setOperationMessage('已显式载入生成的私钥/公钥到签名与核验区。');
+  };
+
+  const clearSensitivePgpInputs = () => {
+    setCryptoPrivKey('');
+    setCryptoPassphrase('');
+    setSignPrivKey('');
+    setSignPassphrase('');
+    setOperationStatus('success');
+    setOperationMessage('已清除 PGP 私钥与保护密码输入。生成结果区内容仍保留，方便您下载或复制。');
   };
 
   const downloadKey = (armorText: string, filename: string) => {
@@ -1265,6 +1371,10 @@ export const PgpKeymasterTool: React.FC = () => {
           </div>
         )}
 
+        <div className="mb-4">
+          <SecurityStatusPanel status={operationStatus} message={operationMessage} />
+        </div>
+
         {activeTab === 'generate' && (
           <div className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6 h-full min-h-0">
             {/* Gen Left Form */}
@@ -1297,6 +1407,9 @@ export const PgpKeymasterTool: React.FC = () => {
               >
                 生成 GPG/PGP 密钥对
               </Button>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
+                私钥不会再自动填入解密或签名区。生成后请按需使用右侧按钮显式载入，避免敏感材料被意外带到其他操作。
+              </div>
             </div>
 
             {/* Gen Right Outputs */}
@@ -1310,6 +1423,9 @@ export const PgpKeymasterTool: React.FC = () => {
                     </Button>
                     <Button size="xs" variant="secondary" onClick={() => downloadKey(genPublicKey, 'gpg_public.key')} disabled={!genPublicKey}>
                       下载
+                    </Button>
+                    <Button size="xs" variant="secondary" onClick={loadGeneratedKeysToCrypto} disabled={!genPublicKey || !genPrivateKey}>
+                      载入加解密
                     </Button>
                   </div>
                 </div>
@@ -1329,6 +1445,9 @@ export const PgpKeymasterTool: React.FC = () => {
                     </Button>
                     <Button size="xs" variant="secondary" onClick={() => downloadKey(genPrivateKey, 'gpg_private.key')} disabled={!genPrivateKey}>
                       下载
+                    </Button>
+                    <Button size="xs" variant="secondary" onClick={loadGeneratedKeysToSignVerify} disabled={!genPublicKey || !genPrivateKey}>
+                      载入签名区
                     </Button>
                   </div>
                 </div>
@@ -1394,6 +1513,9 @@ export const PgpKeymasterTool: React.FC = () => {
                 <Button className="flex-1" variant="secondary" onClick={handleDecrypt} disabled={isLoading || !openpgpLoaded}>
                   <Unlock className="w-4 h-4 mr-1.5" /> 解密消息 (Decrypt)
                 </Button>
+                <Button variant="ghost" onClick={clearSensitivePgpInputs}>
+                  清除敏感输入
+                </Button>
               </div>
             </div>
 
@@ -1449,6 +1571,9 @@ export const PgpKeymasterTool: React.FC = () => {
                   />
                   <Button className="w-full size-sm" onClick={handleSign} disabled={isLoading || !openpgpLoaded}>
                     生成签名 (Sign)
+                  </Button>
+                  <Button className="w-full size-sm" variant="ghost" onClick={clearSensitivePgpInputs}>
+                    清除私钥/密码
                   </Button>
                 </div>
 
@@ -1545,6 +1670,8 @@ export const SmCryptoSuiteTool: React.FC = () => {
   const [sm4Key, setSm4Key] = useState('0123456789abcdeffedcba9876543210'); // 16 bytes hex key
   const [sm4Iv, setSm4Iv] = useState('0123456789abcdeffedcba9876543210'); // 16 bytes hex iv
   const [sm4Mode, setSm4Mode] = useState<'ecb' | 'cbc'>('cbc');
+  const [operationStatus, setOperationStatus] = useState<SecurityOperationStatus>('idle');
+  const [operationMessage, setOperationMessage] = useState('');
 
   // Load sm-crypto dynamically to keep Vite bundle extremely light
   const loadSmCrypto = useCallback(() => {
@@ -1581,8 +1708,13 @@ export const SmCryptoSuiteTool: React.FC = () => {
       const keypair = sm2.generateKeyPairHex();
       setSm2Pub(keypair.publicKey);
       setSm2Priv(keypair.privateKey);
+      setOperationStatus('success');
+      setOperationMessage('SM2 密钥对已生成。请妥善保存私钥，浏览器不会上传任何密钥材料。');
     } catch (e) {
-      alert(`SM2 密钥对生成失败: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM2 密钥对生成失败: ${message}`);
+      notifyToast({ title: 'SM2 密钥对生成失败', description: message, tone: 'error' });
     }
   };
 
@@ -1590,15 +1722,21 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm2 = cryptoWindow().smCrypto?.sm2;
     if (!loaded || !sm2) return;
     if (!sm2Pub) {
-      alert('请先生成或配置 SM2 公钥！');
+      setOperationStatus('error');
+      setOperationMessage('请先生成或配置 SM2 公钥！');
       return;
     }
     try {
       // mode 1 represents C1C3C2 cipher standard
       const cipher = sm2.doEncrypt(sm2Plain, sm2Pub, 1);
       setSm2CipherHex(cipher);
+      setOperationStatus('success');
+      setOperationMessage('SM2 加密完成。');
     } catch (e) {
-      alert(`SM2 加密失败，请核对公钥格式: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM2 加密失败，请核对公钥格式: ${message}`);
+      notifyToast({ title: 'SM2 加密失败', description: message, tone: 'error' });
     }
   };
 
@@ -1606,14 +1744,20 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm2 = cryptoWindow().smCrypto?.sm2;
     if (!loaded || !sm2) return;
     if (!sm2Priv) {
-      alert('请配置 SM2 私钥！');
+      setOperationStatus('error');
+      setOperationMessage('请配置 SM2 私钥！');
       return;
     }
     try {
       const decrypted = sm2.doDecrypt(sm2CipherHex, sm2Priv, 1);
       setSm2Decrypted(decrypted);
+      setOperationStatus('success');
+      setOperationMessage('SM2 解密完成。');
     } catch (e) {
-      alert(`SM2 解密失败，请核对私钥或密文: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM2 解密失败，请核对私钥或密文: ${message}`);
+      notifyToast({ title: 'SM2 解密失败', description: message, tone: 'error' });
     }
   };
 
@@ -1621,14 +1765,20 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm2 = cryptoWindow().smCrypto?.sm2;
     if (!loaded || !sm2) return;
     if (!sm2Priv) {
-      alert('请配置 SM2 私钥进行签名！');
+      setOperationStatus('error');
+      setOperationMessage('请配置 SM2 私钥进行签名！');
       return;
     }
     try {
       const sig = sm2.doSignature(sm2SignPlain, sm2Priv, { hash: true, der: true });
       setSm2SignatureHex(sig);
+      setOperationStatus('success');
+      setOperationMessage('SM2 签名已生成。');
     } catch (e) {
-      alert(`SM2 签名计算失败: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM2 签名计算失败: ${message}`);
+      notifyToast({ title: 'SM2 签名失败', description: message, tone: 'error' });
     }
   };
 
@@ -1636,14 +1786,19 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm2 = cryptoWindow().smCrypto?.sm2;
     if (!loaded || !sm2) return;
     if (!sm2Pub || !sm2SignatureHex) {
-      alert('请配置公钥与待验签的十六进制签名串！');
+      setOperationStatus('error');
+      setOperationMessage('请配置公钥与待验签的十六进制签名串！');
       return;
     }
     try {
       const isValid = sm2.doVerifySignature(sm2SignPlain, sm2SignatureHex, sm2Pub, { hash: true, der: true });
       setSm2VerifyResult(isValid ? 'valid' : 'invalid');
+      setOperationStatus(isValid ? 'success' : 'error');
+      setOperationMessage(isValid ? 'SM2 签名核验通过。' : 'SM2 签名无效：公钥、消息或签名不匹配。');
     } catch {
       setSm2VerifyResult('invalid');
+      setOperationStatus('error');
+      setOperationMessage('SM2 签名验证失败，请检查公钥和签名格式。');
     }
   };
 
@@ -1663,11 +1818,13 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm4 = cryptoWindow().smCrypto?.sm4;
     if (!loaded || !sm4) return;
     if (sm4Key.length !== 32) {
-      alert('SM4 密钥必须为 32 位 Hex 十六进制字符串 (128 bits / 16 字节)！');
+      setOperationStatus('error');
+      setOperationMessage('SM4 密钥必须为 32 位 Hex 十六进制字符串 (128 bits / 16 字节)！');
       return;
     }
     if (sm4Mode === 'cbc' && sm4Iv.length !== 32) {
-      alert('CBC 模式下，SM4 向量 (IV) 必须为 32 位 Hex 十六进制字符串 (16 字节)！');
+      setOperationStatus('error');
+      setOperationMessage('CBC 模式下，SM4 向量 (IV) 必须为 32 位 Hex 十六进制字符串 (16 字节)！');
       return;
     }
     try {
@@ -1677,8 +1834,13 @@ export const SmCryptoSuiteTool: React.FC = () => {
       }
       const cipher = sm4.encrypt(sm4Plain, sm4Key, options);
       setSm4CipherHex(cipher);
+      setOperationStatus('success');
+      setOperationMessage('SM4 对称加密完成。');
     } catch (e) {
-      alert(`SM4 对称加密失败: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM4 对称加密失败: ${message}`);
+      notifyToast({ title: 'SM4 加密失败', description: message, tone: 'error' });
     }
   };
 
@@ -1686,7 +1848,8 @@ export const SmCryptoSuiteTool: React.FC = () => {
     const sm4 = cryptoWindow().smCrypto?.sm4;
     if (!loaded || !sm4) return;
     if (sm4Key.length !== 32) {
-      alert('SM4 密钥必须为 32 位 Hex！');
+      setOperationStatus('error');
+      setOperationMessage('SM4 密钥必须为 32 位 Hex！');
       return;
     }
     try {
@@ -1696,8 +1859,13 @@ export const SmCryptoSuiteTool: React.FC = () => {
       }
       const decrypted = sm4.decrypt(sm4CipherHex, sm4Key, options);
       setSm4Plain(decrypted);
+      setOperationStatus('success');
+      setOperationMessage('SM4 对称解密完成。');
     } catch (e) {
-      alert(`SM4 对称解密失败，请校验密钥或密文: ${(e as Error).message}`);
+      const message = getErrorMessage(e);
+      setOperationStatus('error');
+      setOperationMessage(`SM4 对称解密失败，请校验密钥或密文: ${message}`);
+      notifyToast({ title: 'SM4 解密失败', description: message, tone: 'error' });
     }
   };
 
@@ -1709,6 +1877,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
       />
       <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0 text-slate-700 dark:text-slate-200">
         <RuntimeAssetStatusPanel state={smRuntimeState} onRetry={loadSmCrypto} compact />
+        <SecurityStatusPanel status={operationStatus} message={operationMessage} />
         
         {!loaded && (
           <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-amber-800 dark:text-amber-400 text-xs flex items-center gap-2 animate-pulse">
@@ -1870,9 +2039,9 @@ export const SmCryptoSuiteTool: React.FC = () => {
                   {sm3Result || '等待计算...'}
                 </pre>
                 <Button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(sm3Result);
-                    alert('SM3 特征串复制成功！');
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(sm3Result);
+                    notifyToast({ title: 'SM3 特征串复制成功', tone: 'success' });
                   }}
                   icon={<Copy className="w-3.5 h-3.5" />}
                 >

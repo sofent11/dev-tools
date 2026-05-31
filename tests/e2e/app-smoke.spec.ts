@@ -53,3 +53,24 @@ test('STL repair exposes wall thickness fast and precise controls', async ({ pag
   await modeSelect.selectOption('precise');
   await expect(modeSelect).toHaveValue('precise');
 });
+
+test('video downloader states private Worker limits without overpromising', async ({ page }) => {
+  await page.goto('/tools/network-studio#video-download');
+  await page.getByRole('button', { name: /部署私有解析 Worker/ }).click();
+
+  await expect(page.getByText(/不会绕过平台权限或内容保护/)).toBeVisible();
+  await expect(page.getByText(/它不是破解器/)).toBeVisible();
+  await expect(page.getByText(/完美解锁全部解析功能/)).toHaveCount(0);
+});
+
+test('security PGP missing-key failure is inline and non-blocking', async ({ page }) => {
+  page.on('dialog', dialog => {
+    throw new Error(`Unexpected blocking dialog: ${dialog.message()}`);
+  });
+
+  await page.goto('/tools/crypto-studio#pgp-keymaster');
+  await page.getByRole('button', { name: /文本加密 \/ 解密/ }).click();
+  await page.getByRole('button', { name: /加密消息/ }).click();
+
+  await expect(page.getByText(/请先输入收件人公钥/)).toBeVisible();
+});

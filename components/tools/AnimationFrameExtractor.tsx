@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { loadScriptWithCache, type RemoteRuntimeEvent } from './shared/cdnCacheManager';
 import { useScratchpadStore } from './shared/scratchpadStore';
+import { notifyToast } from './shared/notifyToast';
 
 const SCRIPT_URLS = {
   lottie: 'https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js',
@@ -568,7 +569,14 @@ export const AnimationFrameExtractor: React.FC = () => {
             if (signal.aborted) throw new DOMException('用户已取消批量暂存', 'AbortError');
             const blob = await getFrameBlob(frame);
             const name = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
-            await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
+            await useScratchpadStore.getState().addItemAsync({
+              name,
+              content: blob,
+              type: 'image',
+              mimeType: 'image/png',
+              sourceTool: '动画帧提取器',
+              originAction: 'stash-frame-batch',
+            });
             update(frame.index + 1, frames.length);
           }
         } else if (fileType === 'lottie' && lottieAnimRef.current) {
@@ -581,7 +589,14 @@ export const AnimationFrameExtractor: React.FC = () => {
               const blob = await new Promise<Blob | null>((resolve) => internalCanvas.toBlob(resolve, 'image/png'));
               if (blob) {
                 const name = `${baseName}_frame_${String(i + 1).padStart(3, '0')}.png`;
-                await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
+                await useScratchpadStore.getState().addItemAsync({
+                  name,
+                  content: blob,
+                  type: 'image',
+                  mimeType: 'image/png',
+                  sourceTool: '动画帧提取器',
+                  originAction: 'stash-lottie-frame-batch',
+                });
               }
             }
             update(i + 1, totalFrames);
@@ -596,7 +611,7 @@ export const AnimationFrameExtractor: React.FC = () => {
     } catch (err) {
       const message = (err as Error).name === 'AbortError' ? '已取消批量送入暂存箱' : '批量送入暂存箱失败: ' + (err as Error).message;
       setStatus(message);
-      if ((err as Error).name !== 'AbortError') alert(message);
+      if ((err as Error).name !== 'AbortError') notifyToast({ title: '批量送入暂存箱失败', description: (err as Error).message, tone: 'error' });
     }
   };
 
@@ -666,7 +681,7 @@ export const AnimationFrameExtractor: React.FC = () => {
     } catch (err) {
       const message = (err as Error).name === 'AbortError' ? '已取消 ZIP 导出' : '打包 ZIP 失败: ' + (err as Error).message;
       setStatus(message);
-      if ((err as Error).name !== 'AbortError') alert(message);
+      if ((err as Error).name !== 'AbortError') notifyToast({ title: '打包 ZIP 失败', description: (err as Error).message, tone: 'error' });
     }
   };
 

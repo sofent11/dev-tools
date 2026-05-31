@@ -21,6 +21,7 @@ import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
 import { sanitizeSvgMarkup } from './shared/sanitizeMarkup';
 import { useScratchpadStore } from './shared/scratchpadStore';
+import { notifyToast } from './shared/notifyToast';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -773,7 +774,7 @@ const ImageCompressorPanel: React.FC = () => {
       setCompressedFile(compressedBlob);
     } catch (error) {
       console.error(error);
-      alert('Compression failed: ' + (error as Error).message);
+      notifyToast({ title: '图片压缩失败', description: (error as Error).message, tone: 'error' });
     } finally {
       setIsCompressing(false);
     }
@@ -781,22 +782,35 @@ const ImageCompressorPanel: React.FC = () => {
 
   const [stashed, setStashed] = useState(false);
 
-  const stashToScratchpad = () => {
+  const stashToScratchpad = async () => {
     if (!compressedFile) return;
     let extension = file?.name.split('.').pop() || 'jpg';
     if (options.fileType !== 'original') {
       extension = options.fileType.split('/')[1];
     }
     const name = file ? getBaseName(file.name) : 'image';
-    
-    useScratchpadStore.getState().addItem(
-      `${name}_compressed.${extension}`,
-      compressedFile,
-      'image',
-      compressedFile.type
-    );
-    setStashed(true);
-    setTimeout(() => setStashed(false), 2000);
+
+    try {
+      await useScratchpadStore.getState().addItemAsync({
+        name: `${name}_compressed.${extension}`,
+        content: compressedFile,
+        type: 'image',
+        mimeType: compressedFile.type,
+        sourceTool: '图片压缩器',
+        originAction: 'compress-image',
+      });
+      setStashed(true);
+      notifyToast({ title: '压缩图片已送入暂存箱', tone: 'success' });
+      setTimeout(() => setStashed(false), 2000);
+    } catch (err) {
+      notifyToast({
+        title: '暂存压缩图片失败',
+        description: err instanceof Error ? `${err.message}。可先下载到本地或清理暂存箱空间后重试。` : '浏览器本地存储不可用，请下载到本地或清理空间。',
+        tone: 'error',
+        actionLabel: '下载本地文件',
+        onAction: downloadImage,
+      });
+    }
   };
 
   const downloadImage = () => {
@@ -1725,20 +1739,24 @@ const ImageVectorizerPanel: React.FC = () => {
     downloadBlob(blob, `${name}.svg`);
   };
 
-  const sendSvgToScratchpad = () => {
+  const sendSvgToScratchpad = async () => {
     if (!svgPath) return;
     try {
-      const scratchEvent = new CustomEvent('add-scratchpad-item', {
-        detail: {
-          name: `${file ? getBaseName(file.name) : 'vectorized'}.svg`,
-          content: safeSvgContent,
-          type: 'text'
-        }
+      await useScratchpadStore.getState().addItemAsync({
+        name: `${file ? getBaseName(file.name) : 'vectorized'}.svg`,
+        content: safeSvgContent,
+        type: 'svg',
+        mimeType: 'image/svg+xml',
+        sourceTool: '图片矢量化',
+        originAction: 'vectorize-svg',
       });
-      window.dispatchEvent(scratchEvent);
-      alert('已成功将生成的无损 SVG 送入全局暂存箱！');
-    } catch {
-      alert('送入暂存箱失败');
+      notifyToast({ title: 'SVG 已送入暂存箱', tone: 'success' });
+    } catch (err) {
+      notifyToast({
+        title: '送入暂存箱失败',
+        description: err instanceof Error ? err.message : '浏览器本地存储不可用，请清理空间后重试。',
+        tone: 'error',
+      });
     }
   };
 
