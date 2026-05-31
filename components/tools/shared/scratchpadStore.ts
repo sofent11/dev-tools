@@ -16,14 +16,21 @@ interface ScratchpadState {
   clearAll: () => void;
 }
 
+const createScratchpadItemId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
 export const useScratchpadStore = create<ScratchpadState>()(
   persist(
     (set) => ({
       items: [],
       addItem: (name, content, type = 'text') => set((state) => {
-        const id = Date.now().toString();
         const newItem: ScratchpadItem = {
-          id,
+          id: createScratchpadItemId(),
           name,
           content,
           type,
@@ -47,7 +54,7 @@ export const useScratchpadStore = create<ScratchpadState>()(
 // Optional global bridge listener for tools that dispatch via CustomEvent
 if (typeof window !== 'undefined') {
   window.addEventListener('add-scratchpad-item', ((e: CustomEvent<{ name: string; content: string; type?: string }>) => {
-    if (e.detail && e.detail.name && e.detail.content) {
+    if (e.detail && e.detail.name && typeof e.detail.content === 'string') {
       useScratchpadStore.getState().addItem(e.detail.name, e.detail.content, e.detail.type || 'text');
     }
   }) as EventListener);

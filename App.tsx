@@ -80,6 +80,20 @@ const normalizeScratchpadFileName = (name: string, fallbackExt: string) => {
   return withoutControlChars || fallbackName;
 };
 
+const getScratchpadFallbackExt = (item: ScratchpadItem) => {
+  if (item.type === 'svg' || item.name.endsWith('.svg')) return '';
+  if (item.type === 'json' || item.name.endsWith('.json')) return '';
+  if (item.type === 'jsx' || item.name.endsWith('.jsx')) return '';
+  if (item.type === 'tsx' || item.name.endsWith('.tsx')) return '';
+  return '.txt';
+};
+
+const getScratchpadMimeType = (item: ScratchpadItem) => {
+  if (item.type === 'svg' || item.name.endsWith('.svg')) return 'image/svg+xml;charset=utf-8';
+  if (item.type === 'json' || item.name.endsWith('.json')) return 'application/json;charset=utf-8';
+  return 'text/plain;charset=utf-8';
+};
+
 const translateTextForSearch = (
   value: string,
   query: string,
@@ -116,12 +130,7 @@ export default function App() {
     try {
       const zip = new JSZip();
       itemsToExport.forEach(item => {
-        let ext = '.txt';
-        if (item.type === 'svg' || item.name.endsWith('.svg')) ext = '';
-        else if (item.type === 'json' || item.name.endsWith('.json')) ext = '';
-        else if (item.type === 'jsx' || item.name.endsWith('.jsx')) ext = '';
-        else if (item.type === 'tsx' || item.name.endsWith('.tsx')) ext = '';
-        
+        const ext = getScratchpadFallbackExt(item);
         const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
         zip.file(fileName, item.content);
       });
@@ -547,12 +556,14 @@ const ScratchpadItemCard: React.FC<{
   };
 
   const handleDownload = () => {
-    const blob = new Blob([item.content], { type: 'text/plain;charset=utf-8' });
+    const ext = getScratchpadFallbackExt(item);
+    const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
+    const blob = new Blob([item.content], { type: getScratchpadMimeType(item) });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = item.name;
+    link.download = fileName;
     link.click();
-    URL.revokeObjectURL(link.href);
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   };
 
   const isSvg = item.type === 'svg' || (item.content.trim().startsWith('<svg') && item.content.includes('</svg>'));
