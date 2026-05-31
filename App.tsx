@@ -1,11 +1,12 @@
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive, Languages
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useScratchpadStore, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
+import { useI18n } from './src/i18n';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
 const TOOL_ROUTE_PREFIX = 'tools';
@@ -79,7 +80,18 @@ const normalizeScratchpadFileName = (name: string, fallbackExt: string) => {
   return withoutControlChars || fallbackName;
 };
 
+const translateTextForSearch = (
+  value: string,
+  query: string,
+  translate: (value: string) => string,
+) => {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  return translate(value).toLowerCase().includes(normalizedQuery);
+};
+
 export default function App() {
+  const { locale, toggleLocale, t } = useI18n();
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
@@ -161,8 +173,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    document.title = `${activeTool.name} - 程序员百宝箱`;
-  }, [activeTool.name]);
+    document.title = `${t(activeTool.name)} - ${t('程序员百宝箱')}`;
+  }, [activeTool.name, t]);
 
   const activateTool = (toolId: string) => {
     setActiveToolId(toolId);
@@ -184,9 +196,11 @@ export default function App() {
   };
 
   // Group tools by category
-  const filteredTools = TOOLS.filter(t =>
-    t.name.toLowerCase().includes(search.toLowerCase()) ||
-    t.description.toLowerCase().includes(search.toLowerCase())
+  const filteredTools = TOOLS.filter(tool =>
+    tool.name.toLowerCase().includes(search.toLowerCase()) ||
+    tool.description.toLowerCase().includes(search.toLowerCase()) ||
+    translateTextForSearch(tool.name, search, t) ||
+    translateTextForSearch(tool.description, search, t)
   );
 
   // Ensure order of categories based on Enum definition or custom order
@@ -206,7 +220,7 @@ export default function App() {
         <button
           className="fixed left-4 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
           onClick={() => setIsSidebarOpen(true)}
-          aria-label="打开工具目录"
+          aria-label={t('打开工具目录')}
         >
           <Menu className="w-5 h-5 text-slate-600" />
         </button>
@@ -216,7 +230,7 @@ export default function App() {
         <button
           className="fixed inset-0 z-30 bg-slate-950/20 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
-          aria-label="关闭工具目录遮罩"
+          aria-label={t('关闭工具目录遮罩')}
         />
       )}
 
@@ -231,12 +245,12 @@ export default function App() {
           </div>
           <div className="min-w-0">
             <div className="truncate text-base font-semibold tracking-normal text-slate-950">程序员百宝箱</div>
-            <div className="text-xs font-medium text-slate-500">{TOOLS.length} 个开发效率工具</div>
+            <div className="text-xs font-medium text-slate-500">{TOOLS.length} {t('个开发效率工具')}</div>
           </div>
           <button
             className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 md:hidden"
             onClick={() => setIsSidebarOpen(false)}
-            aria-label="关闭工具目录"
+            aria-label={t('关闭工具目录')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -247,7 +261,7 @@ export default function App() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="搜索工具..."
+              placeholder={t('搜索工具...')}
               className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/15"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -271,7 +285,7 @@ export default function App() {
                   ) : (
                     <ChevronDown className="w-3.5 h-3.5 flex-none" />
                   )}
-                  <span className="flex-1 text-left truncate">{category}</span>
+                  <span className="flex-1 text-left truncate">{t(category)}</span>
                   <span className="flex-none rounded-full bg-slate-100 px-2 py-0.5 text-[10px] leading-none text-slate-500">
                     {tools.length}
                   </span>
@@ -292,7 +306,7 @@ export default function App() {
                           ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100'
                           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'}
                       `}
-                      title={`${tool.name} - ${tool.description}`}
+                      title={`${t(tool.name)} - ${t(tool.description)}`}
                     >
                       <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-lg border
                         ${activeToolId === tool.id ? 'border-primary-100 bg-white text-primary-700' : 'border-slate-100 bg-white text-slate-400 group-hover:text-slate-700'}
@@ -300,8 +314,8 @@ export default function App() {
                         <tool.icon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1 text-left">
-                        <span className="block truncate font-medium">{tool.name}</span>
-                        <span className="block truncate text-xs text-slate-400 group-hover:text-slate-500">{tool.description}</span>
+                        <span className="block truncate font-medium">{t(tool.name)}</span>
+                        <span className="block truncate text-xs text-slate-400 group-hover:text-slate-500">{t(tool.description)}</span>
                       </div>
                     </a>
                   ))}
@@ -312,7 +326,7 @@ export default function App() {
 
           {Object.keys(groupedTools).length === 0 && (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-400">
-              未找到相关工具
+              {t('未找到相关工具')}
             </div>
           )}
         </div>
@@ -325,7 +339,7 @@ export default function App() {
             <button
               className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
               onClick={() => setIsSidebarOpen(true)}
-              aria-label="打开工具目录"
+              aria-label={t('打开工具目录')}
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -334,20 +348,20 @@ export default function App() {
             </div>
             <div className="min-w-0">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="truncate text-lg font-semibold tracking-normal text-slate-950">{activeTool.name}</h1>
+                <h1 className="truncate text-lg font-semibold tracking-normal text-slate-950">{t(activeTool.name)}</h1>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-500">
-                  {activeTool.category}
+                  {t(activeTool.category)}
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-sm text-slate-500">{activeTool.description}</p>
+              <p className="mt-0.5 truncate text-sm text-slate-500">{t(activeTool.description)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3 ml-auto md:ml-0">
             <button
               onClick={() => setIsScratchpadOpen(true)}
               className="relative p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
-              title="打开全局数据暂存箱"
-              aria-label="打开全局数据暂存箱"
+              title={t('打开全局数据暂存箱')}
+              aria-label={t('打开全局数据暂存箱')}
             >
               <ClipboardList className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               {scratchpadItems.length > 0 && (
@@ -357,9 +371,18 @@ export default function App() {
               )}
             </button>
             <button
+              onClick={toggleLocale}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
+              title={locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
+              aria-label={locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
+            >
+              <Languages className="h-4 w-4" />
+              <span>{locale === 'zh-CN' ? 'EN' : '中'}</span>
+            </button>
+            <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
-              title={isDarkMode ? "切换到浅色模式" : "切换到深色模式"}
+              title={isDarkMode ? t('切换到浅色模式') : t('切换到深色模式')}
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400" />}
             </button>
@@ -376,7 +399,7 @@ export default function App() {
             <Suspense
               fallback={
                 <div className="flex h-full min-h-[20rem] items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-500">
-                  正在加载 {activeTool.name}...
+                  {t('正在加载')} {t(activeTool.name)}...
                 </div>
               }
             >
@@ -385,7 +408,7 @@ export default function App() {
           </div>
 
           <div className="mt-3 flex-none text-center text-xs text-slate-400">
-            程序员百宝箱 &copy; {new Date().getFullYear()} • 专为开发者打造的效率工具箱
+            {t('程序员百宝箱')} &copy; {new Date().getFullYear()} • {t('专为开发者打造的效率工具箱')}
           </div>
         </div>
       </main>
@@ -404,14 +427,14 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-primary-500 animate-pulse" />
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">全局数据暂存箱</h3>
-                  <p className="text-[10px] text-slate-400">临时保存文本/代码，打通所有 Studio</p>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{t('全局数据暂存箱')}</h3>
+                  <p className="text-[10px] text-slate-400">{t('临时保存文本/代码，打通所有 Studio')}</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsScratchpadOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
-                aria-label="关闭全局数据暂存箱"
+                aria-label={t('关闭全局数据暂存箱')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -427,7 +450,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-lg text-primary-600 font-bold hover:bg-slate-150 dark:hover:bg-slate-850 transition-colors"
                 >
-                  {isMultiSelectMode ? '常规模式' : '开启打包多选'}
+                  {isMultiSelectMode ? t('常规模式') : t('开启打包多选')}
                 </button>
 
                 {isMultiSelectMode && (
@@ -442,7 +465,7 @@ export default function App() {
                       }}
                       className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-250 transition-colors"
                     >
-                      {validSelectedIds.length === scratchpadItems.length ? '取消' : '全选'}
+                      {validSelectedIds.length === scratchpadItems.length ? t('取消') : t('全选')}
                     </button>
                     <button
                       onClick={() => {
@@ -464,9 +487,9 @@ export default function App() {
               {scratchpadItems.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
                   <ClipboardList className="w-12 h-12 text-slate-300 dark:text-slate-800 stroke-1" />
-                  <span className="font-bold">暂存箱暂无内容</span>
+                  <span className="font-bold">{t('暂存箱暂无内容')}</span>
                   <p className="text-[10px] text-slate-500 text-center max-w-[220px] leading-relaxed">
-                    您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。
+                    {t('您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。')}
                   </p>
                 </div>
               ) : (
@@ -496,7 +519,7 @@ export default function App() {
                   className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 font-bold text-xs select-none transition-all active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span>清空暂存箱</span>
+                  <span>{t('清空暂存箱')}</span>
                 </button>
               </div>
             )}
@@ -514,6 +537,7 @@ const ScratchpadItemCard: React.FC<{
   isSelected: boolean;
   onToggleSelect: () => void;
 }> = ({ item, onRemove, isMultiSelectMode, isSelected, onToggleSelect }) => {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -583,7 +607,7 @@ const ScratchpadItemCard: React.FC<{
             </p>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-[9px] text-slate-400">
-                {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} 字符
+                {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} {t('字符')}
               </span>
               {isJson && (
                 <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
@@ -592,7 +616,7 @@ const ScratchpadItemCard: React.FC<{
               )}
               {isSvg && (
                 <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
-                  SVG 矢量图
+                  {t('SVG 矢量图')}
                 </span>
               )}
             </div>
@@ -602,21 +626,21 @@ const ScratchpadItemCard: React.FC<{
               <button 
                 onClick={handleCopy}
                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                title="复制"
+                title={t('复制')}
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
               <button 
                 onClick={handleDownload}
                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                title="下载"
+                title={t('下载')}
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
               <button 
                 onClick={() => onRemove(item.id)}
                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 transition-colors"
-                title="删除"
+                title={t('删除')}
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
