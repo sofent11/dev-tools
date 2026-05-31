@@ -10,6 +10,12 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { CodePanel, FieldLabel, Select, Textarea } from '../ui/ToolUi';
 
+const SQLJS_VERSION = '1.8.0';
+const SQLJS_SCRIPT_URL = `https://cdnjs.cloudflare.com/ajax/libs/sql.js/${SQLJS_VERSION}/sql-wasm.js`;
+const SQLJS_SCRIPT_FALLBACK_URL = `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm.js`;
+const SQLJS_WASM_BASE_URL = `https://cdnjs.cloudflare.com/ajax/libs/sql.js/${SQLJS_VERSION}`;
+const SQLJS_WASM_FALLBACK_BASE_URL = `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist`;
+
 const useCopy = () => {
   const [copied, setCopied] = useState(false);
   const copy = async (value: string) => {
@@ -861,9 +867,10 @@ export const SqliteSandboxTool: React.FC = () => {
   const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>({
     status: 'idle',
     label: 'SQL.js',
-    source: 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js',
-    version: '1.8.0',
+    source: SQLJS_SCRIPT_URL,
+    version: SQLJS_VERSION,
   });
+  const sqlJsWasmBaseUrlRef = useRef(SQLJS_WASM_BASE_URL);
   const [db, setDb] = useState<SqlDatabase | null>(null);
   const [sql, setSql] = useState(
     `-- 这是一个 WebAssembly SQLite 离线沙箱。\n-- 您可以点击左下角载入测试表，也可以在这里输入并执行任意 SQL 查询。\nSELECT * FROM users;`
@@ -910,7 +917,7 @@ export const SqliteSandboxTool: React.FC = () => {
       const initSqlJs = getSqlJsInitializer();
       if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
       const SQL = await initSqlJs({
-        locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+        locateFile: (file: string) => `${sqlJsWasmBaseUrlRef.current}/${file}`
       });
       const newDb = new SQL.Database();
       setDb(newDb);
@@ -948,18 +955,28 @@ export const SqliteSandboxTool: React.FC = () => {
     }
 
     Promise.resolve().then(() => setIsLoading(true));
-    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js', {
+    loadScriptWithCache(SQLJS_SCRIPT_URL, {
       label: 'SQL.js',
-      version: '1.8.0',
-      onStatus: event => setRuntimeState({
-        status: event.status,
-        label: event.label,
-        version: event.version,
-        source: event.src,
-        attempt: event.attempt,
-        progress: event.progress,
-        error: event.message,
-      }),
+      version: SQLJS_VERSION,
+      fallbackUrls: [SQLJS_SCRIPT_FALLBACK_URL],
+      sourceLabel: 'CDN / fallback',
+      onStatus: event => {
+        setRuntimeState({
+          status: event.status,
+          label: event.label,
+          version: event.version,
+          source: event.src,
+          activeUrl: event.activeUrl,
+          sourceLabel: event.sourceLabel,
+          verified: event.verified,
+          attempt: event.attempt,
+          progress: event.progress,
+          error: event.message,
+        });
+        if (event.activeUrl === SQLJS_SCRIPT_FALLBACK_URL) {
+          sqlJsWasmBaseUrlRef.current = SQLJS_WASM_FALLBACK_BASE_URL;
+        }
+      },
     })
       .then(() => initDatabase())
       .catch(() => {
@@ -1013,7 +1030,7 @@ export const SqliteSandboxTool: React.FC = () => {
         const initSqlJs = getSqlJsInitializer();
         if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
         const SQL = await initSqlJs({
-          locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+          locateFile: (file: string) => `${sqlJsWasmBaseUrlRef.current}/${file}`
         });
         const uInt8Array = new Uint8Array(reader.result as ArrayBuffer);
         const newDb = new SQL.Database(uInt8Array);

@@ -8,17 +8,23 @@ export interface RuntimeAssetLoaderState {
   label: string;
   version?: string;
   source?: string;
+  activeUrl?: string;
+  sourceLabel?: string;
   cached?: boolean;
   attempt?: number;
   progress?: number;
   error?: string;
+  verified?: boolean;
 }
 
 export interface RuntimeAssetOptions {
   url: string;
+  fallbackUrls?: string[];
   kind: RuntimeAssetKind;
   label: string;
   version?: string;
+  sourceLabel?: string;
+  expectedSha256?: string;
   timeoutMs?: number;
   retries?: number;
   cache?: boolean;
@@ -29,11 +35,17 @@ const moduleCache = new Map<string, Promise<unknown>>();
 const scriptCache = new Map<string, Promise<void>>();
 const progressListeners = new Map<string, (progress: number) => void>();
 
-const emit = (options: RuntimeAssetOptions, state: Omit<RuntimeAssetLoaderState, 'label' | 'version' | 'source'>) => {
+const emit = (
+  options: RuntimeAssetOptions,
+  state: Omit<RuntimeAssetLoaderState, 'label' | 'version' | 'source'>,
+  activeUrl = options.url,
+) => {
   options.onState?.({
     label: options.label,
     version: options.version,
     source: options.url,
+    activeUrl,
+    sourceLabel: options.sourceLabel,
     ...state,
   });
 };
@@ -59,35 +71,70 @@ const getRuntimeCache = async () => {
   return caches.open(CACHE_NAME);
 };
 
-const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number) => {
+const toHex = (buffer: ArrayBuffer) =>
+  Array.from(new Uint8Array(buffer), byte => byte.toString(16).padStart(2, '0')).join('');
+
+const normalizeSha256 = (value: string) => value.trim().toLowerCase().replace(/^sha256-/, '');
+
+const verifyResponseSha256 = async (response: Response, expectedSha256?: string) => {
+  if (!expectedSha256) return { response, verified: undefined };
+  if (!globalThis.crypto?.subtle) {
+    throw new Error('当前浏览器不支持 SHA-256 资源校验。');
+  }
+
+  const bytes = await response.arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  const actual = toHex(digest);
+  const expected = normalizeSha256(expectedSha256);
+  if (actual !== expected) {
+    throw new Error(`资源完整性校验失败：期望 ${expected}，实际 ${actual}`);
+  }
+
+  return {
+    response: new Response(bytes, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    }),
+    verified: true,
+  };
+};
+
+const getCandidateUrls = (options: RuntimeAssetOptions) =>
+  Array.from(new Set([options.url, ...(options.fallbackUrls ?? [])].filter(Boolean)));
+
+const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, activeUrl = options.url) => {
   const timeoutMs = options.timeoutMs ?? 15000;
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const cache = options.cache === false ? undefined : await getRuntimeCache();
-    const cachedResponse = await cache?.match(options.url);
+    const cachedResponse = await cache?.match(activeUrl);
     if (cachedResponse) {
-      emit(options, { status: 'cached', cached: true, attempt, progress: 100 });
       const headers = new Headers(cachedResponse.headers);
       headers.set('x-devtoolbox-runtime-cache', 'hit');
-      return new Response(cachedResponse.body, {
+      const cachedCopy = new Response(cachedResponse.body, {
         status: cachedResponse.status,
         statusText: cachedResponse.statusText,
         headers,
       });
+      const verified = await verifyResponseSha256(cachedCopy, options.expectedSha256);
+      emit(options, { status: 'cached', cached: true, attempt, progress: 100, verified: Boolean(options.expectedSha256) }, activeUrl);
+      return verified.response;
     }
 
-    emit(options, { status: 'loading', cached: false, attempt, progress: 0 });
-    const response = await window.fetch(options.url, { signal: controller.signal });
+    emit(options, { status: 'loading', cached: false, attempt, progress: 0 }, activeUrl);
+    const response = await window.fetch(activeUrl, { signal: controller.signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} ${response.statusText}`);
     }
 
     const contentLength = Number(response.headers.get('content-length') || 0);
     if (!response.body || contentLength <= 0) {
-      await cache?.put(options.url, response.clone());
-      return response;
+      const verified = await verifyResponseSha256(response, options.expectedSha256);
+      await cache?.put(activeUrl, verified.response.clone());
+      return verified.response;
     }
 
     const reader = response.body.getReader();
@@ -101,9 +148,9 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number) 
       chunks.push(value);
       loaded += value.length;
       const progress = Math.min(100, Math.round((loaded / contentLength) * 100));
-      emit(options, { status: 'loading', cached: false, attempt, progress });
+      emit(options, { status: 'loading', cached: false, attempt, progress }, activeUrl);
       for (const [key, listener] of progressListeners.entries()) {
-        if (options.url.includes(key)) listener(progress);
+        if (activeUrl.includes(key)) listener(progress);
       }
     }
 
@@ -119,18 +166,19 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number) 
       statusText: response.statusText,
       headers: response.headers,
     });
-    await cache?.put(options.url, loadedResponse.clone());
-    return loadedResponse;
+    const verified = await verifyResponseSha256(loadedResponse, options.expectedSha256);
+    await cache?.put(activeUrl, verified.response.clone());
+    return verified.response;
   } finally {
     window.clearTimeout(timeoutId);
   }
 };
 
-const executeScriptText = (code: string, options: RuntimeAssetOptions, attempt: number) => new Promise<void>((resolve, reject) => {
+const executeScriptText = (code: string, options: RuntimeAssetOptions, attempt: number, activeUrl = options.url) => new Promise<void>((resolve, reject) => {
   const existing = Array.from(document.querySelectorAll<HTMLScriptElement>('script[data-runtime-src]'))
-    .find(scriptNode => scriptNode.dataset.runtimeSrc === options.url);
+    .find(scriptNode => scriptNode.dataset.runtimeSrc === activeUrl);
   if (existing?.dataset.loaded === 'true') {
-    emit(options, { status: 'ready', cached: true, attempt, progress: 100 });
+    emit(options, { status: 'ready', cached: true, attempt, progress: 100, verified: Boolean(options.expectedSha256) }, activeUrl);
     resolve();
     return;
   }
@@ -150,11 +198,11 @@ const executeScriptText = (code: string, options: RuntimeAssetOptions, attempt: 
   script.src = blobUrl;
   script.async = true;
   script.crossOrigin = 'anonymous';
-  script.dataset.runtimeSrc = options.url;
+  script.dataset.runtimeSrc = activeUrl;
   script.onload = () => {
     cleanup();
     script.dataset.loaded = 'true';
-    emit(options, { status: 'ready', cached: false, attempt, progress: 100 });
+    emit(options, { status: 'ready', cached: false, attempt, progress: 100, verified: Boolean(options.expectedSha256) }, activeUrl);
     resolve();
   };
   script.onerror = () => {
@@ -167,26 +215,30 @@ const executeScriptText = (code: string, options: RuntimeAssetOptions, attempt: 
 
 const loadScriptAsset = async (options: RuntimeAssetOptions) => {
   if (typeof document === 'undefined') return;
+  const candidateUrls = getCandidateUrls(options);
   const existing = Array.from(document.querySelectorAll<HTMLScriptElement>('script[data-runtime-src],script[data-src]'))
-    .find(scriptNode => scriptNode.dataset.runtimeSrc === options.url || scriptNode.dataset.src === options.url);
-  if (existing?.dataset.loaded === 'true' || existing?.dataset.src === options.url) {
-    emit(options, { status: 'ready', cached: true, attempt: 0, progress: 100 });
+    .find(scriptNode => candidateUrls.includes(scriptNode.dataset.runtimeSrc || '') || candidateUrls.includes(scriptNode.dataset.src || ''));
+  const existingUrl = existing?.dataset.runtimeSrc || existing?.dataset.src || options.url;
+  if (existing?.dataset.loaded === 'true' || candidateUrls.includes(existing?.dataset.src || '')) {
+    emit(options, { status: 'ready', cached: true, attempt: 0, progress: 100, verified: Boolean(options.expectedSha256) }, existingUrl);
     return;
   }
 
   const attempts = Math.max(1, (options.retries ?? 1) + 1);
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetchWithProgress(options, attempt);
-      const code = await response.text();
-      await executeScriptText(code, options, attempt);
-      return;
-    } catch (err) {
-      lastError = err;
-      emit(options, { status: 'error', attempt, error: (err as Error).message });
-      if (attempt < attempts) await delay(400 * attempt);
+  for (const activeUrl of candidateUrls) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const response = await fetchWithProgress(options, attempt, activeUrl);
+        const code = await response.text();
+        await executeScriptText(code, options, attempt, activeUrl);
+        return;
+      } catch (err) {
+        lastError = err;
+        emit(options, { status: 'error', attempt, error: (err as Error).message }, activeUrl);
+        if (attempt < attempts) await delay(400 * attempt);
+      }
     }
   }
 
@@ -195,22 +247,26 @@ const loadScriptAsset = async (options: RuntimeAssetOptions) => {
 
 const loadRawAsset = async (options: RuntimeAssetOptions) => {
   const attempts = Math.max(1, (options.retries ?? 1) + 1);
+  const candidateUrls = getCandidateUrls(options);
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      const response = await fetchWithProgress(options, attempt);
-      emit(options, {
-        status: 'ready',
-        cached: response.headers.get('x-devtoolbox-runtime-cache') === 'hit',
-        attempt,
-        progress: 100,
-      });
-      return response;
-    } catch (err) {
-      lastError = err;
-      emit(options, { status: 'error', attempt, error: (err as Error).message });
-      if (attempt < attempts) await delay(400 * attempt);
+  for (const activeUrl of candidateUrls) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        const response = await fetchWithProgress(options, attempt, activeUrl);
+        emit(options, {
+          status: 'ready',
+          cached: response.headers.get('x-devtoolbox-runtime-cache') === 'hit',
+          attempt,
+          progress: 100,
+          verified: Boolean(options.expectedSha256),
+        }, activeUrl);
+        return response;
+      } catch (err) {
+        lastError = err;
+        emit(options, { status: 'error', attempt, error: (err as Error).message }, activeUrl);
+        if (attempt < attempts) await delay(400 * attempt);
+      }
     }
   }
 
@@ -222,22 +278,25 @@ export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions
     if (!moduleCache.has(options.url)) {
       const promise = (async () => {
         const attempts = Math.max(1, (options.retries ?? 0) + 1);
+        const candidateUrls = getCandidateUrls(options);
         let lastError: unknown;
 
-        for (let attempt = 1; attempt <= attempts; attempt += 1) {
-          emit(options, { status: 'loading', attempt, progress: 0 });
-          try {
-            const module = await withRuntimeTimeout(
-              import(/* @vite-ignore */ options.url),
-              options.timeoutMs ?? 15000,
-              options.label,
-            );
-            emit(options, { status: 'ready', attempt, progress: 100 });
-            return module;
-          } catch (err) {
-            lastError = err;
-            emit(options, { status: 'error', attempt, error: (err as Error).message });
-            if (attempt < attempts) await delay(400 * attempt);
+        for (const activeUrl of candidateUrls) {
+          for (let attempt = 1; attempt <= attempts; attempt += 1) {
+            emit(options, { status: 'loading', attempt, progress: 0 }, activeUrl);
+            try {
+              const module = await withRuntimeTimeout(
+                import(/* @vite-ignore */ activeUrl),
+                options.timeoutMs ?? 15000,
+                options.label,
+              );
+              emit(options, { status: 'ready', attempt, progress: 100 }, activeUrl);
+              return module;
+            } catch (err) {
+              lastError = err;
+              emit(options, { status: 'error', attempt, error: (err as Error).message }, activeUrl);
+              if (attempt < attempts) await delay(400 * attempt);
+            }
           }
         }
 

@@ -147,31 +147,6 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => observer.disconnect();
   }, [locale]);
 
-  useEffect(() => {
-    const originalAlert = window.alert;
-    const originalConfirm = window.confirm;
-
-    window.alert = (message?: unknown) => {
-      const translated = translateText(String(message ?? ''), locale);
-      if (document.body) {
-        window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
-          detail: {
-            title: translated,
-            tone: /失败|错误|error|failed/i.test(translated) ? 'error' : 'info',
-          },
-        }));
-      } else {
-        originalAlert(translated);
-      }
-    };
-    window.confirm = (message?: string) => originalConfirm(translateText(String(message ?? ''), locale));
-
-    return () => {
-      window.alert = originalAlert;
-      window.confirm = originalConfirm;
-    };
-  }, [locale]);
-
   const value = useMemo<I18nContextValue>(
     () => ({ locale, setLocale, toggleLocale, t }),
     [locale, setLocale, toggleLocale, t],

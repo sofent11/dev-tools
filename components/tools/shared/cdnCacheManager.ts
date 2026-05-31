@@ -18,11 +18,17 @@ export type RemoteRuntimeEvent = {
   progress?: number;
   version?: string;
   message?: string;
+  activeUrl?: string;
+  sourceLabel?: string;
+  verified?: boolean;
 };
 
 export interface LoadScriptOptions {
   label?: string;
   version?: string;
+  fallbackUrls?: string[];
+  sourceLabel?: string;
+  expectedSha256?: string;
   timeoutMs?: number;
   retries?: number;
   onStatus?: (event: RemoteRuntimeEvent) => void;
@@ -103,6 +109,9 @@ export const loadScriptWithCache = (src: string, options: LoadScriptOptions = {}
     kind: 'script',
     label: options.label || src.split('/').pop() || src,
     version: options.version,
+    fallbackUrls: options.fallbackUrls,
+    sourceLabel: options.sourceLabel,
+    expectedSha256: options.expectedSha256,
     timeoutMs: options.timeoutMs,
     retries: options.retries,
     cache: true,
@@ -114,5 +123,8 @@ export const loadScriptWithCache = (src: string, options: LoadScriptOptions = {}
       progress: state.progress,
       version: state.version,
       message: state.error,
+      activeUrl: state.activeUrl,
+      sourceLabel: state.sourceLabel,
+      verified: state.verified,
     }),
   });

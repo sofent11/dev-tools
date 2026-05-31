@@ -17,6 +17,7 @@
 - Non-critical `alert` calls are routed into accessible toast feedback.
 - Tool components no longer use blocking `alert()` for ordinary failures; feedback is inline or via `notifyToast`, with optional recovery actions.
 - Studio tab history sync now responds to both hash and browser back/forward navigation.
+- The i18n provider no longer monkey-patches global `window.alert` or `window.confirm`.
 
 ## Stage 3: Feature Enhancements
 **Status**: Complete, hardening ongoing
@@ -28,6 +29,9 @@
 - The browser-only WebGL face-swap tool has been removed after product review because its mesh-warping output was not reliable enough for a production toolbox.
 - The video downloader is local-first and documents Worker capability boundaries; private Workers improve CORS-limited parsing but do not bypass login, DRM, region, anti-abuse, copyright, or platform limits.
 - PGP key generation now requires explicit user action before generated private keys are loaded into decrypt/sign inputs, and sensitive scratchpad outputs can carry metadata.
+- HTML/SVG preview surfaces use allowlist sanitization instead of blacklist cleanup.
+- Runtime assets can report fallback source URLs and optional SHA-256 verification state; PDF.js, SQL.js, and OpenPGP use fallback metadata.
+- Headshot extraction falls back to manual crop mode when MediaPipe models fail or no face is detected.
 - Animation frame batch export/stash flows expose progress and cancellation; APNG/WebP decoding probes unknown WebCodecs frame counts under frame/pixel budgets.
 - STL repair includes browser-side wall-thickness heatmap sampling, fast/precise modes, cancellation, partial reports, grid prefiltering, and PBR material/environment controls.
 
@@ -43,5 +47,5 @@
 
 - Add optional self-hosted mirrors and fixture-backed offline/timeout simulations for CDN-backed engines.
 - Expand browser-level fixtures for IndexedDB failure, sensitive scratchpad metadata, video parser boundaries, and PGP/SM error states.
-- Add real APNG/WebP and STL fixture suites for numeric frame delay, unknown frame-count probing, and wall-thickness high-face diagnostics.
+- Add real APNG/WebP, PDF, Headshot image, malicious SVG/HTML, and STL fixture suites for numeric frame delay, unknown frame-count probing, sanitizer behavior, and wall-thickness high-face diagnostics.
 - Broaden mobile viewport E2E coverage across key Studio tabs, sensitive crypto flows, and long-running worker cancellation flows.

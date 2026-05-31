@@ -12,6 +12,8 @@ const idleState = (options: RuntimeAssetOptions): RuntimeAssetLoaderState => ({
   label: options.label,
   version: options.version,
   source: options.url,
+  activeUrl: options.url,
+  sourceLabel: options.sourceLabel,
 });
 
 export const useRuntimeAsset = <T,>(options: RuntimeAssetOptions) => {
@@ -65,6 +67,13 @@ export const RuntimeAssetStatusPanel: React.FC<{
             {state.attempt ? `第 ${state.attempt} 次尝试 · ` : ''}
             {state.progress !== undefined ? `${state.progress}%` : ''}
           </div>
+          {(state.activeUrl || state.verified !== undefined) && (
+            <div className="mt-1 break-all text-xs opacity-70">
+              {state.sourceLabel ? `${state.sourceLabel} · ` : ''}
+              {state.activeUrl ? `来源 ${state.activeUrl}` : ''}
+              {state.verified ? ' · SHA-256 已校验' : ''}
+            </div>
+          )}
           {state.error && <div className="mt-1 text-xs">{state.error}</div>}
         </div>
         {isError && onRetry && (

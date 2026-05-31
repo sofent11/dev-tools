@@ -1023,6 +1023,7 @@ export const PasswordGenTool: React.FC = () => {
 // ================= GPG/PGP Offline Keymaster Tool =================
 const OPENPGP_VERSION = '5.11.3';
 const OPENPGP_SCRIPT_URL = `https://cdn.jsdelivr.net/npm/openpgp@${OPENPGP_VERSION}/dist/openpgp.min.js`;
+const OPENPGP_SCRIPT_FALLBACK_URL = `https://unpkg.com/openpgp@${OPENPGP_VERSION}/dist/openpgp.min.js`;
 
 export const PgpKeymasterTool: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'generate' | 'crypto' | 'sign-verify'>('generate');
@@ -1075,11 +1076,16 @@ export const PgpKeymasterTool: React.FC = () => {
     loadScriptWithCache(OPENPGP_SCRIPT_URL, {
       label: 'OpenPGP',
       version: OPENPGP_VERSION,
+      fallbackUrls: [OPENPGP_SCRIPT_FALLBACK_URL],
+      sourceLabel: 'CDN / fallback',
       onStatus: event => setOpenpgpRuntimeState({
         status: event.status,
         label: event.label,
         version: event.version,
         source: event.src,
+        activeUrl: event.activeUrl,
+        sourceLabel: event.sourceLabel,
+        verified: event.verified,
         attempt: event.attempt,
         progress: event.progress,
         error: event.message,

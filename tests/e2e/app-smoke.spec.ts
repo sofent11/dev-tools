@@ -74,3 +74,41 @@ test('security PGP missing-key failure is inline and non-blocking', async ({ pag
 
   await expect(page.getByText(/请先输入收件人公钥/)).toBeVisible();
 });
+
+test('SVG optimizer sanitizes active content before preview', async ({ page }) => {
+  page.on('dialog', dialog => {
+    throw new Error(`Unexpected blocking dialog: ${dialog.message()}`);
+  });
+
+  await page.goto('/tools/css-studio#svg-optimizer');
+  await page.locator('textarea').first().fill(`
+    <svg viewBox="0 0 20 20" onload="alert('xss')">
+      <foreignObject><iframe srcdoc="&lt;script&gt;alert('xss')&lt;/script&gt;"></iframe></foreignObject>
+      <path d="M0 0L20 20" stroke="red" style="stroke-width: 2; background: url(javascript:alert(1))" />
+    </svg>
+  `);
+
+  await expect(page.locator('textarea').first()).toHaveValue(/foreignObject/);
+  await expect(page.locator('iframe')).toHaveCount(0);
+  await expect(page.locator('foreignObject')).toHaveCount(0);
+});
+
+test('headshot extractor exposes manual mode when MediaPipe cannot load', async ({ page }) => {
+  await page.route('**/*', route => {
+    const url = route.request().url();
+    const isExternalMediaPipeAsset =
+      url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision') ||
+      url.includes('storage.googleapis.com/mediapipe-models') ||
+      url.includes('vision_wasm_internal.wasm') ||
+      url.includes('blaze_face_short_range.tflite');
+    if (isExternalMediaPipeAsset) {
+      return route.abort();
+    }
+    return route.continue();
+  });
+  await page.goto('/tools/image-studio#headshot');
+
+  await expect(page.getByRole('heading', { name: /Headshot Extraction/ }).last()).toBeVisible();
+  await expect(page.getByText('手动裁剪模式', { exact: true })).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('button', { name: /重试/ }).first()).toBeVisible();
+});

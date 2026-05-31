@@ -55,18 +55,23 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Clarified video downloader capability boundaries: private Workers improve CORS-limited fetches but do not bypass login, DRM, region, anti-abuse, copyright, or platform policy limits.
 - Removed remaining blocking `alert()` calls from tool components in favor of inline status and `notifyToast`, including PGP/SM crypto operations, animation batch failures, image compression, network parsing, and data tools.
 - Added explicit PGP key handoff controls so generated private keys are no longer auto-filled into decrypt/sign inputs; sensitive scratchpad outputs can now carry metadata such as `sensitive` and `originAction`.
+- Removed global `window.alert` / `window.confirm` monkey-patching from the i18n provider; tool feedback now stays explicit through toast or inline state.
+- Replaced blacklist-style HTML/SVG cleanup with allowlist sanitization for preview surfaces.
+- Added runtime asset fallback URL, active source, and optional SHA-256 verification state support, with initial adoption in PDF.js, SQL.js, and OpenPGP.
+- Hardened Headshot/MediaPipe failure recovery with a visible manual-crop mode when models fail or no face is detected.
 
 ## Remaining Known Issues
 
 - Several large vendor chunks remain by nature of Three.js, pdf-lib, and data tooling. They are lazy-loaded and cached, but deeper splitting can be revisited if real-user performance data shows a problem.
 - Browser-only remote CDN dependencies now share a common runtime loader compatibility path and visible panels in the highest-risk tools. Remaining work is self-hosted asset mirrors and deeper fixture-backed failure simulation.
+- Runtime loader now supports fallback URLs and optional SHA-256 verification metadata. Remaining work is adding vetted self-hosted files under `public/vendor` where license and bundle size allow.
 - Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder`, now probe unknown frame counts, and still enforce frame/pixel budgets.
 - STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The worker now uses grid prefiltering and partial reports, but the result remains a sampling estimate rather than slicer or industrial inspection truth.
 
 ## Recommended Next Iterations
 
 1. Improve runtime loader UI adoption:
-   Add optional self-hosted mirrors and fixture-backed 404/timeout/offline simulations for CDN-backed engines.
+   Add vetted `public/vendor` mirrors and fixture-backed offline simulations for the remaining CDN-backed engines.
 
 2. Expand per-tool tests:
    Add more fixture-backed tests for SQL formatting, SVG sanitizer, JWT worker auditing, APNG/WebP probing, video parser boundaries, PGP/SM failure states, and STL wall-thickness high-face models.

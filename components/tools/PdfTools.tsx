@@ -25,6 +25,7 @@ import type { PDFDocument } from 'pdf-lib';
 const PDFJS_VERSION = '5.4.449';
 const PDFJS_MODULE_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
 const PDFJS_WORKER_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
+const PDFJS_MODULE_FALLBACK_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
 const MAX_PDF_PAGES = 120;
 const MAX_PDF_IMAGE_PIXELS = 90_000_000;
 
@@ -50,9 +51,11 @@ const loadPdfJs = async (onState?: (state: RuntimeAssetLoaderState) => void) => 
     label: 'PDF.js',
     version: PDFJS_VERSION,
     timeoutMs: 15000,
-    retries: 1,
-    cache: false,
-    onState,
+  retries: 1,
+  cache: false,
+  fallbackUrls: [PDFJS_MODULE_FALLBACK_URL],
+  sourceLabel: 'CDN / fallback',
+  onState,
   });
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
   return pdfjsLib;

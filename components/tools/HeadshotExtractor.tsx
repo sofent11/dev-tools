@@ -12,9 +12,11 @@ import {
 } from './shared/cdnCacheManager';
 import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import { notifyToast } from './shared/notifyToast';
 
 const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm';
 const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
+type HeadshotTaskState = 'loadingModel' | 'detecting' | 'manual' | 'error' | 'ready';
 
 const createRuntimeState = (
   label: string,
@@ -33,6 +35,8 @@ export const HeadshotExtractor: React.FC = () => {
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [isLoading, setIsLoading] = useState(false);
   const [status, setStatus] = useState('Waiting for models to load...');
+  const [taskState, setTaskState] = useState<HeadshotTaskState>('loadingModel');
+  const [taskError, setTaskError] = useState('');
   const imgRef = useRef<HTMLImageElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -67,6 +71,8 @@ export const HeadshotExtractor: React.FC = () => {
     
     isModelLoadingRef.current = true;
     setIsModelLoading(true);
+    setTaskState('loadingModel');
+    setTaskError('');
     setStatus('Loading AI models...');
     
     try {
@@ -131,12 +137,15 @@ export const HeadshotExtractor: React.FC = () => {
       });
       
       setStatus('Ready. Please select an image.');
+      setTaskState('ready');
     } catch (error) {
-      console.error('Error loading MediaPipe:', error);
       const message = error instanceof Error ? error.message : '未知错误';
       setStatus(`AI 模型加载失败：${message}`);
+      setTaskState('manual');
+      setTaskError(`AI 模型加载失败：${message}。您仍可上传图片并手动裁剪。`);
       setWasmRuntimeState(prev => prev.status === 'ready' ? prev : { ...prev, status: 'error', error: message });
       setModelRuntimeState(prev => prev.status === 'ready' ? prev : { ...prev, status: 'error', error: message });
+      notifyToast({ title: '大头照模型加载失败', description: '已切换为手动裁剪模式。', tone: 'error' });
     } finally {
       isModelLoadingRef.current = false;
       setIsModelLoading(false);
@@ -201,7 +210,6 @@ export const HeadshotExtractor: React.FC = () => {
 
   const detectFace = async (img: HTMLImageElement | HTMLCanvasElement): Promise<Detection | null> => {
     if (!faceDetectorRef.current) {
-        console.warn('Face detector not initialized');
         return null;
     }
 
@@ -211,10 +219,29 @@ export const HeadshotExtractor: React.FC = () => {
             return result.detections[0];
         }
         return null;
-    } catch (e) {
-        console.error("Detection error:", e);
+    } catch {
         return null;
     }
+  };
+
+  const applyDefaultCrop = (displayWidth: number, displayHeight: number) => {
+    const side = Math.min(displayWidth, displayHeight) * 0.6;
+    const defaultCrop: Crop = {
+      unit: 'px',
+      x: Math.max(0, (displayWidth - side) / 2),
+      y: Math.max(0, (displayHeight - side) / 2),
+      width: side,
+      height: side,
+    };
+    setCrop(defaultCrop);
+    setCompletedCrop({
+      unit: 'px',
+      x: defaultCrop.x,
+      y: defaultCrop.y,
+      width: defaultCrop.width,
+      height: defaultCrop.height,
+    });
+    return defaultCrop;
   };
 
   const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -244,12 +271,16 @@ export const HeadshotExtractor: React.FC = () => {
     }
 
     if (!faceDetectorRef.current) {
-        setStatus('AI Model failed to load.');
+        applyDefaultCrop(displayWidth, displayHeight);
+        setTaskState('manual');
+        setStatus('AI 模型不可用，已进入手动裁剪模式。');
         setIsLoading(false);
         return;
     }
 
     setIsLoading(true);
+    setTaskState('detecting');
+    setTaskError('');
     setStatus('Detecting face...');
 
     // Small delay to let UI render the status change
@@ -311,20 +342,17 @@ export const HeadshotExtractor: React.FC = () => {
         });
         setStatus('Face detected and auto-cropped.');
       } else {
-        setStatus('No face detected. Please select crop area manually.');
-        // Default center crop
-         const defaultCrop: Crop = {
-            unit: 'px',
-            x: (displayWidth - displayWidth * 0.5) / 2,
-            y: (displayHeight - displayWidth * 0.5) / 2,
-            width: displayWidth * 0.5,
-            height: displayWidth * 0.5
-        };
-        setCrop(defaultCrop);
+        applyDefaultCrop(displayWidth, displayHeight);
+        setTaskState('manual');
+        setStatus('未检测到人脸，已进入手动裁剪模式。');
       }
     } catch (err) {
-      console.error(err);
-      setStatus('Detection failed. Please select manually.');
+      const message = err instanceof Error ? err.message : '检测失败';
+      applyDefaultCrop(displayWidth, displayHeight);
+      setTaskState('manual');
+      setTaskError(`检测失败：${message}。您可以继续手动裁剪。`);
+      setStatus('检测失败，已进入手动裁剪模式。');
+      notifyToast({ title: '人脸检测失败', description: '已切换为手动裁剪模式。', tone: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -332,6 +360,9 @@ export const HeadshotExtractor: React.FC = () => {
 
   const onDownloadCrop = () => {
     if (!completedCrop || !previewCanvasRef.current) {
+        setTaskState('error');
+        setTaskError('请先选择裁剪区域，再保存裁剪结果。');
+        notifyToast({ title: '无法保存裁剪结果', description: '请先选择裁剪区域。', tone: 'error' });
         return;
     }
 
@@ -339,7 +370,9 @@ export const HeadshotExtractor: React.FC = () => {
 
     canvas.toBlob((blob) => {
         if (!blob) {
-            console.error('Canvas is empty');
+            setTaskState('error');
+            setTaskError('裁剪画布为空，请重新选择裁剪区域后再保存。');
+            notifyToast({ title: '裁剪画布为空', description: '请重新选择裁剪区域后再保存。', tone: 'error' });
             return;
         }
         const previewUrl = window.URL.createObjectURL(blob);
@@ -348,6 +381,8 @@ export const HeadshotExtractor: React.FC = () => {
         anchor.href = previewUrl;
         anchor.click();
         window.URL.revokeObjectURL(previewUrl);
+        setTaskState('ready');
+        notifyToast({ title: '大头照裁剪结果已下载', tone: 'success' });
     }, 'image/png');
   };
 
@@ -431,6 +466,16 @@ export const HeadshotExtractor: React.FC = () => {
           <RuntimeAssetStatusPanel state={modelRuntimeState} onRetry={initMediaPipe} compact />
         </div>
 
+        {taskError && (
+          <div className={`mx-auto w-full max-w-md rounded-xl border p-3 text-xs leading-5 ${
+            taskState === 'error'
+              ? 'border-rose-200 bg-rose-50 text-rose-700'
+              : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}>
+            {taskError}
+          </div>
+        )}
+
         {isModelLoading ? (
           <div className="max-w-md mx-auto w-full space-y-2 animate-in fade-in duration-300 p-4 border border-slate-200 bg-white rounded-xl shadow-xs">
             <div className="flex justify-between text-xs font-semibold text-slate-600">
@@ -450,6 +495,7 @@ export const HeadshotExtractor: React.FC = () => {
         ) : (
           <div className="text-center text-sm text-slate-500">
               {status}
+              {taskState === 'manual' && <span className="ml-2 font-semibold text-amber-700">手动裁剪模式</span>}
               {isLoading && <RefreshCw className="inline ml-2 w-4 h-4 animate-spin" />}
           </div>
         )}

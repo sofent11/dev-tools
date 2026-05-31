@@ -13,6 +13,7 @@ const readTarget = path => {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
       const fullPath = join(current, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === '__tests__') continue;
         walk(fullPath);
       } else if (/\.(tsx?|jsx?)$/.test(entry.name)) {
         files.push(readFileSync(fullPath, 'utf8'));
@@ -93,6 +94,16 @@ const stalePatterns = [
     file: 'components/tools',
     pattern: /\b(?:window\.)?alert\s*\(/,
     message: 'Tool components should use notifyToast or inline status instead of blocking alert().',
+  },
+  {
+    file: 'src',
+    pattern: /window\.(?:alert|confirm)\s*=/,
+    message: 'Source code should not monkey-patch global alert() or confirm().',
+  },
+  {
+    file: 'components/tools/shared/sanitizeMarkup.ts',
+    pattern: /querySelectorAll\(['"`][^'"`]*(?:script|foreignObject|iframe|object|embed|link|style|meta|base)/i,
+    message: 'Sanitizer should remain allowlist-based instead of a dangerous-tag blacklist.',
   },
 ];
 
