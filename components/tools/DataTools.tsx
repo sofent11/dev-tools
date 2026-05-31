@@ -101,8 +101,105 @@ const countDiffs = (node: DiffNode): Record<DiffKind, number> => {
   return counts;
 };
 
+const parsePath = (path: string): (string | number)[] => {
+  const segments = path.split('.');
+  const result: (string | number)[] = [];
+  const startIdx = segments[0] === 'root' ? 1 : 0;
+  for (let i = startIdx; i < segments.length; i++) {
+    const seg = segments[i];
+    const matches = Array.from(seg.matchAll(/([^[]+)|\[(\d+)\]/g));
+    for (const match of matches) {
+      if (match[1]) {
+        result.push(match[1]);
+      } else if (match[2]) {
+        result.push(parseInt(match[2], 10));
+      }
+    }
+  }
+  return result;
+};
+
+const setValueAtPath = (obj: any, path: (string | number)[], value: any): any => {
+  if (path.length === 0) return value;
+  const newObj = Array.isArray(obj) ? [...obj] : { ...obj };
+  let curr = newObj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const seg = path[i];
+    const nextSeg = path[i + 1];
+    const isNextArray = typeof nextSeg === 'number';
+    if (curr[seg] === undefined || curr[seg] === null) {
+      curr[seg] = isNextArray ? [] : {};
+    } else {
+      curr[seg] = Array.isArray(curr[seg]) ? [...curr[seg]] : { ...curr[seg] };
+    }
+    curr = curr[seg];
+  }
+  const lastSeg = path[path.length - 1];
+  curr[lastSeg] = value;
+  return newObj;
+};
+
+const deleteValueAtPath = (obj: any, path: (string | number)[]): any => {
+  if (path.length === 0) return obj;
+  const newObj = Array.isArray(obj) ? [...obj] : { ...obj };
+  let curr = newObj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const seg = path[i];
+    if (curr[seg] === undefined || curr[seg] === null) return obj;
+    curr[seg] = Array.isArray(curr[seg]) ? [...curr[seg]] : { ...curr[seg] };
+    curr = curr[seg];
+  }
+  const lastSeg = path[path.length - 1];
+  if (Array.isArray(curr)) {
+    curr.splice(Number(lastSeg), 1);
+  } else {
+    delete curr[lastSeg];
+  }
+  return newObj;
+};
+
+interface JsonPatchOp {
+  op: 'add' | 'remove' | 'replace';
+  path: string;
+  value?: any;
+}
+
+const generateJsonPatch = (node: DiffNode): JsonPatchOp[] => {
+  const ops: JsonPatchOp[] = [];
+  const visit = (n: DiffNode) => {
+    if (n.kind === 'added') {
+      ops.push({
+        op: 'add',
+        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1'),
+        value: n.right
+      });
+    } else if (n.kind === 'removed') {
+      ops.push({
+        op: 'remove',
+        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1')
+      });
+    } else if (n.kind === 'changed' && !n.children) {
+      ops.push({
+        op: 'replace',
+        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1'),
+        value: n.right
+      });
+    }
+    n.children?.forEach(visit);
+  };
+  visit(node);
+  return ops;
+};
+
+interface JsonDiffContextProps {
+  onMergeLeft: (node: DiffNode) => void;
+  onMergeRight: (node: DiffNode) => void;
+}
+const JsonDiffContext = React.createContext<JsonDiffContextProps | null>(null);
+
 const DiffTree: React.FC<{ node: DiffNode; depth?: number }> = ({ node, depth = 0 }) => {
   const [isOpen, setIsOpen] = useState(() => node.kind !== 'same');
+  const context = React.useContext(JsonDiffContext);
 
   const color = {
     same: 'border-slate-200 bg-white text-slate-600',
@@ -133,11 +230,31 @@ const DiffTree: React.FC<{ node: DiffNode; depth?: number }> = ({ node, depth = 
             <span className="rounded border border-current/20 px-1.5 py-0.5 text-[10px] uppercase font-bold">{node.kind}</span>
             <span className="text-[11px] opacity-70 font-mono">{node.path}</span>
           </div>
-          {hasChildren && !isOpen && (
-            <span className="text-xs text-slate-400 font-medium">
-              ({node.children!.length} 个属性已折叠)
-            </span>
-          )}
+          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+            {node.kind !== 'same' && context && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => context.onMergeLeft(node)}
+                  className="px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors text-[9px] font-bold"
+                  title="将此差异项合并到左侧"
+                >
+                  ← 合并至左
+                </button>
+                <button
+                  onClick={() => context.onMergeRight(node)}
+                  className="px-1.5 py-0.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors text-[9px] font-bold"
+                  title="将此差异项合并到右侧"
+                >
+                  合并至右 →
+                </button>
+              </div>
+            )}
+            {hasChildren && !isOpen && (
+              <span className="text-xs text-slate-400 font-medium">
+                ({node.children!.length} 个属性已折叠)
+              </span>
+            )}
+          </div>
         </div>
         {!node.children && (
           <div className="mt-1.5 grid gap-1.5 font-mono text-xs md:grid-cols-2 border-t border-slate-100/60 pt-1.5">
@@ -176,6 +293,7 @@ export const JsonDiffTool: React.FC = () => {
   const [right, setRight] = useState(sampleRight);
   const leftCopy = useCopy();
   const rightCopy = useCopy();
+  const patchCopy = useCopy();
 
   const result = useMemo(() => {
     try {
@@ -188,9 +306,66 @@ export const JsonDiffTool: React.FC = () => {
     }
   }, [left, right]);
 
+  const handleMergeLeft = useCallback((node: DiffNode) => {
+    try {
+      const leftJson = JSON.parse(left);
+      const rightJson = JSON.parse(right);
+      const pathSegments = parsePath(node.path);
+
+      let newLeft = leftJson;
+      if (node.kind === 'added') {
+        newLeft = setValueAtPath(leftJson, pathSegments, node.right);
+      } else if (node.kind === 'removed') {
+        newLeft = deleteValueAtPath(leftJson, pathSegments);
+      } else if (node.kind === 'changed') {
+        newLeft = setValueAtPath(leftJson, pathSegments, node.right);
+      }
+
+      setLeft(JSON.stringify(newLeft, null, 2));
+    } catch (e) {
+      alert('合并至左侧失败: ' + (e as Error).message);
+    }
+  }, [left, right]);
+
+  const handleMergeRight = useCallback((node: DiffNode) => {
+    try {
+      const leftJson = JSON.parse(left);
+      const rightJson = JSON.parse(right);
+      const pathSegments = parsePath(node.path);
+
+      let newRight = rightJson;
+      if (node.kind === 'added') {
+        newRight = deleteValueAtPath(rightJson, pathSegments);
+      } else if (node.kind === 'removed') {
+        newRight = setValueAtPath(rightJson, pathSegments, node.left);
+      } else if (node.kind === 'changed') {
+        newRight = setValueAtPath(rightJson, pathSegments, node.left);
+      }
+
+      setRight(JSON.stringify(newRight, null, 2));
+    } catch (e) {
+      alert('合并至右侧失败: ' + (e as Error).message);
+    }
+  }, [left, right]);
+
+  const jsonPatchText = useMemo(() => {
+    if (!result.diff) return '[]';
+    try {
+      const ops = generateJsonPatch(result.diff);
+      return JSON.stringify(ops, null, 2);
+    } catch (e) {
+      return `[计算 JSON Patch 失败: ${(e as Error).message}]`;
+    }
+  }, [result.diff]);
+
+  const contextValue = useMemo(() => ({
+    onMergeLeft: handleMergeLeft,
+    onMergeRight: handleMergeRight
+  }), [handleMergeLeft, handleMergeRight]);
+
   return (
     <Card className="flex h-full flex-col">
-      <CardHeader title="JSON 结构化对比" description="解析两段 JSON，忽略格式差异并按键值树展示增删改。" />
+      <CardHeader title="JSON 结构化对比" description="解析两段 JSON，忽略格式差异并按键值树展示增删改。支持点击节点实时双向合并及导出 RFC 6902 Patch 补丁。" />
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
         <div className="grid min-h-[16rem] gap-4 md:grid-cols-2">
           <div className="flex min-h-0 flex-col gap-2">
@@ -229,9 +404,28 @@ export const JsonDiffTool: React.FC = () => {
           </div>
         )}
 
-        <div className="tool-panel min-h-0 flex-1 overflow-auto p-3">
-          {result.diff ? <DiffTree node={result.diff} /> : <div className="text-sm text-slate-400">修正 JSON 后显示结构化差异。</div>}
-        </div>
+        <JsonDiffContext.Provider value={contextValue}>
+          <div className="tool-panel min-h-0 flex-1 overflow-auto p-3 grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 overflow-auto border border-slate-100 dark:border-slate-800 rounded-xl p-3 bg-white dark:bg-slate-950">
+              <h4 className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">结构化差异树状视图</h4>
+              {result.diff ? <DiffTree node={result.diff} /> : <div className="text-sm text-slate-400">修正 JSON 后显示结构化差异。</div>}
+            </div>
+            <div className="overflow-auto border border-slate-100 dark:border-slate-800 rounded-xl p-3 bg-slate-950 flex flex-col min-h-[200px]">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide">RFC 6902 JSON Patch 补丁</h4>
+                <button
+                  onClick={() => patchCopy.copy(jsonPatchText)}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-slate-800 hover:border-slate-700 text-slate-400 hover:text-slate-200 transition-colors font-semibold"
+                >
+                  {patchCopy.copied ? '✓ 已复制' : '复制 Patch'}
+                </button>
+              </div>
+              <pre className="flex-1 text-[10px] font-mono text-emerald-400 overflow-auto whitespace-pre-wrap select-all leading-relaxed">
+                {jsonPatchText}
+              </pre>
+            </div>
+          </div>
+        </JsonDiffContext.Provider>
       </CardContent>
     </Card>
   );

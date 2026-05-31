@@ -14,6 +14,69 @@ interface MockRule {
     delay: number;
 }
 
+const parseCurlCommand = (curlCmd: string) => {
+    const cleanCmd = curlCmd.trim().replace(/\\\s*\n/g, ' '); 
+    let method = 'GET';
+    let url = '';
+    const parsedHeaders: Record<string, string> = {};
+    let body = '';
+
+    const urlRegex = /(?:https?:\/\/[^\s'"]+)/i;
+    const urlMatch = cleanCmd.match(urlRegex);
+    if (urlMatch) {
+        url = urlMatch[0];
+    }
+
+    const tokens: string[] = [];
+    let current = '';
+    let inDoubleQuotes = false;
+    let inSingleQuotes = false;
+    for (let i = 0; i < cleanCmd.length; i++) {
+        const char = cleanCmd[i];
+        if (char === '"' && !inSingleQuotes) {
+            inDoubleQuotes = !inDoubleQuotes;
+        } else if (char === "'" && !inDoubleQuotes) {
+            inSingleQuotes = !inSingleQuotes;
+        } else if (char === ' ' && !inDoubleQuotes && !inSingleQuotes) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+        } else {
+            current += char;
+        }
+    }
+    if (current) tokens.push(current);
+
+    for (let i = 0; i < tokens.length; i++) {
+        const token = tokens[i];
+        if (token === '-X' || token === '--request') {
+            method = tokens[i + 1]?.toUpperCase() || 'GET';
+            i++;
+        } else if (token === '-H' || token === '--header') {
+            const headerStr = tokens[i + 1] || '';
+            const colonIndex = headerStr.indexOf(':');
+            if (colonIndex > 0) {
+                const key = headerStr.slice(0, colonIndex).trim();
+                const value = headerStr.slice(colonIndex + 1).trim();
+                parsedHeaders[key] = value;
+            }
+            i++;
+        } else if (token === '-d' || token === '--data' || token === '--data-raw' || token === '--data-binary') {
+            body = tokens[i + 1] || '';
+            if (method === 'GET') method = 'POST';
+            i++;
+        }
+    }
+
+    if (!url) {
+        const httpToken = tokens.find(t => t.startsWith('http://') || t.startsWith('https://'));
+        if (httpToken) url = httpToken;
+    }
+
+    return { method, url, headers: JSON.stringify(parsedHeaders, null, 2), body };
+};
+
 export const HttpBuilderTool: React.FC = () => {
     const [method, setMethod] = useState('GET');
     const [url, setUrl] = useState('');
@@ -21,6 +84,8 @@ export const HttpBuilderTool: React.FC = () => {
     const [body, setBody] = useState('');
     const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showCurlModal, setShowCurlModal] = useState(false);
+    const [curlInput, setCurlInput] = useState('');
 
     // Code snippet exporter states
     const [resTab, setResTab] = useState<'response' | 'export'>('response');
@@ -31,6 +96,21 @@ export const HttpBuilderTool: React.FC = () => {
         await navigator.clipboard.writeText(snippet);
         setCopiedSnippet(true);
         setTimeout(() => setCopiedSnippet(false), 1500);
+    };
+
+    const handleImportCurl = () => {
+        if (!curlInput.trim()) return;
+        try {
+            const parsed = parseCurlCommand(curlInput);
+            setMethod(parsed.method);
+            setUrl(parsed.url);
+            setHeaders(parsed.headers);
+            setBody(parsed.body);
+            setShowCurlModal(false);
+            setCurlInput('');
+        } catch (e) {
+            alert('cURL 解析失败: ' + (e as Error).message);
+        }
     };
 
     const getCodeSnippet = () => {
@@ -261,10 +341,36 @@ export const HttpBuilderTool: React.FC = () => {
                             value={url}
                             onChange={e => setUrl(e.target.value)}
                         />
+                        <Button onClick={() => setShowCurlModal(true)} variant="secondary">
+                            导入 cURL
+                        </Button>
                         <Button onClick={sendRequest} disabled={loading} icon={<Send className="w-4 h-4"/>}>
                             发送请求
                         </Button>
                     </div>
+
+                    {showCurlModal && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+                            <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
+                                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">导入 cURL 命令行请求</span>
+                                    <button onClick={() => setShowCurlModal(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                        关闭
+                                    </button>
+                                </div>
+                                <textarea
+                                    className="w-full h-36 p-3 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
+                                    placeholder="例如：curl -X POST 'https://api.example.com/data' -H 'Content-Type: application/json' -d '{&quot;id&quot;: 42}'"
+                                    value={curlInput}
+                                    onChange={e => setCurlInput(e.target.value)}
+                                />
+                                <div className="flex gap-2 justify-end">
+                                    <Button variant="secondary" onClick={() => setShowCurlModal(false)}>取消</Button>
+                                    <Button onClick={handleImportCurl} disabled={!curlInput.trim()}>解析并填充</Button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* CORS Proxy Configuration Bar */}
                     <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
@@ -931,6 +1037,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
     const [message, setMessage] = useState('{\n  "message": "Hello DevToolbox Pro!"\n}');
     const [logs, setLogs] = useState<LogItem[]>([]);
     const [isConnected, setIsConnected] = useState(false);
+    const [useMockServer, setUseMockServer] = useState(false);
     
     // Heartbeat configuration
     const [enableHeartbeat, setEnableHeartbeat] = useState(false);
@@ -949,6 +1056,8 @@ export const WebSocketSseSandboxTool: React.FC = () => {
             { id: Date.now().toString() + Math.random().toString(36).substring(2, 7), time: timeStr, type, msg }
         ].slice(-100)); // cap at 100 logs
     };
+
+    const clearLogs = () => setLogs([]);
 
     // Auto scroll down console logs
     useEffect(() => {
@@ -991,6 +1100,89 @@ export const WebSocketSseSandboxTool: React.FC = () => {
         if (isConnected) {
             if (wsRef.current) {
                 wsRef.current.close();
+            }
+            return;
+        }
+
+        if (useMockServer) {
+            try {
+                addLog('info', `正在连接本地 Mock WebSocket 仿真服务器 (mock://local-websocket-server)...`);
+                
+                class MockWebSocket {
+                    url: string;
+                    readyState: number = WebSocket.CONNECTING;
+                    onopen: (() => void) | null = null;
+                    onmessage: ((event: MessageEvent) => void) | null = null;
+                    onerror: (() => void) | null = null;
+                    onclose: ((event: CloseEvent) => void) | null = null;
+
+                    constructor(url: string) {
+                        this.url = url;
+                        setTimeout(() => {
+                            this.readyState = WebSocket.OPEN;
+                            if (this.onopen) this.onopen();
+                        }, 400);
+                    }
+
+                    send(data: string) {
+                        setTimeout(() => {
+                            let responseText = `[Mock Server Response to "${data}"]`;
+                            if (data.toLowerCase().includes('ping') || data.toLowerCase().includes('heartbeat')) {
+                                responseText = 'pong';
+                            } else {
+                                responseText = JSON.stringify({
+                                    status: "ok",
+                                    timestamp: Date.now(),
+                                    received: data,
+                                    note: "这是本地 Mock 仿真服务器自动响应。"
+                                }, null, 2);
+                            }
+
+                            if (this.onmessage) {
+                                this.onmessage(new MessageEvent('message', { data: responseText }));
+                            }
+                        }, 300);
+                    }
+
+                    close() {
+                        this.readyState = WebSocket.CLOSED;
+                        if (this.onclose) {
+                            this.onclose(new CloseEvent('close', { code: 1000, reason: 'Mock connection closed' }));
+                        }
+                    }
+                }
+
+                const ws = new MockWebSocket('mock://local-websocket-server') as unknown as WebSocket;
+                wsRef.current = ws;
+
+                ws.onopen = () => {
+                    Promise.resolve().then(() => {
+                        setIsConnected(true);
+                        addLog('success', `WebSocket 本地 Mock 仿真连接成功 🟢`);
+                    });
+                };
+
+                ws.onmessage = (event) => {
+                    Promise.resolve().then(() => {
+                        addLog('recv', `[收到数据] ${event.data}`);
+                    });
+                };
+
+                ws.onerror = () => {
+                    Promise.resolve().then(() => {
+                        addLog('error', `WebSocket 本地 Mock 发生错误 ❌`);
+                    });
+                };
+
+                ws.onclose = (event) => {
+                    Promise.resolve().then(() => {
+                        setIsConnected(false);
+                        wsRef.current = null;
+                        addLog('info', `WebSocket 本地 Mock 仿真连接关闭 🔴`);
+                    });
+                };
+            } catch (e) {
+                addLog('error', `初始化本地 Mock WebSocket 失败: ${(e as Error).message}`);
             }
             return;
         }
@@ -1053,6 +1245,82 @@ export const WebSocketSseSandboxTool: React.FC = () => {
             return;
         }
 
+        if (useMockServer) {
+            try {
+                addLog('info', `正在开启本地 Mock SSE 监听 (mock://local-sse-server)...`);
+                
+                class MockEventSource {
+                    url: string;
+                    onmessage: ((event: MessageEvent) => void) | null = null;
+                    onerror: (() => void) | null = null;
+                    listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
+                    timer: any = null;
+
+                    constructor(url: string) {
+                        this.url = url;
+                        let count = 0;
+                        this.timer = setInterval(() => {
+                            count++;
+                            const data = JSON.stringify({
+                                event: "mock-stream",
+                                id: count,
+                                value: `流式数据块 #${count}`,
+                                timestamp: new Date().toLocaleTimeString(),
+                                desc: "此消息由本地 SSE 仿真服务器持续推送。"
+                            }, null, 2);
+
+                            if (this.onmessage) {
+                                this.onmessage(new MessageEvent('message', { data }));
+                            }
+
+                            if (this.listeners['ping']) {
+                                this.listeners['ping'].forEach(cb => {
+                                    cb(new MessageEvent('ping', { data: `[心跳] #${count}` }));
+                                });
+                            }
+                        }, 2000);
+                    }
+
+                    addEventListener(event: string, callback: any) {
+                        if (!this.listeners[event]) this.listeners[event] = [];
+                        this.listeners[event].push(callback);
+                    }
+
+                    close() {
+                        if (this.timer) {
+                            clearInterval(this.timer);
+                        }
+                    }
+                }
+
+                const sse = new MockEventSource('mock://local-sse-server') as unknown as EventSource;
+                sseRef.current = sse;
+                setIsConnected(true);
+                addLog('success', `本地 Mock SSE 监听建立成功，等待仿真数据推送... 🟢`);
+
+                sse.onmessage = (event) => {
+                    Promise.resolve().then(() => {
+                        addLog('recv', `[收到事件] ${event.data}`);
+                    });
+                };
+
+                sse.onerror = () => {
+                    Promise.resolve().then(() => {
+                        addLog('error', `本地 Mock SSE 监听发生错误`);
+                    });
+                };
+
+                sse.addEventListener('ping', (event: any) => {
+                    Promise.resolve().then(() => {
+                        addLog('recv', `[自定义事件: ping] ${event.data}`);
+                    });
+                });
+            } catch (e) {
+                addLog('error', `初始化本地 Mock SSE 失败: ${(e as Error).message}`);
+            }
+            return;
+        }
+
         try {
             addLog('info', `正在连接 SSE 事件源: ${sseUrl}...`);
             const sse = new EventSource(sseUrl);
@@ -1102,38 +1370,55 @@ export const WebSocketSseSandboxTool: React.FC = () => {
             <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
                 {/* Left Side: Connection & Configuration Panel */}
                 <div className="flex-1 flex flex-col gap-4 min-h-0">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex gap-3 text-xs">
-                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                    <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                        <div className="flex gap-3">
+                            <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                <input 
+                                    type="radio" name="mode" checked={mode === 'ws'} 
+                                    onChange={() => {
+                                        if (isConnected) {
+                                            if (wsRef.current) wsRef.current.close();
+                                            if (sseRef.current) sseRef.current.close();
+                                            setIsConnected(false);
+                                        }
+                                        setMode('ws');
+                                        setLogs([]);
+                                    }}
+                                    className="text-primary-600 focus:ring-primary-400" 
+                                />
+                                <span>WebSocket 客户端</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 font-bold cursor-pointer">
+                                <input 
+                                    type="radio" name="mode" checked={mode === 'sse'} 
+                                    onChange={() => {
+                                        if (isConnected) {
+                                            if (wsRef.current) wsRef.current.close();
+                                            if (sseRef.current) sseRef.current.close();
+                                            setIsConnected(false);
+                                        }
+                                        setMode('sse');
+                                        setLogs([]);
+                                    }}
+                                    className="text-primary-600 focus:ring-primary-400" 
+                                />
+                                <span>SSE (Server-Sent Events)</span>
+                            </label>
+                        </div>
+                        <label className="flex items-center gap-2 font-bold cursor-pointer text-emerald-600 dark:text-emerald-400">
                             <input 
-                                type="radio" name="mode" checked={mode === 'ws'} 
-                                onChange={() => {
+                                type="checkbox" checked={useMockServer} 
+                                onChange={e => {
                                     if (isConnected) {
                                         if (wsRef.current) wsRef.current.close();
                                         if (sseRef.current) sseRef.current.close();
                                         setIsConnected(false);
                                     }
-                                    setMode('ws');
-                                    setLogs([]);
+                                    setUseMockServer(e.target.checked);
                                 }}
-                                className="text-primary-600 focus:ring-primary-400" 
+                                className="rounded text-emerald-600 focus:ring-emerald-400" 
                             />
-                            <span>WebSocket 客户端</span>
-                        </label>
-                        <label className="flex items-center gap-1.5 font-bold cursor-pointer">
-                            <input 
-                                type="radio" name="mode" checked={mode === 'sse'} 
-                                onChange={() => {
-                                    if (isConnected) {
-                                        if (wsRef.current) wsRef.current.close();
-                                        if (sseRef.current) sseRef.current.close();
-                                        setIsConnected(false);
-                                    }
-                                    setMode('sse');
-                                    setLogs([]);
-                                }}
-                                className="text-primary-600 focus:ring-primary-400" 
-                            />
-                            <span>SSE (Server-Sent Events)</span>
+                            <span>启用本地 Mock 仿真服务器模式</span>
                         </label>
                     </div>
 
