@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "check:i18n": "node scripts/check-i18n-coverage.mjs",
+    "check:i18n": "node scripts/check-i18n-coverage.mjs && node scripts/check-english-visible-text.mjs",
     "check:routes": "node scripts/check-route-map.mjs",
     "check:docs": "node scripts/check-docs-roadmap.mjs",
     "audit:prod": "npm audit --omit=dev",

@@ -3,9 +3,10 @@ import { DEFAULT_LOCALE, LOCALES, type Locale, translateText } from './messages'
 import { I18nContext, type I18nContextValue } from './context';
 
 const textNodeOriginals = new WeakMap<Text, string>();
+const optionTextOriginals = new WeakMap<HTMLOptionElement, string>();
 const elementAttributeOriginals = new WeakMap<Element, Map<string, string>>();
 const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'aria-valuetext', 'placeholder', 'title'];
-const SKIP_SELECTOR = [
+const TEXT_NODE_SKIP_SELECTOR = [
   '[data-i18n-skip]',
   'script',
   'style',
@@ -18,6 +19,19 @@ const SKIP_SELECTOR = [
   'svg',
   'textarea',
   'input',
+  '[contenteditable="true"]',
+].join(',');
+const ATTRIBUTE_SKIP_SELECTOR = [
+  '[data-i18n-skip]',
+  'script',
+  'style',
+  'noscript',
+  'code',
+  'pre',
+  'kbd',
+  'samp',
+  'canvas',
+  'svg',
   '[contenteditable="true"]',
 ].join(',');
 
@@ -33,12 +47,15 @@ const getInitialLocale = (): Locale => {
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US';
 };
 
-const shouldSkipElement = (element: Element | null) =>
-  Boolean(element?.closest(SKIP_SELECTOR));
+const shouldSkipTextNode = (element: Element | null) =>
+  Boolean(element?.closest(TEXT_NODE_SKIP_SELECTOR));
+
+const shouldSkipAttributes = (element: Element | null) =>
+  Boolean(element?.closest(ATTRIBUTE_SKIP_SELECTOR));
 
 const localizeTextNode = (node: Text, locale: Locale) => {
   const parent = node.parentElement;
-  if (!parent || shouldSkipElement(parent)) return;
+  if (!parent || shouldSkipTextNode(parent)) return;
   if (locale === 'zh-CN' && hasHan(node.data)) {
     textNodeOriginals.set(node, node.data);
     return;
@@ -57,7 +74,7 @@ const localizeTextNode = (node: Text, locale: Locale) => {
 };
 
 const localizeElementAttributes = (element: Element, locale: Locale) => {
-  if (shouldSkipElement(element)) return;
+  if (shouldSkipAttributes(element)) return;
 
   for (const attr of TRANSLATABLE_ATTRIBUTES) {
     const value = element.getAttribute(attr);
@@ -85,8 +102,24 @@ const localizeElementAttributes = (element: Element, locale: Locale) => {
   }
 };
 
+const localizeOptionText = (element: Element, locale: Locale) => {
+  if (!(element instanceof HTMLOptionElement)) return;
+  const value = element.textContent ?? '';
+  const existingOriginal = optionTextOriginals.get(element);
+  const original = existingOriginal ?? value;
+  if (!hasHan(original)) return;
+
+  if (!existingOriginal) optionTextOriginals.set(element, original);
+
+  const next = locale === 'zh-CN' ? original : translateText(original, locale);
+  if (value !== next) element.textContent = next;
+};
+
 const walkAndLocalize = (root: ParentNode, locale: Locale) => {
-  if (root instanceof Element) localizeElementAttributes(root, locale);
+  if (root instanceof Element) {
+    localizeElementAttributes(root, locale);
+    localizeOptionText(root, locale);
+  }
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   let current = walker.nextNode();
@@ -95,6 +128,7 @@ const walkAndLocalize = (root: ParentNode, locale: Locale) => {
       localizeTextNode(current as Text, locale);
     } else if (current instanceof Element) {
       localizeElementAttributes(current, locale);
+      localizeOptionText(current, locale);
     }
     current = walker.nextNode();
   }
