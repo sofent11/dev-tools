@@ -16,6 +16,12 @@ interface ScratchpadState {
   clearAll: () => void;
 }
 
+declare global {
+  interface Window {
+    __devToolboxScratchpadBridge?: EventListener;
+  }
+}
+
 const createScratchpadItemId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -53,9 +59,25 @@ export const useScratchpadStore = create<ScratchpadState>()(
 
 // Optional global bridge listener for tools that dispatch via CustomEvent
 if (typeof window !== 'undefined') {
-  window.addEventListener('add-scratchpad-item', ((e: CustomEvent<{ name: string; content: string; type?: string }>) => {
+  if (window.__devToolboxScratchpadBridge) {
+    window.removeEventListener('add-scratchpad-item', window.__devToolboxScratchpadBridge);
+  }
+
+  const scratchpadBridge = ((e: CustomEvent<{ name: string; content: string; type?: string }>) => {
     if (e.detail && e.detail.name && typeof e.detail.content === 'string') {
       useScratchpadStore.getState().addItem(e.detail.name, e.detail.content, e.detail.type || 'text');
     }
-  }) as EventListener);
+  }) as EventListener;
+
+  window.__devToolboxScratchpadBridge = scratchpadBridge;
+  window.addEventListener('add-scratchpad-item', scratchpadBridge);
+
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      window.removeEventListener('add-scratchpad-item', scratchpadBridge);
+      if (window.__devToolboxScratchpadBridge === scratchpadBridge) {
+        delete window.__devToolboxScratchpadBridge;
+      }
+    });
+  }
 }
