@@ -120,6 +120,12 @@ const enExact: Record<string, string> = {
   '离线 GPG 密钥对生成与加解密': 'Offline GPG key generation and encryption/decryption',
   '国密算法套件 (SM2/3/4)': 'Chinese SM Suite (SM2/3/4)',
   '中国商用国密离线加密/签名/哈希套件': 'Offline Chinese commercial cryptography suite for encryption, signing, and hashing',
+  '国密算法安全测试中心 (Chinese Cryptography GB/T Standard)': 'Chinese Cryptography Test Center (GB/T Standard)',
+  '支持中国国家商用密码套件：SM2 椭圆曲线非对称密钥对与签名体检验、SM3 杂凑算法特征码比对及 SM4 分组对称加密（ECB/CBC 模式）的 100% 本地离线处理。': '100% local processing for Chinese commercial cryptography: SM2 elliptic-curve keypairs, encryption and signing, SM3 hashing, and SM4 block encryption in ECB/CBC modes.',
+  '正在从安全 CDN 离线载入国密 SM 算法动力包，请稍候...': 'Loading the SM cryptography package from the secure CDN...',
+  'SM2 非对称与签名': 'SM2 Asymmetric & Signing',
+  'SM3 杂凑计算': 'SM3 Hashing',
+  'SM4 对称分组加密': 'SM4 Block Encryption',
 
   '文本编辑与 Diff 套件': 'Text Editing & Diff Suite',
   '涵盖文本大小写转换、正则测试、比对、排版去重及字数统计的高效文本实验室': 'A text lab for case conversion, regex testing, diffing, cleanup, deduplication, and text statistics',

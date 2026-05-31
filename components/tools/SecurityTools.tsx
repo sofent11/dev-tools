@@ -16,6 +16,75 @@ const useCopyToClipboard = () => {
   return { copied, copy };
 };
 
+interface ZxcvbnResult {
+  score: 0 | 1 | 2 | 3 | 4;
+  guesses_log10?: number;
+  crack_times_display?: {
+    online_no_throttling_10_guesses_per_second?: string;
+    offline_fast_hashing_1e10_per_second?: string;
+  };
+  feedback?: {
+    warning?: string;
+    suggestions: string[];
+  };
+}
+
+type ZxcvbnFn = (password: string) => ZxcvbnResult;
+
+type OpenPgpKeyTypeOptions =
+  | { type: 'ecc'; curve: string; userIDs: Array<{ name: string; email: string }>; passphrase: string }
+  | { type: 'rsa'; rsaBits: number; userIDs: Array<{ name: string; email: string }>; passphrase: string };
+
+interface OpenPgpApi {
+  generateKey(options: OpenPgpKeyTypeOptions): Promise<{ privateKey: string; publicKey: string }>;
+  createMessage(options: { text: string }): Promise<unknown>;
+  readKey(options: { armoredKey: string }): Promise<unknown>;
+  readPrivateKey(options: { armoredKey: string }): Promise<unknown>;
+  readMessage(options: { armoredMessage: string }): Promise<unknown>;
+  readSignature(options: { armoredSignature: string }): Promise<unknown>;
+  decryptKey(options: { privateKey: unknown; passphrase: string }): Promise<unknown>;
+  encrypt(options: { message: unknown; encryptionKeys: unknown }): Promise<string>;
+  decrypt(options: { message: unknown; decryptionKeys: unknown }): Promise<{ data: string }>;
+  sign(options: { message: unknown; signingKeys: unknown; detached: true }): Promise<string>;
+  verify(options: { message: unknown; signature: unknown; verificationKeys: unknown }): Promise<{
+    signatures: Array<{ verified: Promise<boolean> }>;
+  }>;
+}
+
+interface Sm2KeyPair {
+  privateKey: string;
+  publicKey: string;
+}
+
+interface SmCryptoOptions {
+  mode: 'ecb' | 'cbc';
+  padding: 'pkcs7';
+  iv?: string;
+}
+
+interface SmCryptoApi {
+  sm2?: {
+    generateKeyPairHex(): Sm2KeyPair;
+    doEncrypt(plainText: string, publicKey: string, mode: 1): string;
+    doDecrypt(cipherText: string, privateKey: string, mode: 1): string;
+    doSignature(plainText: string, privateKey: string, options: { hash: boolean; der: boolean }): string;
+    doVerifySignature(plainText: string, signature: string, publicKey: string, options: { hash: boolean; der: boolean }): boolean;
+  };
+  sm3?: (input: string) => string;
+  sm4?: {
+    encrypt(plainText: string, key: string, options: SmCryptoOptions): string;
+    decrypt(cipherText: string, key: string, options: SmCryptoOptions): string;
+  };
+}
+
+type CryptoWindow = Window & {
+  zxcvbn?: ZxcvbnFn;
+  openpgp?: OpenPgpApi;
+  smCrypto?: SmCryptoApi;
+};
+
+const cryptoWindow = () => window as CryptoWindow;
+
 // --- JWT Tool ---
 // --- JWT Tool ---
 const base64UrlEncode = (str: string): string => {
@@ -35,8 +104,8 @@ export const JwtTool: React.FC = () => {
 
   // Derived state during render
   let claims: { label: string; value: string }[] = [];
-  let headerObj: Record<string, any> | null = null;
-  let payloadObj: Record<string, any> | null = null;
+  let headerObj: Record<string, unknown> | null = null;
+  let payloadObj: Record<string, unknown> | null = null;
   let parseError: string | null = null;
 
   try {
@@ -48,10 +117,10 @@ export const JwtTool: React.FC = () => {
       claims = [
         payloadObj.iss ? { label: 'Issuer (iss)', value: String(payloadObj.iss) } : null,
         payloadObj.sub ? { label: 'Subject (sub)', value: String(payloadObj.sub) } : null,
-        payloadObj.aud ? { label: 'Audience (aud)', value: Array.isArray(payloadObj.aud) ? payloadObj.aud.join(', ') : String(payloadObj.aud) } : null,
+        payloadObj.aud ? { label: 'Audience (aud)', value: Array.isArray(payloadObj.aud) ? payloadObj.aud.map(String).join(', ') : String(payloadObj.aud) } : null,
         payloadObj.iat ? { label: 'Issued At (iat)', value: toDate(payloadObj.iat) } : null,
         payloadObj.nbf ? { label: 'Not Before (nbf)', value: toDate(payloadObj.nbf) } : null,
-        payloadObj.exp ? { label: 'Expires At (exp)', value: `${toDate(payloadObj.exp)}${Date.now() > payloadObj.exp * 1000 ? '（已过期 ⚠️）' : '（未过期 🟢）'}` } : null,
+        typeof payloadObj.exp === 'number' ? { label: 'Expires At (exp)', value: `${toDate(payloadObj.exp)}${Date.now() > payloadObj.exp * 1000 ? '（已过期 ⚠️）' : '（未过期 🟢）'}` } : null,
       ].filter(Boolean) as { label: string; value: string }[];
     }
   } catch {
@@ -608,7 +677,7 @@ export const PasswordGenTool: React.FC = () => {
 
     // Dynamic injection of zxcvbn.js
     useEffect(() => {
-        if ((window as any).zxcvbn) {
+        if (cryptoWindow().zxcvbn) {
             Promise.resolve().then(() => setZxcvbnLoaded(true));
             return;
         }
@@ -659,8 +728,9 @@ export const PasswordGenTool: React.FC = () => {
 
     // Live derived entropy updates using useMemo instead of useEffect setState
     const entropyResult = useMemo(() => {
-        if (zxcvbnLoaded && (window as any).zxcvbn && password) {
-            return (window as any).zxcvbn(password);
+        const zxcvbn = cryptoWindow().zxcvbn;
+        if (zxcvbnLoaded && zxcvbn && password) {
+            return zxcvbn(password);
         }
         return null;
     }, [password, zxcvbnLoaded]);
@@ -795,7 +865,7 @@ export const PasswordGenTool: React.FC = () => {
                                         {entropyResult.feedback.warning && (
                                             <p className="font-bold mb-1">⚠️ {entropyResult.feedback.warning}</p>
                                         )}
-                                        {entropyResult.feedback.suggestions.map((sug: string, idx: number) => (
+                                        {entropyResult.feedback.suggestions.map((sug, idx) => (
                                             <p key={idx}>• {sug}</p>
                                         ))}
                                     </div>
@@ -850,7 +920,7 @@ export const PgpKeymasterTool: React.FC = () => {
   const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard();
 
   useEffect(() => {
-    if ((window as any).openpgp) {
+    if (cryptoWindow().openpgp) {
       Promise.resolve().then(() => setOpenpgpLoaded(true));
       return;
     }
@@ -871,7 +941,8 @@ export const PgpKeymasterTool: React.FC = () => {
     try {
       setIsLoading(true);
       setError('');
-      const openpgp = (window as any).openpgp;
+      const openpgp = cryptoWindow().openpgp;
+      if (!openpgp) throw new Error('OpenPGP library is not loaded');
       
       const options = genKeyType === 'ecc'
         ? { type: 'ecc' as const, curve: 'curve25519', userIDs: [{ name: genName, email: genEmail }], passphrase: genPassphrase }
@@ -901,7 +972,8 @@ export const PgpKeymasterTool: React.FC = () => {
     }
     try {
       setIsLoading(true);
-      const openpgp = (window as any).openpgp;
+      const openpgp = cryptoWindow().openpgp;
+      if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.createMessage({ text: cryptoText });
       const publicKeyObj = await openpgp.readKey({ armoredKey: cryptoPubKey });
       
@@ -909,7 +981,7 @@ export const PgpKeymasterTool: React.FC = () => {
         message,
         encryptionKeys: publicKeyObj
       });
-      setCryptoResult(encrypted as string);
+      setCryptoResult(encrypted);
       setIsLoading(false);
     } catch (err) {
       alert('加密失败: ' + (err as Error).message);
@@ -924,7 +996,8 @@ export const PgpKeymasterTool: React.FC = () => {
     }
     try {
       setIsLoading(true);
-      const openpgp = (window as any).openpgp;
+      const openpgp = cryptoWindow().openpgp;
+      if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.readMessage({ armoredMessage: cryptoText });
       let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: cryptoPrivKey });
       
@@ -939,7 +1012,7 @@ export const PgpKeymasterTool: React.FC = () => {
         message,
         decryptionKeys: privateKeyObj
       });
-      setCryptoResult(decrypted as string);
+      setCryptoResult(decrypted);
       setIsLoading(false);
     } catch (err) {
       alert('解密失败（请检查私钥或密码是否正确）: ' + (err as Error).message);
@@ -954,7 +1027,8 @@ export const PgpKeymasterTool: React.FC = () => {
     }
     try {
       setIsLoading(true);
-      const openpgp = (window as any).openpgp;
+      const openpgp = cryptoWindow().openpgp;
+      if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.createMessage({ text: signText });
       let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: signPrivKey });
       
@@ -970,8 +1044,8 @@ export const PgpKeymasterTool: React.FC = () => {
         signingKeys: privateKeyObj,
         detached: true
       });
-      setSignResultSignature(signature as string);
-      setVerifySignature(signature as string);
+      setSignResultSignature(signature);
+      setVerifySignature(signature);
       setIsLoading(false);
     } catch (err) {
       alert('签署失败: ' + (err as Error).message);
@@ -986,7 +1060,8 @@ export const PgpKeymasterTool: React.FC = () => {
     }
     try {
       setIsLoading(true);
-      const openpgp = (window as any).openpgp;
+      const openpgp = cryptoWindow().openpgp;
+      if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.createMessage({ text: signText });
       const signatureObj = await openpgp.readSignature({ armoredSignature: verifySignature });
       const publicKeyObj = await openpgp.readKey({ armoredKey: verifyPubKey });
@@ -1335,7 +1410,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
 
   // Load sm-crypto dynamically to keep Vite bundle extremely light
   useEffect(() => {
-    if ((window as any).smCrypto) {
+    if (cryptoWindow().smCrypto) {
       Promise.resolve().then(() => setLoaded(true));
       return;
     }
@@ -1352,9 +1427,10 @@ export const SmCryptoSuiteTool: React.FC = () => {
 
   // SM2 Generators
   const handleSm2Generate = () => {
-    if (!loaded || !(window as any).smCrypto?.sm2) return;
+    const sm2 = cryptoWindow().smCrypto?.sm2;
+    if (!loaded || !sm2) return;
     try {
-      const keypair = (window as any).smCrypto.sm2.generateKeyPairHex();
+      const keypair = sm2.generateKeyPairHex();
       setSm2Pub(keypair.publicKey);
       setSm2Priv(keypair.privateKey);
     } catch (e) {
@@ -1363,14 +1439,15 @@ export const SmCryptoSuiteTool: React.FC = () => {
   };
 
   const handleSm2Encrypt = () => {
-    if (!loaded || !(window as any).smCrypto?.sm2) return;
+    const sm2 = cryptoWindow().smCrypto?.sm2;
+    if (!loaded || !sm2) return;
     if (!sm2Pub) {
       alert('请先生成或配置 SM2 公钥！');
       return;
     }
     try {
       // mode 1 represents C1C3C2 cipher standard
-      const cipher = (window as any).smCrypto.sm2.doEncrypt(sm2Plain, sm2Pub, 1);
+      const cipher = sm2.doEncrypt(sm2Plain, sm2Pub, 1);
       setSm2CipherHex(cipher);
     } catch (e) {
       alert(`SM2 加密失败，请核对公钥格式: ${(e as Error).message}`);
@@ -1378,13 +1455,14 @@ export const SmCryptoSuiteTool: React.FC = () => {
   };
 
   const handleSm2Decrypt = () => {
-    if (!loaded || !(window as any).smCrypto?.sm2) return;
+    const sm2 = cryptoWindow().smCrypto?.sm2;
+    if (!loaded || !sm2) return;
     if (!sm2Priv) {
       alert('请配置 SM2 私钥！');
       return;
     }
     try {
-      const decrypted = (window as any).smCrypto.sm2.doDecrypt(sm2CipherHex, sm2Priv, 1);
+      const decrypted = sm2.doDecrypt(sm2CipherHex, sm2Priv, 1);
       setSm2Decrypted(decrypted);
     } catch (e) {
       alert(`SM2 解密失败，请核对私钥或密文: ${(e as Error).message}`);
@@ -1392,13 +1470,14 @@ export const SmCryptoSuiteTool: React.FC = () => {
   };
 
   const handleSm2Sign = () => {
-    if (!loaded || !(window as any).smCrypto?.sm2) return;
+    const sm2 = cryptoWindow().smCrypto?.sm2;
+    if (!loaded || !sm2) return;
     if (!sm2Priv) {
       alert('请配置 SM2 私钥进行签名！');
       return;
     }
     try {
-      const sig = (window as any).smCrypto.sm2.doSignature(sm2SignPlain, sm2Priv, { hash: true, der: true });
+      const sig = sm2.doSignature(sm2SignPlain, sm2Priv, { hash: true, der: true });
       setSm2SignatureHex(sig);
     } catch (e) {
       alert(`SM2 签名计算失败: ${(e as Error).message}`);
@@ -1406,13 +1485,14 @@ export const SmCryptoSuiteTool: React.FC = () => {
   };
 
   const handleSm2Verify = () => {
-    if (!loaded || !(window as any).smCrypto?.sm2) return;
+    const sm2 = cryptoWindow().smCrypto?.sm2;
+    if (!loaded || !sm2) return;
     if (!sm2Pub || !sm2SignatureHex) {
       alert('请配置公钥与待验签的十六进制签名串！');
       return;
     }
     try {
-      const isValid = (window as any).smCrypto.sm2.doVerifySignature(sm2SignPlain, sm2SignatureHex, sm2Pub, { hash: true, der: true });
+      const isValid = sm2.doVerifySignature(sm2SignPlain, sm2SignatureHex, sm2Pub, { hash: true, der: true });
       setSm2VerifyResult(isValid ? 'valid' : 'invalid');
     } catch {
       setSm2VerifyResult('invalid');
@@ -1421,9 +1501,10 @@ export const SmCryptoSuiteTool: React.FC = () => {
 
   // SM3 Calculations
   const sm3Result = useMemo(() => {
-    if (!loaded || !(window as any).smCrypto?.sm3) return '';
+    const sm3 = cryptoWindow().smCrypto?.sm3;
+    if (!loaded || !sm3) return '';
     try {
-      return (window as any).smCrypto.sm3(sm3Input).toUpperCase();
+      return sm3(sm3Input).toUpperCase();
     } catch {
       return '';
     }
@@ -1431,7 +1512,8 @@ export const SmCryptoSuiteTool: React.FC = () => {
 
   // SM4 Ciphers
   const handleSm4Encrypt = () => {
-    if (!loaded || !(window as any).smCrypto?.sm4) return;
+    const sm4 = cryptoWindow().smCrypto?.sm4;
+    if (!loaded || !sm4) return;
     if (sm4Key.length !== 32) {
       alert('SM4 密钥必须为 32 位 Hex 十六进制字符串 (128 bits / 16 字节)！');
       return;
@@ -1441,11 +1523,11 @@ export const SmCryptoSuiteTool: React.FC = () => {
       return;
     }
     try {
-      const options: any = { mode: sm4Mode, padding: 'pkcs7' };
+      const options: SmCryptoOptions = { mode: sm4Mode, padding: 'pkcs7' };
       if (sm4Mode === 'cbc') {
         options.iv = sm4Iv;
       }
-      const cipher = (window as any).smCrypto.sm4.encrypt(sm4Plain, sm4Key, options);
+      const cipher = sm4.encrypt(sm4Plain, sm4Key, options);
       setSm4CipherHex(cipher);
     } catch (e) {
       alert(`SM4 对称加密失败: ${(e as Error).message}`);
@@ -1453,17 +1535,18 @@ export const SmCryptoSuiteTool: React.FC = () => {
   };
 
   const handleSm4Decrypt = () => {
-    if (!loaded || !(window as any).smCrypto?.sm4) return;
+    const sm4 = cryptoWindow().smCrypto?.sm4;
+    if (!loaded || !sm4) return;
     if (sm4Key.length !== 32) {
       alert('SM4 密钥必须为 32 位 Hex！');
       return;
     }
     try {
-      const options: any = { mode: sm4Mode, padding: 'pkcs7' };
+      const options: SmCryptoOptions = { mode: sm4Mode, padding: 'pkcs7' };
       if (sm4Mode === 'cbc') {
         options.iv = sm4Iv;
       }
-      const decrypted = (window as any).smCrypto.sm4.decrypt(sm4CipherHex, sm4Key, options);
+      const decrypted = sm4.decrypt(sm4CipherHex, sm4Key, options);
       setSm4Plain(decrypted);
     } catch (e) {
       alert(`SM4 对称解密失败，请校验密钥或密文: ${(e as Error).message}`);
