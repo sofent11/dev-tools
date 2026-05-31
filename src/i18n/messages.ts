@@ -214,6 +214,8 @@ const enExact: Record<string, string> = {
   '自动人脸/肩部裁剪': 'Automatic face and shoulder crop',
   'AI 换脸': 'AI Face Swap',
   '本地 WebGL 换脸': 'Local WebGL face swap',
+  '动画帧提取': 'Animation Frame Extraction',
+  '动图与 Lottie 逐帧提取': 'Frame-by-frame extraction for GIFs and Lottie',
 
   'PDF 工具箱': 'PDF Toolbox',
   '合并 / 转图片': 'Merge and convert to images',
