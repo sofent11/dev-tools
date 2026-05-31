@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Check, Copy, RefreshCw } from 'lucide-react';
 import { CronExpressionParser } from 'cron-parser';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -43,26 +43,19 @@ export const ChmodTool: React.FC = () => {
     public: { read: true, write: false, execute: false }, // 4
   });
 
-  const [octal, setOctal] = useState('644');
-  const [symbolic, setSymbolic] = useState('-rw-r--r--');
-
-  const calculate = () => {
+  const { octal, symbolic } = useMemo(() => {
     const calcDigit = (p: typeof permissions.owner) => (p.read ? 4 : 0) + (p.write ? 2 : 0) + (p.execute ? 1 : 0);
     const o = calcDigit(permissions.owner);
     const g = calcDigit(permissions.group);
     const p = calcDigit(permissions.public);
-    
-    setOctal(`${o}${g}${p}`);
 
     const sym = (p: typeof permissions.owner) => 
         (p.read ? 'r' : '-') + (p.write ? 'w' : '-') + (p.execute ? 'x' : '-');
-    
-    setSymbolic(`-${sym(permissions.owner)}${sym(permissions.group)}${sym(permissions.public)}`);
-  };
 
-  useEffect(() => {
-    calculate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return {
+      octal: `${o}${g}${p}`,
+      symbolic: `-${sym(permissions.owner)}${sym(permissions.group)}${sym(permissions.public)}`,
+    };
   }, [permissions]);
 
   const toggle = (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => {
