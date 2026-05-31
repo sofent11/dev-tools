@@ -1,7 +1,8 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FileCode, FolderArchive
 } from 'lucide-react';
+import JSZip from 'jszip';
 import { useScratchpadStore } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
@@ -54,9 +55,38 @@ export default function App() {
 
   // Zustand Global Scratchpad Store State
   const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const scratchpadItems = useScratchpadStore((state) => state.items);
   const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
   const clearScratchpad = useScratchpadStore((state) => state.clearAll);
+
+  const handleExportZip = async (itemsToExport: typeof scratchpadItems) => {
+    if (itemsToExport.length === 0) return;
+    try {
+      const zip = new JSZip();
+      itemsToExport.forEach(item => {
+        let ext = '.txt';
+        if (item.type === 'svg' || item.name.endsWith('.svg')) ext = '';
+        else if (item.type === 'json' || item.name.endsWith('.json')) ext = '';
+        else if (item.type === 'jsx' || item.name.endsWith('.jsx')) ext = '';
+        else if (item.type === 'tsx' || item.name.endsWith('.tsx')) ext = '';
+        
+        const fileName = item.name.includes('.') ? item.name : `${item.name}${ext}`;
+        zip.file(fileName, item.content);
+      });
+      const blobContent = await zip.generateAsync({ type: 'blob' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blobContent);
+      link.download = `scratchpad_${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (err) {
+      alert('打包 ZIP 失败: ' + (err as Error).message);
+    }
+  };
 
   useEffect(() => {
     if (isDarkMode) {
@@ -336,18 +366,74 @@ export default function App() {
               </button>
             </div>
 
+            {/* Header controls bar for multi-select */}
+            {scratchpadItems.length > 0 && (
+              <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-xl mt-2 flex-none border border-slate-150 dark:border-slate-850 text-xs">
+                <button
+                  onClick={() => {
+                    setIsMultiSelectMode(!isMultiSelectMode);
+                    setSelectedIds([]);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg text-primary-600 font-bold hover:bg-slate-150 dark:hover:bg-slate-850 transition-colors"
+                >
+                  {isMultiSelectMode ? '常规模式' : '开启打包多选'}
+                </button>
+
+                {isMultiSelectMode && (
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => {
+                        if (selectedIds.length === scratchpadItems.length) {
+                          setSelectedIds([]);
+                        } else {
+                          setSelectedIds(scratchpadItems.map(item => item.id));
+                        }
+                      }}
+                      className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-250 transition-colors"
+                    >
+                      {selectedIds.length === scratchpadItems.length ? '取消' : '全选'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const itemsToZip = scratchpadItems.filter(item => selectedIds.includes(item.id));
+                        handleExportZip(itemsToZip);
+                      }}
+                      disabled={selectedIds.length === 0}
+                      className="px-2.5 py-1 rounded bg-primary-600 text-white font-bold disabled:bg-slate-200 disabled:dark:bg-slate-850 disabled:text-slate-400 hover:bg-primary-700 transition-colors flex items-center gap-1 active:scale-95 transition-transform"
+                    >
+                      <FolderArchive className="w-3.5 h-3.5" />
+                      <span>ZIP ({selectedIds.length})</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto py-3 space-y-3 pr-1 scrollbar-thin">
               {scratchpadItems.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
                   <ClipboardList className="w-12 h-12 text-slate-300 dark:text-slate-800 stroke-1" />
                   <span className="font-bold">暂存箱暂无内容</span>
                   <p className="text-[10px] text-slate-500 text-center max-w-[220px] leading-relaxed">
-                    您可以在 Mock数据、图片矢量化、Hex查看器 等工具中直接点击“送入暂存箱”将数据路由到此处。
+                    您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。
                   </p>
                 </div>
               ) : (
                 scratchpadItems.map(item => (
-                  <ScratchpadItemCard key={item.id} item={item} onRemove={removeScratchpadItem} />
+                  <ScratchpadItemCard 
+                    key={item.id} 
+                    item={item} 
+                    onRemove={removeScratchpadItem} 
+                    isMultiSelectMode={isMultiSelectMode}
+                    isSelected={selectedIds.includes(item.id)}
+                    onToggleSelect={() => {
+                      if (selectedIds.includes(item.id)) {
+                        setSelectedIds(selectedIds.filter(id => id !== item.id));
+                      } else {
+                        setSelectedIds([...selectedIds, item.id]);
+                      }
+                    }}
+                  />
                 ))
               )}
             </div>
@@ -370,7 +456,13 @@ export default function App() {
   );
 }
 
-const ScratchpadItemCard: React.FC<{ item: any; onRemove: (id: string) => void }> = ({ item, onRemove }) => {
+const ScratchpadItemCard: React.FC<{
+  item: any;
+  onRemove: (id: string) => void;
+  isMultiSelectMode: boolean;
+  isSelected: boolean;
+  onToggleSelect: () => void;
+}> = ({ item, onRemove, isMultiSelectMode, isSelected, onToggleSelect }) => {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -388,43 +480,114 @@ const ScratchpadItemCard: React.FC<{ item: any; onRemove: (id: string) => void }
     URL.revokeObjectURL(link.href);
   };
 
+  const isSvg = item.type === 'svg' || (item.content.trim().startsWith('<svg') && item.content.includes('</svg>'));
+  const isJson = item.type === 'json' || (() => {
+    try {
+      const trimmed = item.content.trim();
+      return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    } catch {
+      return false;
+    }
+  })();
+
+  const jsonBadge = useMemo(() => {
+    if (!isJson) return '';
+    try {
+      const parsed = JSON.parse(item.content);
+      if (Array.isArray(parsed)) return `Array (${parsed.length})`;
+      if (typeof parsed === 'object' && parsed !== null) return `Object (${Object.keys(parsed).length} keys)`;
+    } catch (e) { /* ignore */ }
+    return 'JSON';
+  }, [item.content, isJson]);
+
   return (
-    <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs relative group transition-all hover:shadow-sm">
-      <div className="flex justify-between items-start">
-        <div className="min-w-0 flex-1 pr-2">
-          <p className="font-bold text-slate-800 dark:text-slate-200 truncate font-mono text-[11px]" title={item.name}>
-            {item.name}
-          </p>
-          <span className="text-[9px] text-slate-400 block mt-0.5">
-            {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} 字符
-          </span>
+    <div 
+      onClick={() => isMultiSelectMode && onToggleSelect()}
+      className={`p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl space-y-2 text-xs relative group transition-all hover:shadow-sm flex gap-2.5 ${
+        isMultiSelectMode ? 'cursor-pointer' : ''
+      } ${
+        isSelected ? 'border-primary-400 bg-primary-500/5 dark:bg-primary-550/10' : 'border-slate-200 dark:border-slate-800'
+      }`}
+    >
+      {isMultiSelectMode && (
+        <div className="flex items-center shrink-0" onClick={e => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onToggleSelect}
+            className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500 cursor-pointer"
+          />
         </div>
-        <div className="flex gap-1 shrink-0">
-          <button 
-            onClick={handleCopy}
-            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-            title="复制"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-          <button 
-            onClick={handleDownload}
-            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-            title="下载"
-          >
-            <Download className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            onClick={() => onRemove(item.id)}
-            className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 transition-colors"
-            title="删除"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+      )}
+      <div className="flex-1 min-w-0 space-y-2">
+        <div className="flex justify-between items-start">
+          <div className="min-w-0 flex-1 pr-2">
+            <p className="font-bold text-slate-800 dark:text-slate-200 truncate font-mono text-[11px]" title={item.name}>
+              {item.name}
+            </p>
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="text-[9px] text-slate-400">
+                {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} 字符
+              </span>
+              {isJson && (
+                <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
+                  {jsonBadge}
+                </span>
+              )}
+              {isSvg && (
+                <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
+                  SVG 矢量图
+                </span>
+              )}
+            </div>
+          </div>
+          {!isMultiSelectMode && (
+            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              <button 
+                onClick={handleCopy}
+                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                title="复制"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+              <button 
+                onClick={handleDownload}
+                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                title="下载"
+              >
+                <Download className="w-3.5 h-3.5" />
+              </button>
+              <button 
+                onClick={() => onRemove(item.id)}
+                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 transition-colors"
+                title="删除"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
         </div>
-      </div>
-      <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded font-mono text-[10px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none">
-        {item.content.slice(0, 300)}{item.content.length > 300 ? '...' : ''}
+
+        {/* Preview dynamic cards */}
+        {isSvg ? (
+          <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-checkerboard p-1 overflow-hidden hover:scale-[1.02] transition-transform duration-200">
+            <div className="h-full w-auto max-w-full flex items-center justify-center select-none" dangerouslySetInnerHTML={{ __html: item.content }} />
+          </div>
+        ) : isJson ? (
+          <div className="p-2 bg-slate-900 dark:bg-slate-950 border border-slate-850 rounded-lg font-mono text-[9px] text-emerald-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none leading-normal">
+            {(() => {
+              try {
+                return JSON.stringify(JSON.parse(item.content), null, 2).slice(0, 180) + (item.content.length > 180 ? '...' : '');
+              } catch {
+                return item.content.slice(0, 150) + '...';
+              }
+            })()}
+          </div>
+        ) : (
+          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg font-mono text-[9px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none">
+            {item.content.slice(0, 180)}{item.content.length > 180 ? '...' : ''}
+          </div>
+        )}
       </div>
     </div>
   );

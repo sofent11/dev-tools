@@ -550,3 +550,417 @@ export const SvgOptimizerTool: React.FC = () => {
     </Card>
   );
 };
+
+// ================= HTML to JSX Tool =================
+export const HtmlToJsxTool: React.FC = () => {
+  const [html, setHtml] = useState(
+    `<div class="card" style="margin-top: 10px; background: #fff">\n  <label for="username">Username</label>\n  <input type="text" id="username" class="input-field" disabled>\n  <hr>\n</div>`
+  );
+  const [wrapFragment, setWrapFragment] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
+
+  const jsxResult = useMemo(() => {
+    if (!html.trim()) return '';
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<body>${html}</body>`, 'text/html');
+      const nodes = Array.from(doc.body.childNodes);
+      
+      if (nodes.length === 0) return '';
+      
+      const serializeNode = (node: Node, depth: number): string => {
+        const indent = '  '.repeat(depth);
+        
+        if (node.nodeType === Node.TEXT_NODE) {
+          const text = node.nodeValue || '';
+          if (!text.trim()) return text;
+          return text.replace(/[{}]/g, m => `{'${m}'}`);
+        }
+        
+        if (node.nodeType === Node.COMMENT_NODE) {
+          return `${indent}{/* ${node.nodeValue?.trim()} */}`;
+        }
+        
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as Element;
+          const tagName = el.tagName.toLowerCase();
+          
+          const attrs: string[] = [];
+          for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes[i];
+            let name = attr.name.toLowerCase();
+            const val = attr.value;
+            
+            if (name === 'class') name = 'className';
+            else if (name === 'for') name = 'htmlFor';
+            else if (name === 'tabindex') name = 'tabIndex';
+            else if (name === 'autofocus') name = 'autoFocus';
+            else if (name === 'autocomplete') name = 'autoComplete';
+            else if (name === 'readonly') name = 'readOnly';
+            else if (name === 'maxlength') name = 'maxLength';
+            else if (name === 'colspan') name = 'colSpan';
+            else if (name === 'rowspan') name = 'rowSpan';
+            else if (name === 'contenteditable') name = 'contentEditable';
+            else if (name.startsWith('on')) {
+              name = 'on' + name.slice(2).charAt(0).toUpperCase() + name.slice(3);
+            } else if (name.includes('-') && !name.startsWith('data-') && !name.startsWith('aria-')) {
+              name = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
+            }
+            
+            if (name === 'style') {
+              const styleObj: Record<string, string> = {};
+              val.split(';').forEach(rule => {
+                const parts = rule.split(':');
+                if (parts.length >= 2) {
+                  const key = parts[0].trim().replace(/-([a-z])/g, g => g[1].toUpperCase());
+                  const value = parts.slice(1).join(':').trim();
+                  if (key && value) {
+                    styleObj[key] = value;
+                  }
+                }
+              });
+              const styleStr = Object.entries(styleObj)
+                .map(([k, v]) => `  ${k}: '${v.replace(/'/g, "\\'")}'`)
+                .join(',\n');
+              attrs.push(`style={{ \n${styleStr}\n}}`);
+            } else {
+              const booleans = ['disabled', 'checked', 'required', 'readOnly', 'multiple', 'autoFocus', 'hidden'];
+              if (booleans.includes(name)) {
+                attrs.push(name);
+              } else {
+                attrs.push(`${name}="${val.replace(/"/g, '&quot;')}"`);
+              }
+            }
+          }
+          
+          const attrsStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
+          const selfClosing = ['img', 'input', 'br', 'hr', 'meta', 'link', 'area', 'col', 'embed', 'source', 'track', 'wbr'];
+          if (selfClosing.includes(tagName) && el.childNodes.length === 0) {
+            return `${indent}<${tagName}${attrsStr} />`;
+          }
+          
+          let children = '';
+          let hasComplex = false;
+          el.childNodes.forEach(child => {
+            if (child.nodeType === Node.ELEMENT_NODE) hasComplex = true;
+            const childStr = serializeNode(child, depth + 1);
+            if (childStr) children += childStr;
+          });
+          
+          if (hasComplex) {
+            return `${indent}<${tagName}${attrsStr}>\n${children}\n${indent}</${tagName}>`;
+          } else {
+            return `${indent}<${tagName}${attrsStr}>${children.trim()}</${tagName}>`;
+          }
+        }
+        return '';
+      };
+      
+      const filteredNodes = nodes.filter(n => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()));
+      
+      let finalJsx = '';
+      if (wrapFragment || filteredNodes.length > 1) {
+        finalJsx = `<>\n${filteredNodes.map(n => serializeNode(n, 1)).join('\n')}\n</>`;
+      } else if (filteredNodes.length === 1) {
+        finalJsx = serializeNode(filteredNodes[0], 0);
+      }
+      
+      return finalJsx;
+    } catch (e) {
+      return '编译 HTML 出错: ' + (e as Error).message;
+    }
+  }, [html, wrapFragment]);
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader
+        title="HTML 转 JSX 智能编译器"
+        description="将原生 HTML 极速、精确地转换为 React JSX 格式，自动转换 class, style, label-for 等属性。"
+        actions={
+          <div className="flex items-center gap-4 text-xs">
+            <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={wrapFragment}
+                onChange={event => setWrapFragment(event.target.checked)}
+                className="rounded text-primary-600 focus:ring-primary-400"
+              />
+              <span>强制 Fragment 包裹</span>
+            </label>
+            <Button size="sm" variant="secondary" disabled={!jsxResult} onClick={() => copy(jsxResult)}>
+              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+              <span className="ml-1">复制 JSX</span>
+            </Button>
+          </div>
+        }
+      />
+      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
+        <div className="flex min-h-0 flex-col gap-2">
+          <FieldLabel>HTML 源代码</FieldLabel>
+          <Textarea
+            className="min-h-0 flex-1 font-mono text-xs leading-relaxed"
+            value={html}
+            onChange={event => setHtml(event.target.value)}
+          />
+        </div>
+        <div className="flex min-h-0 flex-col gap-2">
+          <FieldLabel>React JSX 输出</FieldLabel>
+          <CodePanel className="min-h-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
+            {jsxResult || '// 转换结果将在这里实时显示'}
+          </CodePanel>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+// ================= SVG to React Tool =================
+export const SvgToReactTool: React.FC = () => {
+  const [svg, setSvg] = useState(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">\n  <circle cx="12" cy="12" r="10" />\n  <path d="M12 8v4l3 3" />\n</svg>`
+  );
+  const [componentName, setComponentName] = useState('MyCustomIcon');
+  const [isTs, setIsTs] = useState(true);
+  const [useForwardRef, setUseForwardRef] = useState(true);
+  const [removeDimensions, setRemoveDimensions] = useState(true);
+  const [useCurrentColor, setUseCurrentColor] = useState(true);
+  const [customSize, setCustomSize] = useState(true);
+  
+  const { copied, copy } = useCopyToClipboard();
+
+  const reactComponentCode = useMemo(() => {
+    if (!svg.trim()) return '';
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svg.trim(), 'image/svg+xml');
+      const svgEl = doc.querySelector('svg');
+      if (!svgEl) return '// 错误：无法在输入中找到 <svg> 元素';
+
+      const name = componentName.trim().replace(/[^a-zA-Z0-9]/g, '') || 'SvgIcon';
+      const attributes: string[] = [];
+      const viewBox = svgEl.getAttribute('viewBox') || '0 0 24 24';
+
+      for (let i = 0; i < svgEl.attributes.length; i++) {
+        const attr = svgEl.attributes[i];
+        const attrName = attr.name.toLowerCase();
+        let val = attr.value;
+
+        if (attrName === 'viewbox' || attrName === 'xmlns') continue;
+        if (removeDimensions && (attrName === 'width' || attrName === 'height')) continue;
+
+        let reactName = attrName;
+        if (attrName.includes('-')) {
+          reactName = attrName.replace(/-([a-z])/g, g => g[1].toUpperCase());
+        }
+
+        if (useCurrentColor && (attrName === 'fill' || attrName === 'stroke')) {
+          if (val !== 'none') val = 'currentColor';
+        }
+
+        attributes.push(`${reactName}="${val}"`);
+      }
+
+      if (customSize) {
+        attributes.push('width={size}');
+        attributes.push('height={size}');
+      } else if (!removeDimensions) {
+        const w = svgEl.getAttribute('width');
+        const h = svgEl.getAttribute('height');
+        if (w) attributes.push(`width="${w}"`);
+        if (h) attributes.push(`height="${h}"`);
+      }
+
+      const serializeSvgNode = (node: Node): string => {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as Element;
+          const tagName = el.tagName.toLowerCase();
+          const attrs: string[] = [];
+
+          for (let i = 0; i < el.attributes.length; i++) {
+            const attr = el.attributes[i];
+            let name = attr.name;
+            let val = attr.value;
+
+            if (name.includes('-')) {
+              name = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
+            }
+
+            if (useCurrentColor && (attr.name === 'fill' || attr.name === 'stroke')) {
+              if (val !== 'none') val = 'currentColor';
+            }
+
+            if (name === 'style') {
+              const styleObj: Record<string, string> = {};
+              val.split(';').forEach(rule => {
+                const parts = rule.split(':');
+                if (parts.length >= 2) {
+                  const key = parts[0].trim().replace(/-([a-z])/g, g => g[1].toUpperCase());
+                  const value = parts.slice(1).join(':').trim();
+                  if (key && value) styleObj[key] = value;
+                }
+              });
+              const styleStr = Object.entries(styleObj)
+                .map(([k, v]) => `${k}: '${v}'`)
+                .join(', ');
+              attrs.push(`style={{ ${styleStr} }}`);
+            } else {
+              attrs.push(`${name}="${val}"`);
+            }
+          }
+
+          const attrsStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
+          const selfClosing = ['path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'stop', 'use', 'image'];
+          if (selfClosing.includes(tagName) && el.childNodes.length === 0) {
+            return `<${tagName}${attrsStr} />`;
+          }
+
+          let children = '';
+          el.childNodes.forEach(child => {
+            children += serializeSvgNode(child);
+          });
+
+          return `<${tagName}${attrsStr}>${children}</${tagName}>`;
+        }
+        if (node.nodeType === Node.TEXT_NODE) {
+          return node.nodeValue || '';
+        }
+        return '';
+      };
+
+      let childrenStr = '';
+      svgEl.childNodes.forEach(child => {
+        childrenStr += serializeSvgNode(child);
+      });
+
+      let code = '';
+      if (useForwardRef) {
+        code += `import React, { forwardRef } from 'react';\n\n`;
+      } else {
+        code += `import React from 'react';\n\n`;
+      }
+
+      if (isTs) {
+        if (customSize) {
+          code += `interface ${name}Props extends React.SVGProps<SVGSVGElement> {\n  size?: number | string;\n}\n\n`;
+        } else {
+          code += `type ${name}Props = React.SVGProps<SVGSVGElement>;\n\n`;
+        }
+      }
+
+      if (useForwardRef) {
+        if (isTs) {
+          code += `export const ${name} = forwardRef<SVGSVGElement, ${name}Props>((\n  { ${customSize ? 'size = 24, ' : ''}...props },\n  ref\n) => {\n`;
+        } else {
+          code += `export const ${name} = forwardRef((\n  { ${customSize ? 'size = 24, ' : ''}...props },\n  ref\n) => {\n`;
+        }
+      } else {
+        if (isTs) {
+          code += `export const ${name}: React.FC<${name}Props> = ({\n  ${customSize ? 'size = 24, ' : ''}...props\n}) => {\n`;
+        } else {
+          code += `export const ${name} = ({\n  ${customSize ? 'size = 24, ' : ''}...props\n}) => {\n`;
+        }
+      }
+
+      code += `  return (\n`;
+      const refProp = useForwardRef ? ' ref={ref}' : '';
+      code += `    <svg\n`;
+      code += `      viewBox="${viewBox}"\n`;
+      if (refProp) code += `     ${refProp}\n`;
+      
+      attributes.forEach(attr => {
+        code += `      ${attr}\n`;
+      });
+      
+      code += `      {...props}\n`;
+      code += `    >\n`;
+      
+      const indentedChildren = childrenStr
+        .trim()
+        .replace(/></g, '>\n<')
+        .split('\n')
+        .map(line => `      ${line}`)
+        .join('\n');
+        
+      code += indentedChildren + '\n';
+      code += `    </svg>\n`;
+      code += `  );\n`;
+      
+      if (useForwardRef) {
+        code += `});\n\n`;
+        code += `${name}.displayName = '${name}';\n`;
+      } else {
+        code += `};\n`;
+      }
+
+      return code;
+    } catch (e) {
+      return '// 转换 SVG 出错: ' + (e as Error).message;
+    }
+  }, [svg, componentName, isTs, useForwardRef, removeDimensions, useCurrentColor, customSize]);
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader
+        title="SVG 转 React JSX/TSX 组件"
+        description="一键将 SVG 转换为生产级的 React / TSX 矢量图标组件，支持 TypeScript、forwardRef 引用、自动 currentColor 及弹性尺寸。"
+        actions={
+          <Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => copy(reactComponentCode)}>
+            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+            <span className="ml-1">复制 React 组件</span>
+          </Button>
+        }
+      />
+      <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <div>
+            <FieldLabel>组件命名</FieldLabel>
+            <Input value={componentName} onChange={e => setComponentName(e.target.value)} placeholder="e.g. MyIcon" />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
+              <input type="checkbox" checked={isTs} onChange={e => setIsTs(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>TypeScript (TSX)</span>
+            </label>
+            <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
+              <input type="checkbox" checked={useForwardRef} onChange={e => setUseForwardRef(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>forwardRef</span>
+            </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
+              <input type="checkbox" checked={removeDimensions} onChange={e => setRemoveDimensions(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>清理硬编码宽高 (width/height)</span>
+            </label>
+            <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
+              <input type="checkbox" checked={useCurrentColor} onChange={e => setUseCurrentColor(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>自动替换颜色为 currentColor</span>
+            </label>
+            <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
+              <input type="checkbox" checked={customSize} onChange={e => setCustomSize(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
+              <span>注入弹性 size 属性 (默认为 24)</span>
+            </label>
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <FieldLabel>原始 SVG 源码</FieldLabel>
+            <Textarea
+              className="h-44 font-mono text-[10px] leading-normal"
+              value={svg}
+              onChange={e => setSvg(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-col gap-2">
+          <FieldLabel>React 组件代码</FieldLabel>
+          <CodePanel className="min-h-[26rem] flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
+            {reactComponentCode || '// 组件输出将在这里实时渲染'}
+          </CodePanel>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+

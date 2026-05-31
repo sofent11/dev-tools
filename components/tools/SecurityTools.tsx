@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCcw, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { RefreshCcw, Copy, Check, Lock, Unlock, Info } from 'lucide-react';
 import md5 from 'blueimp-md5';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { FieldLabel, Input } from '../ui/ToolUi';
+import { FieldLabel, Input, Select } from '../ui/ToolUi';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -54,7 +54,7 @@ export const JwtTool: React.FC = () => {
         payloadObj.exp ? { label: 'Expires At (exp)', value: `${toDate(payloadObj.exp)}${Date.now() > payloadObj.exp * 1000 ? '（已过期 ⚠️）' : '（未过期 🟢）'}` } : null,
       ].filter(Boolean) as { label: string; value: string }[];
     }
-  } catch (err) {
+  } catch {
     parseError = "JSON 格式解析失败，请检查语法";
   }
 
@@ -593,7 +593,7 @@ export const HmacTool: React.FC = () => {
   );
 }
 
-// --- Password Generator Tool ---
+// --- Password Generator Tool & Real-Time Entropy Estimator ---
 export const PasswordGenTool: React.FC = () => {
     const [length, setLength] = useState(16);
     const [options, setOptions] = useState({
@@ -602,8 +602,25 @@ export const PasswordGenTool: React.FC = () => {
         numbers: true,
         symbols: true,
     });
+    const [password, setPassword] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [zxcvbnLoaded, setZxcvbnLoaded] = useState(false);
 
-    // Pure function for generation
+    // Dynamic injection of zxcvbn.js
+    useEffect(() => {
+        if ((window as any).zxcvbn) {
+            Promise.resolve().then(() => setZxcvbnLoaded(true));
+            return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js';
+        script.async = true;
+        script.onload = () => {
+            Promise.resolve().then(() => setZxcvbnLoaded(true));
+        };
+        document.body.appendChild(script);
+    }, []);
+
     const generatePassword = useCallback((len: number, opts: typeof options) => {
         const chars = {
             uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -629,18 +646,24 @@ export const PasswordGenTool: React.FC = () => {
         return res;
     }, []);
 
-    const [password, setPassword] = useState(() => {
-        // Init logic duplicated or we can define function outside component
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+~`|}{[]:;?><,./-=';
-        let res = '';
-        const array = new Uint32Array(16);
-        crypto.getRandomValues(array);
-        for (let i = 0; i < 16; i++) {
-            res += chars[array[i] % chars.length];
+    // Initial password generation on mount or load
+    useEffect(() => {
+        const initialPass = generatePassword(16, {
+            uppercase: true,
+            lowercase: true,
+            numbers: true,
+            symbols: true,
+        });
+        Promise.resolve().then(() => setPassword(initialPass));
+    }, [generatePassword]);
+
+    // Live derived entropy updates using useMemo instead of useEffect setState
+    const entropyResult = useMemo(() => {
+        if (zxcvbnLoaded && (window as any).zxcvbn && password) {
+            return (window as any).zxcvbn(password);
         }
-        return res;
-    });
-    const [copied, setCopied] = useState(false);
+        return null;
+    }, [password, zxcvbnLoaded]);
 
     const generate = useCallback(() => {
         setPassword(generatePassword(length, options));
@@ -649,72 +672,637 @@ export const PasswordGenTool: React.FC = () => {
     const handleLengthChange = (v: number) => {
         setLength(v);
         setPassword(generatePassword(v, options));
-    }
+    };
 
     const handleOptionChange = (key: keyof typeof options) => {
         const newOpts = {...options, [key]: !options[key]};
         setOptions(newOpts);
         setPassword(generatePassword(length, newOpts));
-    }
+    };
 
     const copyPass = () => {
         navigator.clipboard.writeText(password);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    }
+    };
+
+    const scoreInfo = useMemo(() => {
+        if (!entropyResult) return { width: '0%', color: 'bg-slate-200', text: '计算中...' };
+        const score = entropyResult.score;
+        switch (score) {
+            case 0: return { width: '15%', color: 'bg-rose-500', text: '危！极易破解 ⚠️' };
+            case 1: return { width: '35%', color: 'bg-orange-500', text: '弱！低安全 ⚠️' };
+            case 2: return { width: '60%', color: 'bg-amber-500', text: '中！中等安全 🟡' };
+            case 3: return { width: '80%', color: 'bg-emerald-400', text: '强！高安全 🟢' };
+            case 4: return { width: '100%', color: 'bg-emerald-600', text: '极强！军事级安全 🛡️' };
+            default: return { width: '0%', color: 'bg-slate-200', text: '未知' };
+        }
+    }, [entropyResult]);
 
     return (
         <Card className="h-full flex flex-col">
             <CardHeader 
-                title="密码生成器" 
-                description="生成高强度随机密码。" 
+                title="密码生成与 Zxcvbn 破解时延估算器" 
+                description="生成高强度随机密码，基于 Zxcvbn 熵值算法离线计算破解成本，多维度可视化黑客暴力破解的时延。" 
                 actions={<Button size="sm" onClick={generate} icon={<RefreshCcw className="w-4 h-4"/>}>刷新</Button>}
             />
-            <CardContent className="flex-1 space-y-8">
+            <CardContent className="flex-1 overflow-auto space-y-6">
                 <div className="relative">
-                    <div className="tool-panel flex min-h-[4rem] w-full items-center justify-center break-all p-4 text-center font-mono text-2xl tracking-normal text-slate-950">
-                        {password}
-                    </div>
-                     <Button 
+                    <input 
+                        type="text"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        className="tool-panel flex min-h-[4.5rem] w-full items-center justify-center break-all p-4 text-center font-mono text-xl md:text-2xl tracking-normal text-slate-950 focus:outline-none focus:ring-2 focus:ring-primary-200 bg-white"
+                    />
+                    <Button 
                         size="sm" 
                         variant="ghost"
-                        className="absolute top-2 right-2 bg-white/50 backdrop-blur"
+                        className="absolute top-2 right-2 bg-white/70 backdrop-blur"
                         onClick={copyPass}
                     >
                         {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                     </Button>
                 </div>
 
-                <div className="space-y-6">
-                    <div>
-                         <label className="flex justify-between text-sm font-medium text-slate-700 mb-2">
-                             <span>长度: {length}</span>
-                         </label>
-                         <input 
-                            type="range" 
-                            min="6" 
-                            max="64" 
-                            value={length} 
-                            onChange={e => handleLengthChange(Number(e.target.value))}
-                            className="w-full accent-primary-600"
-                        />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Controls */}
+                    <div className="space-y-4">
+                        <div>
+                             <label className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
+                                 <span>密码长度: {length}</span>
+                             </label>
+                             <input 
+                                type="range" 
+                                min="6" 
+                                max="64" 
+                                value={length} 
+                                onChange={e => handleLengthChange(Number(e.target.value))}
+                                className="w-full accent-primary-600"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            {Object.keys(options).map(key => (
+                                <label key={key} className="tool-panel flex cursor-pointer items-center gap-2.5 p-2.5 transition-colors hover:bg-white text-xs font-semibold">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={options[key as keyof typeof options]}
+                                        onChange={() => handleOptionChange(key as keyof typeof options)}
+                                        className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                                    />
+                                    <span className="capitalize text-slate-700">{key}</span>
+                                </label>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        {Object.keys(options).map(key => (
-                            <label key={key} className="tool-panel flex cursor-pointer items-center gap-3 p-3 transition-colors hover:bg-white">
-                                <input 
-                                    type="checkbox" 
-                                    checked={options[key as keyof typeof options]}
-                                    onChange={() => handleOptionChange(key as keyof typeof options)}
-                                    className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500"
-                                />
-                                <span className="capitalize text-slate-700">{key}</span>
-                            </label>
-                        ))}
+                    {/* Live Entropy Estimations */}
+                    <div className="tool-panel p-4 space-y-4">
+                        <div>
+                            <div className="flex justify-between text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                                <span>安全评级与强度</span>
+                                <span>{scoreInfo.text}</span>
+                            </div>
+                            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                                <div className={`h-full transition-all duration-350 ${scoreInfo.color}`} style={{ width: scoreInfo.width }} />
+                            </div>
+                        </div>
+
+                        {entropyResult ? (
+                            <div className="space-y-2 text-xs">
+                                <div className="border-b pb-2 dark:border-slate-800">
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">估算密码信息熵</div>
+                                    <strong className="font-mono text-sm text-slate-800 dark:text-slate-200">
+                                        {entropyResult.guesses_log10 ? entropyResult.guesses_log10.toFixed(2) : '0.00'} log10 bits
+                                    </strong>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 border-b pb-2 dark:border-slate-800">
+                                    <div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase">在线攻击时延</div>
+                                        <span className="font-semibold text-slate-700 dark:text-slate-350">
+                                            {entropyResult.crack_times_display?.online_no_throttling_10_guesses_per_second || '极速'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase">高速离线哈希攻击</div>
+                                        <span className="font-semibold text-rose-600 dark:text-rose-400">
+                                            {entropyResult.crack_times_display?.offline_fast_hashing_1e10_per_second || '即刻'}
+                                        </span>
+                                    </div>
+                                </div>
+                                {entropyResult.feedback && (entropyResult.feedback.warning || entropyResult.feedback.suggestions.length > 0) && (
+                                    <div className="bg-amber-50 dark:bg-amber-950/20 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/30 text-amber-800 dark:text-amber-400 text-[10px]">
+                                        {entropyResult.feedback.warning && (
+                                            <p className="font-bold mb-1">⚠️ {entropyResult.feedback.warning}</p>
+                                        )}
+                                        {entropyResult.feedback.suggestions.map((sug: string, idx: number) => (
+                                            <p key={idx}>• {sug}</p>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-xs text-slate-400 italic">
+                                {zxcvbnLoaded ? '输入或生成密码以运行安全审计...' : '正在加载密码强度审计计算库...'}
+                            </div>
+                        )}
                     </div>
                 </div>
             </CardContent>
         </Card>
-    )
-}
+    );
+};
+
+// ================= GPG/PGP Offline Keymaster Tool =================
+export const PgpKeymasterTool: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'generate' | 'crypto' | 'sign-verify'>('generate');
+  const [openpgpLoaded, setOpenpgpLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  // Generation state
+  const [genName, setGenName] = useState('Alice Vance');
+  const [genEmail, setGenEmail] = useState('alice@dev.com');
+  const [genPassphrase, setGenPassphrase] = useState('supersecret');
+  const [genKeyType, setGenKeyType] = useState('ecc'); // 'ecc' or '2048' or '4096'
+  const [genPublicKey, setGenPublicKey] = useState('');
+  const [genPrivateKey, setGenPrivateKey] = useState('');
+  
+  // Encryption/Decryption state
+  const [cryptoText, setCryptoText] = useState('Hello World! This is an offline PGP secure message.');
+  const [cryptoPubKey, setCryptoPubKey] = useState('');
+  const [cryptoPrivKey, setCryptoPrivKey] = useState('');
+  const [cryptoPassphrase, setCryptoPassphrase] = useState('');
+  const [cryptoResult, setCryptoResult] = useState('');
+  
+  // Sign/Verify state
+  const [signText, setSignText] = useState('This message is signed by Alice to confirm identity.');
+  const [signPrivKey, setSignPrivKey] = useState('');
+  const [signPassphrase, setSignPassphrase] = useState('');
+  const [signResultSignature, setSignResultSignature] = useState('');
+  const [verifyPubKey, setVerifyPubKey] = useState('');
+  const [verifySignature, setVerifySignature] = useState('');
+  const [verifyStatus, setVerifyStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
+
+  const { copied: genPubCopied, copy: copyGenPub } = useCopyToClipboard();
+  const { copied: genPrivCopied, copy: copyGenPriv } = useCopyToClipboard();
+  const { copied: cryptoResultCopied, copy: copyCryptoResult } = useCopyToClipboard();
+  const { copied: signatureCopied, copy: copySignature } = useCopyToClipboard();
+
+  useEffect(() => {
+    if ((window as any).openpgp) {
+      Promise.resolve().then(() => setOpenpgpLoaded(true));
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js';
+    script.async = true;
+    script.onload = () => {
+      Promise.resolve().then(() => setOpenpgpLoaded(true));
+    };
+    script.onerror = () => {
+      Promise.resolve().then(() => setError('加载 OpenPGP 库失败，请检查网络连接。'));
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  const handleGenerateKeys = async () => {
+    if (!openpgpLoaded) return;
+    try {
+      setIsLoading(true);
+      setError('');
+      const openpgp = (window as any).openpgp;
+      
+      const options = genKeyType === 'ecc'
+        ? { type: 'ecc' as const, curve: 'curve25519', userIDs: [{ name: genName, email: genEmail }], passphrase: genPassphrase }
+        : { type: 'rsa' as const, rsaBits: Number(genKeyType), userIDs: [{ name: genName, email: genEmail }], passphrase: genPassphrase };
+        
+      const { privateKey, publicKey } = await openpgp.generateKey(options);
+      setGenPublicKey(publicKey);
+      setGenPrivateKey(privateKey);
+      
+      // Auto-fill into other tabs for extremely smooth developer UX!
+      setCryptoPubKey(publicKey);
+      setCryptoPrivKey(privateKey);
+      setSignPrivKey(privateKey);
+      setVerifyPubKey(publicKey);
+      
+      setIsLoading(false);
+    } catch (err) {
+      setError('生成密钥对失败: ' + (err as Error).message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleEncrypt = async () => {
+    if (!openpgpLoaded || !cryptoPubKey) {
+      alert('请先输入收件人公钥！');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const openpgp = (window as any).openpgp;
+      const message = await openpgp.createMessage({ text: cryptoText });
+      const publicKeyObj = await openpgp.readKey({ armoredKey: cryptoPubKey });
+      
+      const encrypted = await openpgp.encrypt({
+        message,
+        encryptionKeys: publicKeyObj
+      });
+      setCryptoResult(encrypted as string);
+      setIsLoading(false);
+    } catch (err) {
+      alert('加密失败: ' + (err as Error).message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleDecrypt = async () => {
+    if (!openpgpLoaded || !cryptoPrivKey) {
+      alert('请先输入您的私钥！');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const openpgp = (window as any).openpgp;
+      const message = await openpgp.readMessage({ armoredMessage: cryptoText });
+      let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: cryptoPrivKey });
+      
+      if (cryptoPassphrase) {
+        privateKeyObj = await openpgp.decryptKey({
+          privateKey: privateKeyObj,
+          passphrase: cryptoPassphrase
+        });
+      }
+      
+      const { data: decrypted } = await openpgp.decrypt({
+        message,
+        decryptionKeys: privateKeyObj
+      });
+      setCryptoResult(decrypted as string);
+      setIsLoading(false);
+    } catch (err) {
+      alert('解密失败（请检查私钥或密码是否正确）: ' + (err as Error).message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleSign = async () => {
+    if (!openpgpLoaded || !signPrivKey) {
+      alert('请先输入签署私钥！');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const openpgp = (window as any).openpgp;
+      const message = await openpgp.createMessage({ text: signText });
+      let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: signPrivKey });
+      
+      if (signPassphrase) {
+        privateKeyObj = await openpgp.decryptKey({
+          privateKey: privateKeyObj,
+          passphrase: signPassphrase
+        });
+      }
+      
+      const signature = await openpgp.sign({
+        message,
+        signingKeys: privateKeyObj,
+        detached: true
+      });
+      setSignResultSignature(signature as string);
+      setVerifySignature(signature as string);
+      setIsLoading(false);
+    } catch (err) {
+      alert('签署失败: ' + (err as Error).message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!openpgpLoaded || !verifyPubKey || !verifySignature) {
+      alert('请确保已填入验证公钥与待校验签名！');
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const openpgp = (window as any).openpgp;
+      const message = await openpgp.createMessage({ text: signText });
+      const signatureObj = await openpgp.readSignature({ armoredSignature: verifySignature });
+      const publicKeyObj = await openpgp.readKey({ armoredKey: verifyPubKey });
+      
+      const verificationResult = await openpgp.verify({
+        message,
+        signature: signatureObj,
+        verificationKeys: publicKeyObj
+      });
+      const { signatures } = verificationResult;
+      const isValid = await signatures[0].verified;
+      setVerifyStatus(isValid ? 'valid' : 'invalid');
+      setIsLoading(false);
+    } catch (err) {
+      alert('签名验证失败: ' + (err as Error).message);
+      setVerifyStatus('invalid');
+      setIsLoading(false);
+    }
+  };
+
+  const downloadKey = (armorText: string, filename: string) => {
+    const blob = new Blob([armorText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader
+        title="GPG / PGP 离线安全密钥加解密中心"
+        description="100% 浏览器本地离线运行的 OpenPGP 军事级密码库，支持 ECC/RSA 密钥生成、消息签名、数字签名核验及文本加解密。"
+      />
+      <div className="flex border-b border-slate-200 dark:border-slate-800 px-4">
+        {([
+          ['generate', '生成密钥对'],
+          ['crypto', '文本加密 / 解密'],
+          ['sign-verify', '消息数字签名 / 核验'],
+        ] as const).map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`py-3 px-5 text-xs font-bold border-b-2 transition-all ${
+              activeTab === tab
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <CardContent className="flex-1 overflow-auto min-h-0">
+        {!openpgpLoaded && (
+          <div className="p-3 bg-blue-50 text-blue-700 rounded-xl text-xs mb-4 flex items-center gap-2 animate-pulse">
+            <Info className="w-4 h-4" />
+            <span>正在载入 OpenPGP WebAssembly 密码学安全计算核心，请稍后...</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs mb-4">
+            {error}
+          </div>
+        )}
+
+        {activeTab === 'generate' && (
+          <div className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6 h-full min-h-0">
+            {/* Gen Left Form */}
+            <div className="space-y-4">
+              <div>
+                <FieldLabel>用户名 / UID</FieldLabel>
+                <Input value={genName} onChange={e => setGenName(e.target.value)} placeholder="Alice Vance" />
+              </div>
+              <div>
+                <FieldLabel>邮箱 (Email)</FieldLabel>
+                <Input value={genEmail} onChange={e => setGenEmail(e.target.value)} placeholder="alice@dev.com" />
+              </div>
+              <div>
+                <FieldLabel>私钥保护密码 (Passphrase)</FieldLabel>
+                <Input type="password" value={genPassphrase} onChange={e => setGenPassphrase(e.target.value)} placeholder="守护您的私钥..." />
+              </div>
+              <div>
+                <FieldLabel>算法类型 (Key Type)</FieldLabel>
+                <Select value={genKeyType} onChange={e => setGenKeyType(e.target.value)}>
+                  <option value="ecc">ECC (Curve25519) - 极速/轻量</option>
+                  <option value="2048">RSA-2048 - 传统兼容</option>
+                  <option value="4096">RSA-4096 - 超高安全强度</option>
+                </Select>
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleGenerateKeys}
+                disabled={isLoading || !openpgpLoaded}
+                isLoading={isLoading}
+              >
+                生成 GPG/PGP 密钥对
+              </Button>
+            </div>
+
+            {/* Gen Right Outputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col min-h-0 gap-2">
+                <div className="flex justify-between items-center text-xs">
+                  <FieldLabel>公钥 (Public Key)</FieldLabel>
+                  <div className="flex gap-1.5">
+                    <Button size="xs" variant="secondary" onClick={() => copyGenPub(genPublicKey)} disabled={!genPublicKey}>
+                      {genPubCopied ? '已复制' : '复制'}
+                    </Button>
+                    <Button size="xs" variant="secondary" onClick={() => downloadKey(genPublicKey, 'gpg_public.key')} disabled={!genPublicKey}>
+                      下载
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  className="flex-1 p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[10px] resize-none overflow-auto border border-slate-700"
+                  value={genPublicKey || '点击左侧生成密钥对...'}
+                />
+              </div>
+
+              <div className="flex flex-col min-h-0 gap-2">
+                <div className="flex justify-between items-center text-xs">
+                  <FieldLabel>加密私钥 (Protected Private Key)</FieldLabel>
+                  <div className="flex gap-1.5">
+                    <Button size="xs" variant="secondary" onClick={() => copyGenPriv(genPrivateKey)} disabled={!genPrivateKey}>
+                      {genPrivCopied ? '已复制' : '复制'}
+                    </Button>
+                    <Button size="xs" variant="secondary" onClick={() => downloadKey(genPrivateKey, 'gpg_private.key')} disabled={!genPrivateKey}>
+                      下载
+                    </Button>
+                  </div>
+                </div>
+                <textarea
+                  readOnly
+                  className="flex-1 p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[10px] resize-none overflow-auto border border-slate-700"
+                  value={genPrivateKey || '点击左侧生成密钥对...'}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'crypto' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full min-h-0">
+            {/* Input message and keys */}
+            <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex flex-col min-h-0 flex-1 gap-1.5">
+                <FieldLabel>输入文本消息 (待加密明文 / 待解密密文)</FieldLabel>
+                <textarea
+                  className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white font-mono text-xs focus:outline-none resize-none overflow-auto leading-relaxed"
+                  value={cryptoText}
+                  onChange={e => setCryptoText(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="flex flex-col min-h-[8rem]">
+                  <FieldLabel>收件人公钥 (用于加密)</FieldLabel>
+                  <textarea
+                    className="flex-1 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
+                    value={cryptoPubKey}
+                    onChange={e => setCryptoPubKey(e.target.value)}
+                    placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----..."
+                  />
+                </div>
+                <div className="flex flex-col min-h-[8rem] gap-2">
+                  <div className="flex-1 flex flex-col min-h-0">
+                    <FieldLabel>签署私钥 (用于解密)</FieldLabel>
+                    <textarea
+                      className="flex-1 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
+                      value={cryptoPrivKey}
+                      onChange={e => setCryptoPrivKey(e.target.value)}
+                      placeholder="-----BEGIN PGP PRIVATE KEY BLOCK-----..."
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      type="password"
+                      className="text-xs p-2 h-8"
+                      value={cryptoPassphrase}
+                      onChange={e => setCryptoPassphrase(e.target.value)}
+                      placeholder="私钥保护密码"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <Button className="flex-1" onClick={handleEncrypt} disabled={isLoading || !openpgpLoaded}>
+                  <Lock className="w-4 h-4 mr-1.5" /> 加密消息 (Encrypt)
+                </Button>
+                <Button className="flex-1" variant="secondary" onClick={handleDecrypt} disabled={isLoading || !openpgpLoaded}>
+                  <Unlock className="w-4 h-4 mr-1.5" /> 解密消息 (Decrypt)
+                </Button>
+              </div>
+            </div>
+
+            {/* Results pane */}
+            <div className="flex flex-col gap-2 min-h-0">
+              <div className="flex justify-between items-center text-xs">
+                <FieldLabel>加解密计算结果</FieldLabel>
+                <Button size="xs" variant="secondary" onClick={() => copyCryptoResult(cryptoResult)} disabled={!cryptoResult}>
+                  {cryptoResultCopied ? '已复制' : '复制结果'}
+                </Button>
+              </div>
+              <textarea
+                readOnly
+                className="flex-1 p-4 bg-slate-950 text-emerald-400 rounded-xl font-mono text-[11px] leading-relaxed resize-none overflow-auto border border-slate-850"
+                value={cryptoResult || '// 运行结果将在这里实时显示'}
+              />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'sign-verify' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full min-h-0">
+            {/* Sign & Verify forms */}
+            <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex flex-col min-h-0 flex-1 gap-1.5">
+                <FieldLabel>待处理的文本消息 (Message)</FieldLabel>
+                <textarea
+                  className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white font-mono text-xs focus:outline-none resize-none overflow-auto leading-relaxed"
+                  value={signText}
+                  onChange={e => setSignText(e.target.value)}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Sign inputs */}
+                <div className="space-y-2.5">
+                  <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-primary-500" />
+                    <span>制作数字签名</span>
+                  </h5>
+                  <textarea
+                    className="w-full h-24 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
+                    value={signPrivKey}
+                    onChange={e => setSignPrivKey(e.target.value)}
+                    placeholder="签署者的私钥 -----BEGIN PGP PRIVATE KEY BLOCK-----"
+                  />
+                  <Input
+                    type="password"
+                    className="text-xs p-2 h-8"
+                    value={signPassphrase}
+                    onChange={e => setSignPassphrase(e.target.value)}
+                    placeholder="私钥保护密码 (Passphrase)"
+                  />
+                  <Button className="w-full size-sm" onClick={handleSign} disabled={isLoading || !openpgpLoaded}>
+                    生成签名 (Sign)
+                  </Button>
+                </div>
+
+                {/* Verify inputs */}
+                <div className="space-y-2.5">
+                  <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Unlock className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>核验数字签名</span>
+                  </h5>
+                  <textarea
+                    className="w-full h-24 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
+                    value={verifyPubKey}
+                    onChange={e => setVerifyPubKey(e.target.value)}
+                    placeholder="签署者的公钥 -----BEGIN PGP PUBLIC KEY BLOCK-----"
+                  />
+                  <textarea
+                    className="w-full h-20 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
+                    value={verifySignature}
+                    onChange={e => setVerifySignature(e.target.value)}
+                    placeholder="脱水签名 block -----BEGIN PGP SIGNATURE-----"
+                  />
+                  <Button className="w-full size-sm" variant="secondary" onClick={handleVerify} disabled={isLoading || !openpgpLoaded}>
+                    验证签名有效性 (Verify)
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Results pane */}
+            <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex-1 flex flex-col gap-2 min-h-0">
+                <div className="flex justify-between items-center text-xs">
+                  <FieldLabel>脱水数字签名 (Armored Detached Signature)</FieldLabel>
+                  <Button size="xs" variant="secondary" onClick={() => copySignature(signResultSignature)} disabled={!signResultSignature}>
+                    {signatureCopied ? '已复制' : '复制签名'}
+                  </Button>
+                </div>
+                <textarea
+                  readOnly
+                  className="flex-1 p-3 bg-slate-950 text-indigo-400 rounded-xl font-mono text-[10px] leading-normal resize-none overflow-auto border border-slate-850"
+                  value={signResultSignature || '// 生成的签名 Block 将在此渲染'}
+                />
+              </div>
+
+              {/* Status report */}
+              {verifyStatus === 'valid' && (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping inline-block" />
+                  <span>🟢 <b>签名有效！</b>该消息确由公钥持有者签署，内容未经任何非法篡改。</span>
+                </div>
+              )}
+
+              {verifyStatus === 'invalid' && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-400 text-xs font-semibold flex items-center gap-2.5">
+                  <span>🔴 <b>警告：签名无效！</b>核验公钥不匹配，或消息内容已被串改或损坏。</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};

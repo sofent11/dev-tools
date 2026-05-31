@@ -82,7 +82,7 @@ const generateUuid = () => {
 const eNames = ['Alice', 'Bob', 'Charlie', 'David', 'Eva', 'Frank', 'Grace', 'Henry', 'Ivy', 'Jack', 'Kate', 'Leo'];
 const mailDomains = ['gmail.com', 'outlook.com', 'qq.com', '163.com', 'example.com'];
 
-import { Plus, Trash2, FileJson, Table, Database, Download } from 'lucide-react';
+import { Plus, Trash2, Download } from 'lucide-react';
 
 interface SchemaField {
   id: string;
@@ -115,7 +115,7 @@ export const LoremIpsumTool: React.FC = () => {
   
   const [count, setCount] = useState<number>(20);
   const [sqlTableName, setSqlTableName] = useState<string>('tb_users');
-  const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'sql'>('json');
+  const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'sql' | 'msw' | 'express'>('json');
   
   const [output, setOutput] = useState<string>('');
   const [copied, setCopied] = useState(false);
@@ -185,6 +185,8 @@ export const LoremIpsumTool: React.FC = () => {
       rawData.push(row);
     }
 
+    const tName = sqlTableName.trim() || 'users';
+
     // 2. Export Compiler Engine
     if (exportFormat === 'json') {
       setOutput(JSON.stringify(rawData, null, 2));
@@ -197,7 +199,6 @@ export const LoremIpsumTool: React.FC = () => {
       const rows = rawData.map(row => 
         Object.values(row).map(val => {
           const s = String(val);
-          // Escape quotes and wrap in double quotes if special chars exist
           if (s.includes(',') || s.includes('"') || s.includes('\n')) {
             return `"${s.replace(/"/g, '""')}"`;
           }
@@ -210,9 +211,7 @@ export const LoremIpsumTool: React.FC = () => {
         setOutput('');
         return;
       }
-      const tName = sqlTableName.trim() || 'tb_users';
       const keys = Object.keys(rawData[0]).join(', ');
-      
       const statements = rawData.map(row => {
         const values = Object.values(row).map(val => {
           if (typeof val === 'number') return val;
@@ -221,6 +220,67 @@ export const LoremIpsumTool: React.FC = () => {
         return `INSERT INTO ${tName} (${keys}) VALUES (${values});`;
       });
       setOutput(statements.join('\n'));
+    } else if (exportFormat === 'msw') {
+      const handlerName = tName.replace(/[^a-zA-Z0-9]/g, '');
+      const apiPath = `/api/${handlerName}`;
+      setOutput(`import { http, HttpResponse } from 'msw';
+
+// 定义 Mock 数据集
+const mock${handlerName.charAt(0).toUpperCase() + handlerName.slice(1)}List = ${JSON.stringify(rawData, null, 2)};
+
+export const handlers = [
+  // GET 请求拦截器
+  http.get('${apiPath}', () => {
+    return HttpResponse.json(mock${handlerName.charAt(0).toUpperCase() + handlerName.slice(1)}List);
+  }),
+
+  // POST 新增请求拦截器
+  http.post('${apiPath}', async ({ request }) => {
+    const newRecord = await request.json() as any;
+    newRecord.id = mock${handlerName.charAt(0).toUpperCase() + handlerName.slice(1)}List.length + 1;
+    return HttpResponse.json({
+      success: true,
+      data: newRecord
+    }, { status: 201 });
+  })
+];`);
+    } else if (exportFormat === 'express') {
+      const handlerName = tName.replace(/[^a-zA-Z0-9]/g, '');
+      const apiPath = `/api/${handlerName}`;
+      setOutput(`const express = require('express');
+const router = express.Router();
+
+// Mock 数据集
+const mockData = ${JSON.stringify(rawData, null, 2)};
+
+/**
+ * GET ${apiPath}
+ * 获取 Mock 数据列表
+ */
+router.get('/${handlerName}', (req, res) => {
+  const { limit } = req.query;
+  if (limit) {
+    return res.json(mockData.slice(0, parseInt(limit, 10)));
+  }
+  res.json(mockData);
+});
+
+/**
+ * POST ${apiPath}
+ * 新增 Mock 记录
+ */
+router.post('/${handlerName}', (req, res) => {
+  const newRecord = req.body;
+  newRecord.id = mockData.length + 1;
+  newRecord.created_at = new Date().toISOString();
+  mockData.push(newRecord);
+  res.status(201).json({
+    success: true,
+    data: newRecord
+  });
+});
+
+module.exports = router;`);
     }
   };
 
@@ -234,7 +294,10 @@ export const LoremIpsumTool: React.FC = () => {
     if (!output) return;
     const isJson = exportFormat === 'json';
     const isCsv = exportFormat === 'csv';
-    const ext = isJson ? 'json' : isCsv ? 'csv' : 'sql';
+    const isSql = exportFormat === 'sql';
+    const isMsw = exportFormat === 'msw';
+    
+    const ext = isJson ? 'json' : isCsv ? 'csv' : isSql ? 'sql' : isMsw ? 'ts' : 'js';
     const mime = isJson ? 'application/json' : 'text/plain';
     
     const blob = new Blob([output], { type: mime });
@@ -256,7 +319,7 @@ export const LoremIpsumTool: React.FC = () => {
     <Card className="flex h-full flex-col">
       <CardHeader
         title="可视化 Schema 数据 Mock 发生器"
-        description="支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV 及 SQL INSERT Statements 压测脚本。"
+        description="支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV、SQL 压测脚本，及 MSW 拦截拦截器、Node Express 路由代码。"
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" disabled={!output} onClick={handleCopy} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
@@ -360,34 +423,31 @@ export const LoremIpsumTool: React.FC = () => {
           </div>
 
           {/* Export config bar */}
-          <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3.5 flex-none">
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3.5 flex-none text-xs">
             <div>
               <FieldLabel>输出目标格式</FieldLabel>
-              <div className="grid grid-cols-3 gap-2 mt-1">
-                {(['json', 'csv', 'sql'] as const).map(fmt => (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
+                {(['json', 'csv', 'sql', 'msw', 'express'] as const).map(fmt => (
                   <button
                     key={fmt}
                     onClick={() => setExportFormat(fmt)}
-                    className={`py-1.5 rounded-lg border text-xs font-semibold uppercase flex items-center justify-center gap-1 transition-all ${exportFormat === fmt ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-800'}`}
+                    className={`py-1.5 rounded-lg border text-xs font-semibold uppercase flex items-center justify-center gap-1 transition-all last:col-span-2 last:sm:col-span-1 ${exportFormat === fmt ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-white border-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:border-slate-800'}`}
                   >
-                    {fmt === 'json' ? <FileJson className="w-3.5 h-3.5" /> : fmt === 'csv' ? <Table className="w-3.5 h-3.5" /> : <Database className="w-3.5 h-3.5" />}
                     <span>{fmt}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {exportFormat === 'sql' && (
-              <div className="animate-in fade-in duration-300">
-                <FieldLabel>SQL 导出表名</FieldLabel>
-                <Input 
-                  className="font-mono text-xs font-bold mt-1"
-                  value={sqlTableName}
-                  onChange={e => setSqlTableName(e.target.value)}
-                  placeholder="e.g. tb_users"
-                />
-              </div>
-            )}
+            <div>
+              <FieldLabel>API / 数据库表名</FieldLabel>
+              <Input 
+                className="font-mono text-xs font-bold mt-1"
+                value={sqlTableName}
+                onChange={e => setSqlTableName(e.target.value)}
+                placeholder="e.g. users"
+              />
+            </div>
 
             <div>
               <FieldLabel>生成记录条数</FieldLabel>

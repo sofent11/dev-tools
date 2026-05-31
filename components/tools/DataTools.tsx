@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Check, Copy, Minimize2, Wand2 } from 'lucide-react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Terminal, Info } from 'lucide-react';
 import { format as formatSql, supportedDialects } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -560,6 +560,367 @@ export const JsonSchemaTool: React.FC = () => {
           )}
         </div>
 
+      </CardContent>
+    </Card>
+  );
+};
+
+// ================= SQLite WebAssembly Sandbox =================
+export const SqliteSandboxTool: React.FC = () => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [db, setDb] = useState<any>(null);
+  const [sql, setSql] = useState(
+    `-- 这是一个 WebAssembly SQLite 离线沙箱。\n-- 您可以点击左下角载入测试表，也可以在这里输入并执行任意 SQL 查询。\nSELECT * FROM users;`
+  );
+  
+  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryError, setQueryError] = useState('');
+  const [tables, setTables] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refreshSchema = (activeDb: any) => {
+    if (!activeDb) return;
+    try {
+      const res = activeDb.exec("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+      if (res.length > 0) {
+        const tablesList = res[0].values.map((row: any) => {
+          const tableName = row[0];
+          const createSql = row[1];
+          let cols: { name: string; type: string }[] = [];
+          try {
+            const colRes = activeDb.exec(`PRAGMA table_info(${tableName})`);
+            if (colRes.length > 0) {
+              cols = colRes[0].values.map((c: any) => ({
+                name: c[1],
+                type: c[2]
+              }));
+            }
+          } catch (e) { /* ignore */ }
+          return { name: tableName, sql: createSql, columns: cols };
+        });
+        setTables(tablesList);
+      } else {
+        setTables([]);
+      }
+    } catch (e) {
+      console.error('Failed to load schema', e);
+    }
+  };
+
+  const initDatabase = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      const initSqlJs = (window as any).initSqlJs;
+      const SQL = await initSqlJs({
+        locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+      });
+      const newDb = new SQL.Database();
+      setDb(newDb);
+      
+      // Initialize demo data
+      newDb.run(`
+        CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, role TEXT);
+        CREATE TABLE logs (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
+        
+        INSERT INTO users (name, email, role) VALUES 
+          ('Alice Vance', 'alice@dev.com', 'Administrator'),
+          ('Bob Newman', 'bob@dev.com', 'Developer'),
+          ('Charlie Zheng', 'charlie@dev.com', 'Designer');
+          
+        INSERT INTO logs (user_id, action) VALUES 
+          (1, 'Login'),
+          (2, 'Git Commit'),
+          (1, 'Database Export');
+      `);
+      
+      refreshSchema(newDb);
+      const res = newDb.exec('SELECT * FROM users;');
+      setQueryResult(res);
+      setIsLoading(false);
+    } catch (err) {
+      setError('初始化 WASM 数据库失败: ' + (err as Error).message);
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if ((window as any).initSqlJs) {
+      Promise.resolve().then(() => initDatabase());
+      return;
+    }
+
+    Promise.resolve().then(() => setIsLoading(true));
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js';
+    script.async = true;
+    script.onload = () => {
+      Promise.resolve().then(() => initDatabase());
+    };
+    script.onerror = () => {
+      Promise.resolve().then(() => {
+        setError('加载 SQLite WebAssembly 库失败，请检查网络连接。');
+        setIsLoading(false);
+      });
+    };
+    document.body.appendChild(script);
+  }, []);
+
+  const handleExecute = () => {
+    if (!db) return;
+    try {
+      const res = db.exec(sql);
+      setQueryError('');
+      setQueryResult(res);
+      refreshSchema(db);
+    } catch (err) {
+      setQueryError((err as Error).message);
+      setQueryResult(null);
+    }
+  };
+
+  const handleExport = () => {
+    if (!db) return;
+    try {
+      const binaryArray = db.export();
+      const blob = new Blob([binaryArray], { type: 'application/x-sqlite3' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'sandbox.sqlite';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      alert('导出数据库失败: ' + (err as Error).message);
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        setIsLoading(true);
+        const initSqlJs = (window as any).initSqlJs;
+        const SQL = await initSqlJs({
+          locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
+        });
+        const uInt8Array = new Uint8Array(reader.result as ArrayBuffer);
+        const newDb = new SQL.Database(uInt8Array);
+        setDb(newDb);
+        setQueryError('');
+        setQueryResult(null);
+        refreshSchema(newDb);
+        setIsLoading(false);
+      } catch (err) {
+        alert('加载 SQLite 文件失败: ' + (err as Error).message);
+        setIsLoading(false);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const loadPresetQuery = (presetSql: string) => {
+    setSql(presetSql);
+  };
+
+  return (
+    <Card className="flex h-full flex-col">
+      <CardHeader
+        title="SQLite WebAssembly 离线沙箱"
+        description="基于 WASM 100% 本地运行的 SQLite 数据库，支持拖入已有 .db/.sqlite 文件，支持表结构 Schema 浏览及 SQL 语句终端运行。"
+        actions={
+          <div className="flex gap-2 items-center">
+            <input
+              type="file"
+              accept=".sqlite,.db,.sqlite3"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Upload className="w-4 h-4" />}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              导入 .sqlite 文件
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Download className="w-4 h-4" />}
+              onClick={handleExport}
+              disabled={!db}
+            >
+              导出数据库 (.sqlite)
+            </Button>
+          </div>
+        }
+      />
+      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-[18rem_minmax(0,1fr)]">
+        {/* Left column: Schema Browser & Boilerplates */}
+        <div className="flex flex-col gap-4 border-r border-slate-200 dark:border-slate-800 pr-4 overflow-auto max-h-full">
+          <div>
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" />
+              <span>数据表 Schema ({tables.length})</span>
+            </h4>
+            {tables.length === 0 ? (
+              <div className="text-xs text-slate-400 italic">暂无自定义表</div>
+            ) : (
+              <div className="space-y-3">
+                {tables.map(t => (
+                  <div key={t.name} className="tool-panel p-2.5 rounded-lg text-xs">
+                    <strong className="text-slate-800 dark:text-slate-200 font-mono block mb-1">
+                      {t.name}
+                    </strong>
+                    <div className="space-y-1 font-mono text-[10px] text-slate-500">
+                      {t.columns.map((c: any) => (
+                        <div key={c.name} className="flex justify-between">
+                          <span>{c.name}</span>
+                          <span className="text-primary-600 font-semibold">{c.type}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-slate-200 dark:border-slate-800 pt-3">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+              快速测试 SQL
+            </h4>
+            <div className="space-y-2">
+              <button
+                onClick={() => loadPresetQuery("SELECT * FROM users;")}
+                className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
+              >
+                查询用户表 (SELECT)
+              </button>
+              <button
+                onClick={() =>
+                  loadPresetQuery(
+                    `SELECT u.name, COUNT(l.id) AS log_count\nFROM users u\nLEFT JOIN logs l ON l.user_id = u.id\nGROUP BY u.id;`
+                  )
+                }
+                className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
+              >
+                多表关联聚合 (JOIN)
+              </button>
+              <button
+                onClick={() =>
+                  loadPresetQuery(
+                    `INSERT INTO users (name, email, role) VALUES ('Dave Brown', 'dave@dev.com', 'Manager');\nSELECT * FROM users;`
+                  )
+                }
+                className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
+              >
+                写入新记录 (INSERT)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right column: Terminal & Output */}
+        <div className="flex flex-col gap-4 min-h-0 flex-1 overflow-hidden">
+          {isLoading && (
+            <div className="p-3 bg-blue-50 text-blue-700 rounded-xl text-xs flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+              <span>正在动态载入 WebAssembly SQL.js 引擎，请稍候...</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs">
+              {error}
+            </div>
+          )}
+
+          {/* Terminal input */}
+          <div className="flex flex-col min-h-0 flex-1 gap-2">
+            <div className="flex items-center justify-between">
+              <FieldLabel hint="SQLite Terminal">SQL 查询终端</FieldLabel>
+              <Button
+                size="sm"
+                onClick={handleExecute}
+                disabled={!db || isLoading}
+                icon={<Play className="w-4 h-4" />}
+              >
+                执行 SQL (Ctrl+Enter)
+              </Button>
+            </div>
+            <textarea
+              className="w-full h-44 p-3 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
+              value={sql}
+              onChange={e => setSql(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  e.preventDefault();
+                  handleExecute();
+                }
+              }}
+            />
+          </div>
+
+          {/* Query Results / Terminal output */}
+          <div className="flex-[1.5] min-h-0 flex flex-col gap-2">
+            <FieldLabel>运行结果</FieldLabel>
+            
+            {queryError && (
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-400 text-xs font-mono">
+                🔴 SQL 语法或执行错误: {queryError}
+              </div>
+            )}
+
+            {!queryError && !queryResult && (
+              <div className="flex-1 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center text-xs text-slate-400">
+                等待 SQL 查询运行...
+              </div>
+            )}
+
+            {!queryError && queryResult && queryResult.length === 0 && (
+              <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/10 flex items-center justify-center text-xs text-slate-500">
+                语句成功执行，影响了数据但没有结果集返回。
+              </div>
+            )}
+
+            {!queryError && queryResult && queryResult.length > 0 && (
+              <div className="flex-1 overflow-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950 shadow-inner">
+                {queryResult.map((resultBlock: any, blockIdx: number) => (
+                  <table key={blockIdx} className="w-full border-collapse text-left text-xs font-mono">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-850">
+                        {resultBlock.columns.map((col: string, colIdx: number) => (
+                          <th key={colIdx} className="px-4 py-2 text-slate-600 dark:text-slate-400 font-bold border-r border-slate-200 dark:border-slate-800 last:border-r-0">
+                            {col}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {resultBlock.values.map((row: any[], rowIdx: number) => (
+                        <tr key={rowIdx} className="border-b border-slate-100 dark:border-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 last:border-b-0">
+                          {row.map((val: any, valIdx: number) => (
+                            <td key={valIdx} className="px-4 py-2 text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-900 last:border-r-0 break-all">
+                              {val === null ? <em className="text-slate-400">NULL</em> : String(val)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
