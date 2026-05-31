@@ -38,6 +38,39 @@ interface DiffNode {
   children?: DiffNode[];
 }
 
+type SqlValue = string | number | Uint8Array | null;
+
+interface SqlExecResult {
+  columns: string[];
+  values: SqlValue[][];
+}
+
+interface SqlDatabase {
+  exec(sql: string): SqlExecResult[];
+  export(): Uint8Array;
+  run(sql: string): void;
+}
+
+interface SqlJsStatic {
+  Database: new (data?: Uint8Array) => SqlDatabase;
+}
+
+type SqlJsInitializer = (options: { locateFile: (file: string) => string }) => Promise<SqlJsStatic>;
+
+interface SqliteColumn {
+  name: string;
+  type: string;
+}
+
+interface SqliteTable {
+  name: string;
+  sql: string;
+  columns: SqliteColumn[];
+}
+
+const getSqlJsInitializer = (): SqlJsInitializer | undefined =>
+  (window as Window & { initSqlJs?: SqlJsInitializer }).initSqlJs;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -796,34 +829,34 @@ export const JsonSchemaTool: React.FC = () => {
 export const SqliteSandboxTool: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [db, setDb] = useState<any>(null);
+  const [db, setDb] = useState<SqlDatabase | null>(null);
   const [sql, setSql] = useState(
     `-- 这是一个 WebAssembly SQLite 离线沙箱。\n-- 您可以点击左下角载入测试表，也可以在这里输入并执行任意 SQL 查询。\nSELECT * FROM users;`
   );
   
-  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryResult, setQueryResult] = useState<SqlExecResult[] | null>(null);
   const [queryError, setQueryError] = useState('');
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<SqliteTable[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refreshSchema = useCallback((activeDb: any) => {
+  const refreshSchema = useCallback((activeDb: SqlDatabase) => {
     if (!activeDb) return;
     try {
       const res = activeDb.exec("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
       if (res.length > 0) {
-        const tablesList = res[0].values.map((row: any) => {
-          const tableName = row[0];
-          const createSql = row[1];
-          let cols: { name: string; type: string }[] = [];
+        const tablesList: SqliteTable[] = res[0].values.map(row => {
+          const tableName = String(row[0] ?? '');
+          const createSql = String(row[1] ?? '');
+          let cols: SqliteColumn[] = [];
           try {
             const colRes = activeDb.exec(`PRAGMA table_info(${tableName})`);
             if (colRes.length > 0) {
-              cols = colRes[0].values.map((c: any) => ({
-                name: c[1],
-                type: c[2]
+              cols = colRes[0].values.map(c => ({
+                name: String(c[1] ?? ''),
+                type: String(c[2] ?? '')
               }));
             }
-          } catch (e) { /* ignore */ }
+          } catch { /* ignore */ }
           return { name: tableName, sql: createSql, columns: cols };
         });
         setTables(tablesList);
@@ -839,7 +872,8 @@ export const SqliteSandboxTool: React.FC = () => {
     try {
       setIsLoading(true);
       setError('');
-      const initSqlJs = (window as any).initSqlJs;
+      const initSqlJs = getSqlJsInitializer();
+      if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
       const SQL = await initSqlJs({
         locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
       });
@@ -873,7 +907,7 @@ export const SqliteSandboxTool: React.FC = () => {
   }, [refreshSchema]);
 
   useEffect(() => {
-    if ((window as any).initSqlJs) {
+    if (getSqlJsInitializer()) {
       Promise.resolve().then(() => initDatabase());
       return;
     }
@@ -932,7 +966,8 @@ export const SqliteSandboxTool: React.FC = () => {
     reader.onload = async () => {
       try {
         setIsLoading(true);
-        const initSqlJs = (window as any).initSqlJs;
+        const initSqlJs = getSqlJsInitializer();
+        if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
         const SQL = await initSqlJs({
           locateFile: (file: string) => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${file}`
         });
@@ -1007,7 +1042,7 @@ export const SqliteSandboxTool: React.FC = () => {
                       {t.name}
                     </strong>
                     <div className="space-y-1 font-mono text-[10px] text-slate-500">
-                      {t.columns.map((c: any) => (
+                      {t.columns.map(c => (
                         <div key={c.name} className="flex justify-between">
                           <span>{c.name}</span>
                           <span className="text-primary-600 font-semibold">{c.type}</span>
@@ -1120,7 +1155,7 @@ export const SqliteSandboxTool: React.FC = () => {
 
             {!queryError && queryResult && queryResult.length > 0 && (
               <div className="flex-1 overflow-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-950 shadow-inner">
-                {queryResult.map((resultBlock: any, blockIdx: number) => (
+                {queryResult.map((resultBlock, blockIdx) => (
                   <table key={blockIdx} className="w-full border-collapse text-left text-xs font-mono">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-850">
@@ -1132,9 +1167,9 @@ export const SqliteSandboxTool: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {resultBlock.values.map((row: any[], rowIdx: number) => (
+                      {resultBlock.values.map((row, rowIdx) => (
                         <tr key={rowIdx} className="border-b border-slate-100 dark:border-slate-900 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 last:border-b-0">
-                          {row.map((val: any, valIdx: number) => (
+                          {row.map((val, valIdx) => (
                             <td key={valIdx} className="px-4 py-2 text-slate-800 dark:text-slate-200 border-r border-slate-100 dark:border-slate-900 last:border-r-0 break-all">
                               {val === null ? <em className="text-slate-400">NULL</em> : String(val)}
                             </td>
