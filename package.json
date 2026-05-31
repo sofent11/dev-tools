@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "check:i18n": "node scripts/check-i18n-coverage.mjs",
+    "check:routes": "node scripts/check-route-map.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
