@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
-import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Terminal, Info, Search, ShieldAlert, FileArchive, Cpu } from 'lucide-react';
+import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Search, ShieldAlert, Cpu } from 'lucide-react';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -773,7 +773,7 @@ export const SqliteSandboxTool: React.FC = () => {
   const [tables, setTables] = useState<any[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const refreshSchema = (activeDb: any) => {
+  const refreshSchema = useCallback((activeDb: any) => {
     if (!activeDb) return;
     try {
       const res = activeDb.exec("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
@@ -800,9 +800,9 @@ export const SqliteSandboxTool: React.FC = () => {
     } catch (e) {
       console.error('Failed to load schema', e);
     }
-  };
+  }, []);
 
-  const initDatabase = async () => {
+  const initDatabase = useCallback(async () => {
     try {
       setIsLoading(true);
       setError('');
@@ -837,7 +837,7 @@ export const SqliteSandboxTool: React.FC = () => {
       setError('初始化 WASM 数据库失败: ' + (err as Error).message);
       setIsLoading(false);
     }
-  };
+  }, [refreshSchema]);
 
   useEffect(() => {
     if ((window as any).initSqlJs) {
@@ -859,7 +859,7 @@ export const SqliteSandboxTool: React.FC = () => {
       });
     };
     document.body.appendChild(script);
-  }, []);
+  }, [initDatabase]);
 
   const handleExecute = () => {
     if (!db) return;

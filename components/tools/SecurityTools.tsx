@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCcw, Copy, Check, Lock, Unlock, Info, KeyRound } from 'lucide-react';
+import { RefreshCcw, Copy, Check, Lock, Unlock, Info } from 'lucide-react';
 import md5 from 'blueimp-md5';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -1716,4 +1716,3 @@ export const SmCryptoSuiteTool: React.FC = () => {
     </Card>
   );
 };
-

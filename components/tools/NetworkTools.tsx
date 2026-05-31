@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -1022,7 +1022,7 @@ export const PingAnalyzerTool: React.FC = () => {
         jitter = count > 0 ? Math.round(jitterSum / count) : 0;
     }
 
-    const performPing = async () => {
+    const performPing = useCallback(async () => {
         const pingUrl = target === 'custom' ? customUrl : target;
         if (!pingUrl) return;
 
@@ -1043,7 +1043,7 @@ export const PingAnalyzerTool: React.FC = () => {
                 return next.slice(-30);
             });
         }
-    };
+    }, [customUrl, target]);
 
     useEffect(() => {
         if (isRunning) {
@@ -1056,7 +1056,7 @@ export const PingAnalyzerTool: React.FC = () => {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [isRunning, target, customUrl, intervalMs]);
+    }, [isRunning, performPing, intervalMs]);
 
     const renderChart = () => {
         if (history.length === 0) return null;

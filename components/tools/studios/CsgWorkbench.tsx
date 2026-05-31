@@ -851,7 +851,7 @@ export const CsgWorkbench: React.FC = () => {
       transformControlsRef.current.detach();
     }
 
-  }, [shapes, selectedShapeId, resultGeometry, showWireframe, buildGeometry, sceneReady]);
+  }, [shapes, selectedShapeId, resultGeometry, showWireframe, materialType, buildGeometry, sceneReady]);
 
   const selectedShape = shapes.find(s => s.id === selectedShapeId);
 

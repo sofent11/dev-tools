@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Archive,
   Download,
@@ -1706,7 +1706,7 @@ const ImageVectorizerPanel: React.FC = () => {
     }
   };
 
-  const handleVectorize = () => {
+  const handleVectorize = useCallback(() => {
     if (!previewUrl) return;
     setIsProcessing(true);
 
@@ -1743,13 +1743,19 @@ const ImageVectorizerPanel: React.FC = () => {
       setIsProcessing(false);
     };
     img.src = previewUrl;
-  };
+  }, [invert, previewUrl, simplifyTolerance, threshold]);
 
   useEffect(() => {
     if (previewUrl) {
       Promise.resolve().then(handleVectorize);
     }
-  }, [threshold, simplifyTolerance, invert, previewUrl]);
+  }, [handleVectorize, previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   return (
     <CardContent className="flex-1 flex flex-col lg:flex-row gap-6 overflow-auto p-6 min-h-0 text-slate-700 dark:text-slate-200">

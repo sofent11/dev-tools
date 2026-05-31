@@ -1,4 +1,4 @@
-import { lazy, type ElementType } from 'react';
+import { lazy } from 'react';
 import {
   FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files
 } from 'lucide-react';
