@@ -25,17 +25,30 @@ class MockWebSocket {
     onmessage: MockMessageHandler = null;
     onerror: (() => void) | null = null;
     onclose: ((event: CloseEvent) => void) | null = null;
+    private timeouts: Array<ReturnType<typeof setTimeout>> = [];
 
     constructor(url: string) {
         this.url = url;
-        setTimeout(() => {
+        this.schedule(() => {
+            if (this.readyState !== WebSocket.CONNECTING) return;
             this.readyState = WebSocket.OPEN;
-            if (this.onopen) this.onopen();
+            this.onopen?.();
         }, 400);
     }
 
+    private schedule(callback: () => void, delay: number) {
+        const timeout = setTimeout(() => {
+            this.timeouts = this.timeouts.filter(item => item !== timeout);
+            callback();
+        }, delay);
+        this.timeouts.push(timeout);
+    }
+
     send(data: string) {
-        setTimeout(() => {
+        if (this.readyState !== WebSocket.OPEN) return;
+
+        this.schedule(() => {
+            if (this.readyState !== WebSocket.OPEN) return;
             let responseText = `[Mock Server Response to "${data}"]`;
             if (data.toLowerCase().includes('ping') || data.toLowerCase().includes('heartbeat')) {
                 responseText = 'pong';
@@ -55,6 +68,9 @@ class MockWebSocket {
     }
 
     close() {
+        this.timeouts.forEach(timeout => clearTimeout(timeout));
+        this.timeouts = [];
+        if (this.readyState === WebSocket.CLOSED) return;
         this.readyState = WebSocket.CLOSED;
         if (this.onclose) {
             this.onclose(new CloseEvent('close', { code: 1000, reason: 'Mock connection closed' }));
