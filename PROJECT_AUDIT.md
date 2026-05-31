@@ -59,6 +59,7 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Replaced blacklist-style HTML/SVG cleanup with allowlist sanitization for preview surfaces.
 - Added runtime asset fallback URL, active source, and optional SHA-256 verification state support, with initial adoption in PDF.js, SQL.js, and OpenPGP.
 - Hardened Headshot/MediaPipe failure recovery with a visible manual-crop mode when models fail or no face is detected.
+- Reorganized navigation around user task flows into 8 top-level categories and 12 Studio entries; old direct single-tool aliases are no longer maintained.
 
 ## Remaining Known Issues
 
@@ -67,6 +68,7 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Runtime loader now supports fallback URLs and optional SHA-256 verification metadata. Remaining work is adding vetted self-hosted files under `public/vendor` where license and bundle size allow.
 - Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder`, now probe unknown frame counts, and still enforce frame/pixel budgets.
 - STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The worker now uses grid prefiltering and partial reports, but the result remains a sampling estimate rather than slicer or industrial inspection truth.
+- The task-oriented Studio IA intentionally breaks older `/tools/<single-tool>` aliases; external docs and bookmarks should use `/tools/<studio-id>#<tab-id>` links.
 
 ## Recommended Next Iterations
 

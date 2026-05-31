@@ -18,6 +18,7 @@
 - Tool components no longer use blocking `alert()` for ordinary failures; feedback is inline or via `notifyToast`, with optional recovery actions.
 - Studio tab history sync now responds to both hash and browser back/forward navigation.
 - The i18n provider no longer monkey-patches global `window.alert` or `window.confirm`.
+- Navigation has been reorganized into 8 task-oriented categories and 12 Studio wrappers; legacy direct tool aliases are intentionally retired.
 
 ## Stage 3: Feature Enhancements
 **Status**: Complete, hardening ongoing
@@ -39,7 +40,7 @@
 **Status**: Complete
 
 - Added Vitest unit tests for JSON Diff paths and cURL import.
-- Added Playwright smoke tests for legacy routes, locale/dark-mode controls, HTTP cURL import, mobile scratchpad drawer, APNG/WebP capability messaging, and STL wall-thickness controls.
+- Added Playwright smoke tests for current Studio routes, locale/dark-mode controls, HTTP cURL import, mobile scratchpad drawer, APNG/WebP capability messaging, and STL wall-thickness controls.
 - CI now runs unit tests and Playwright E2E smoke tests in addition to typecheck, lint, i18n, route map, production audit, and build.
 - Modified modules pass TypeScript and ESLint checks.
 

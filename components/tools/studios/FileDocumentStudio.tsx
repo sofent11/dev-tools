@@ -17,8 +17,8 @@ const subTools: SubTool[] = [
 export const FileDocumentStudio: React.FC = () => {
   return (
     <TabbedToolbox
-      title="文件与文档处理中心"
-      description="提供高安全的本地 PDF 合并转换、文件多维元属性与哈希检测，以及 MIME 速查工具"
+      title="文件、PDF 与 MIME 工作室"
+      description="集中处理本地 PDF 合并转换、文件属性与哈希检测、文件名路径提取和 MIME 类型查询"
       tools={subTools}
       defaultTab="pdf"
     />

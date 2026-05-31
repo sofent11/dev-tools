@@ -2,12 +2,14 @@ import React from 'react';
 import { LucideIcon } from 'lucide-react';
 
 export enum Category {
-  TEXT = '文本与编码',
-  DEV = '开发与数据',
-  NETWORK = '网络与运维',
-  SECURITY = '安全与生成',
-  MEDIA = '图形与媒体',
-  SMART_AI = '时间与智能'
+  DATA = '数据与数据库',
+  TEXT_MARKUP = '文本、标记与编码',
+  NETWORK = '接口与网络',
+  FRONTEND = '前端与样式',
+  FILE_MEDIA = '文件与媒体',
+  SECURITY = '安全与密钥',
+  SYSTEM = '系统与生成器',
+  CAD = '3D、CAD 与几何'
 }
 
 export interface ToolDef {

@@ -6,7 +6,7 @@ import JSZip from 'jszip';
 import { useScratchpadStore, getScratchpadItemContent, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
 import { Category, ToolDef } from './types';
-import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
+import { TOOLS, TOOL_IDS } from './components/tools/registry';
 import { useI18n } from './src/i18n';
 import { formatBytes } from './components/tools/shared/fileUtils';
 import { notifyToast, type ToastTone } from './components/tools/shared/notifyToast';
@@ -36,13 +36,6 @@ const getAppPathname = () => {
 const getToolIdFromLocation = () => {
   const segments = getAppPathname().split('/').filter(Boolean).map(decodeURIComponent);
   const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
-
-  if (candidate && LEGACY_TOOL_MAP[candidate]) {
-    const mapping = LEGACY_TOOL_MAP[candidate];
-    const targetPath = `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${mapping.studioId}`;
-    window.history.replaceState(null, '', `${targetPath}#${mapping.subToolId}`);
-    return mapping.studioId;
-  }
 
   return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
 };

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -6,78 +6,89 @@ const read = path => readFileSync(join(root, path), 'utf8');
 
 const registrySource = read('components/tools/registry.ts');
 
-const getStudioIdsByComponent = () => {
-  const studioIdsByComponent = new Map();
+const getStudioImports = () => {
+  const imports = new Map();
+  const importPattern = /const\s+(\w+)\s*=\s*lazyNamed\(\(\)\s*=>\s*import\('([^']+)'\),\s*'([^']+)'\s*\)/g;
+  for (const match of registrySource.matchAll(importPattern)) {
+    imports.set(match[1], { importPath: match[2], exportName: match[3] });
+  }
+  return imports;
+};
+
+const getRegistryTools = () => {
+  const tools = [];
   const toolPattern = /\{\s*id:\s*'([^']+)'[\s\S]*?component:\s*(\w+)\s*\}/g;
-
   for (const match of registrySource.matchAll(toolPattern)) {
-    studioIdsByComponent.set(match[2], match[1]);
+    tools.push({ studioId: match[1], componentName: match[2] });
   }
-
-  return studioIdsByComponent;
+  return tools;
 };
 
-const getCurrentSubTools = () => {
-  const studioIdsByComponent = getStudioIdsByComponent();
-  const studioDir = join(root, 'components/tools/studios');
-  const subTools = [];
+const resolveStudioFile = importPath => `components/tools/${importPath.replace('./', '')}.tsx`;
 
-  for (const file of readdirSync(studioDir).filter(name => name.endsWith('.tsx'))) {
-    const source = read(`components/tools/studios/${file}`);
-    const exportName = source.match(/export const (\w+):/)?.[1];
-    const studioId = exportName ? studioIdsByComponent.get(exportName) : undefined;
-    if (!studioId || !source.includes('<TabbedToolbox')) continue;
-
-    const subToolBlock = source.match(/const subTools:[\s\S]*?=\s*\[([\s\S]*?)\];/)?.[1];
-    if (!subToolBlock) continue;
-
-    for (const match of subToolBlock.matchAll(/\{\s*id:\s*'([^']+)'/g)) {
-      subTools.push({ studioId, subToolId: match[1] });
-    }
+const getStudioConfig = tool => {
+  const imported = studioImports.get(tool.componentName);
+  if (!imported) {
+    return { errors: [`Registry component ${tool.componentName} has no lazyNamed studio import.`] };
   }
 
-  return subTools;
+  const studioFile = resolveStudioFile(imported.importPath);
+  if (!existsSync(join(root, studioFile))) {
+    return { errors: [`Registry component ${tool.componentName} points to missing file ${studioFile}.`] };
+  }
+
+  const source = read(studioFile);
+  const errors = [];
+  if (!source.includes(`export const ${imported.exportName}:`)) {
+    errors.push(`${studioFile} does not export ${imported.exportName}.`);
+  }
+
+  const subToolBlock = source.match(/const subTools:[\s\S]*?=\s*\[([\s\S]*?)\];/)?.[1];
+  const subTools = subToolBlock
+    ? Array.from(subToolBlock.matchAll(/\{\s*id:\s*'([^']+)'/g), match => match[1])
+    : [];
+  if (subTools.length === 0) {
+    errors.push(`${studioFile} has no parseable subTools.`);
+  }
+
+  const duplicateTabs = subTools.filter((id, index) => subTools.indexOf(id) !== index);
+  for (const tabId of new Set(duplicateTabs)) {
+    errors.push(`${studioFile} repeats tab id "${tabId}".`);
+  }
+
+  const defaultTab = source.match(/defaultTab="([^"]+)"/)?.[1];
+  if (!defaultTab) {
+    errors.push(`${studioFile} is missing defaultTab.`);
+  } else if (!subTools.includes(defaultTab)) {
+    errors.push(`${studioFile} defaultTab "${defaultTab}" is not in subTools.`);
+  }
+
+  return { studioFile, subTools, defaultTab, errors };
 };
 
-const getLegacyRoutes = () => {
-  const routes = [];
-  const legacyPattern = /'([^']+)':\s*\{\s*studioId:\s*'([^']+)',\s*subToolId:\s*'([^']+)'\s*\}/g;
+const studioImports = getStudioImports();
+const registryTools = getRegistryTools();
+const registryIds = registryTools.map(tool => tool.studioId);
+const duplicateStudios = registryIds.filter((id, index) => registryIds.indexOf(id) !== index);
+const errors = [];
+let subToolCount = 0;
 
-  for (const match of registrySource.matchAll(legacyPattern)) {
-    routes.push({ key: match[1], studioId: match[2], subToolId: match[3] });
+for (const studioId of new Set(duplicateStudios)) {
+  errors.push(`Registry repeats studio id "${studioId}".`);
+}
+
+for (const tool of registryTools) {
+  const config = getStudioConfig(tool);
+  subToolCount += config.subTools?.length || 0;
+  errors.push(...config.errors.map(error => `${tool.studioId}: ${error}`));
+}
+
+if (errors.length > 0) {
+  console.error('Route map validation failed:');
+  for (const error of errors) {
+    console.error(`- ${error}`);
   }
-
-  return routes;
-};
-
-const currentSubTools = getCurrentSubTools();
-const legacyRoutes = getLegacyRoutes();
-const validTargets = new Set(currentSubTools.map(item => `${item.studioId}#${item.subToolId}`));
-const legacyByKey = new Map(legacyRoutes.map(item => [item.key, item]));
-
-const missing = currentSubTools.filter(item => {
-  const legacy = legacyByKey.get(item.subToolId);
-  return !legacy || legacy.studioId !== item.studioId || legacy.subToolId !== item.subToolId;
-});
-
-const stale = legacyRoutes.filter(item => !validTargets.has(`${item.studioId}#${item.subToolId}`));
-
-if (missing.length > 0 || stale.length > 0) {
-  if (missing.length > 0) {
-    console.error('Missing direct legacy routes for current sub-tools:');
-    for (const item of missing) {
-      console.error(`- /tools/${item.subToolId} -> /tools/${item.studioId}#${item.subToolId}`);
-    }
-  }
-
-  if (stale.length > 0) {
-    console.error('Legacy routes point to missing studio tabs:');
-    for (const item of stale) {
-      console.error(`- /tools/${item.key} -> /tools/${item.studioId}#${item.subToolId}`);
-    }
-  }
-
   process.exit(1);
 }
 
-console.log(`Route map OK: ${currentSubTools.length} sub-tool direct routes and ${legacyRoutes.length} legacy aliases checked.`);
+console.log(`Route map OK: ${registryTools.length} studios and ${subToolCount} studio tabs checked.`);

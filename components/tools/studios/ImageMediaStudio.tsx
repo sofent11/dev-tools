@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Image, Images, Palette, LayoutTemplate, Grid3X3, Scissors, FileVideo } from 'lucide-react';
+import { FileVideo, Grid3X3, Image, Images, LayoutTemplate, Palette, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const ImageTools = lazyNamed(() => import('../ImageTools'), 'ImageTools');
@@ -10,6 +10,7 @@ const ImageWatermarkTool = lazyNamed(() => import('../images'), 'ImageWatermarkT
 const PerlerBeadTool = lazyNamed(() => import('../images'), 'PerlerBeadTool');
 const HeadshotExtractor = lazyNamed(() => import('../HeadshotExtractor'), 'HeadshotExtractor');
 const AnimationFrameExtractor = lazy(() => import('../AnimationFrameExtractor').then(m => ({ default: m.AnimationFrameExtractor })));
+const VideoDownloader = lazyNamed(() => import('../VideoDownloader'), 'VideoDownloader');
 
 const subTools: SubTool[] = [
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, component: ImageTools },
@@ -20,13 +21,14 @@ const subTools: SubTool[] = [
   { id: 'perler-beads', name: '拼豆图纸生成', description: '图片转拼豆网格 (Worker 异步加速)', icon: Grid3X3, component: PerlerBeadTool },
   { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, component: HeadshotExtractor },
   { id: 'animation-frame', name: '动画帧提取', description: '动图与 Lottie 逐帧提取', icon: FileVideo, component: AnimationFrameExtractor },
+  { id: 'video-download', name: '视频下载解析', description: '解析视频直链 / HLS 视频流', icon: FileVideo, component: VideoDownloader },
 ];
 
 export const ImageMediaStudio: React.FC = () => {
   return (
     <TabbedToolbox
-      title="图形与图像创意工坊"
-      description="集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸裁剪与动画帧提取的一站式多媒体图形中心"
+      title="图片、动画与视频工作室"
+      description="集中处理图片压缩转换、抠图、水印、人像裁剪、动画帧提取、拼豆图纸和浏览器本地优先的视频解析"
       tools={subTools}
       defaultTab="image"
     />
