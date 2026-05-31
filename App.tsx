@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useScratchpadStore, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
+import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 import { useI18n } from './src/i18n';
@@ -45,25 +46,6 @@ const getToolIdFromLocation = () => {
 };
 
 const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}`;
-
-const sanitizeSvgPreview = (svg: string) => {
-  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-  const svgEl = doc.querySelector('svg');
-  if (!svgEl || doc.querySelector('parsererror')) return '';
-
-  svgEl.querySelectorAll('script, foreignObject, iframe, object, embed, link, meta').forEach(node => node.remove());
-  svgEl.querySelectorAll('*').forEach(node => {
-    Array.from(node.attributes).forEach(attr => {
-      const name = attr.name.toLowerCase();
-      const value = attr.value.trim().toLowerCase();
-      if (name.startsWith('on') || value.startsWith('javascript:') || value.includes('url(javascript:')) {
-        node.removeAttribute(attr.name);
-      }
-    });
-  });
-
-  return svgEl.outerHTML;
-};
 
 const normalizeScratchpadFileName = (name: string, fallbackExt: string) => {
   const fallbackName = `scratchpad-item${fallbackExt}`;
@@ -587,7 +569,7 @@ const ScratchpadItemCard: React.FC<{
   }, [item.content, isJson]);
 
   const sanitizedSvg = useMemo(
-    () => (isSvg ? sanitizeSvgPreview(item.content) : ''),
+    () => (isSvg ? sanitizeSvgMarkup(item.content) : ''),
     [isSvg, item.content],
   );
 

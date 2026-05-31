@@ -4,6 +4,7 @@ import { optimize } from 'svgo/browser';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { CodePanel, FieldLabel, Input, TabButton, Tabs, Textarea } from '../../ui/ToolUi';
+import { sanitizeSvgMarkup } from '../shared/sanitizeMarkup';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
 
 const mimeRows = [
@@ -394,6 +395,8 @@ export const SvgOptimizerTool: React.FC = () => {
     if (!result.data) return [];
     return computeDomDiff(svg, result.data);
   }, [svg, result.data]);
+  const safeSourceSvg = useMemo(() => sanitizeSvgMarkup(svg), [svg]);
+  const safeOptimizedSvg = useMemo(() => sanitizeSvgMarkup(result.data || ''), [result.data]);
 
   const before = byteSize(svg);
   const after = result.data ? byteSize(result.data) : 0;
@@ -474,7 +477,7 @@ export const SvgOptimizerTool: React.FC = () => {
                 <CodePanel className="flex-1 overflow-auto whitespace-pre-wrap text-[10px] font-mono p-4 border-b border-slate-200 dark:border-slate-800 leading-relaxed bg-slate-950 text-emerald-400">
                   {result.data || '优化结果将在这里显示'}
                 </CodePanel>
-                <div className="bg-white dark:bg-slate-950 p-4 h-32 flex items-center justify-center overflow-auto flex-none" dangerouslySetInnerHTML={{ __html: result.data || '' }} />
+                <div className="bg-white dark:bg-slate-950 p-4 h-32 flex items-center justify-center overflow-auto flex-none" dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }} />
               </div>
             )}
 
@@ -485,7 +488,7 @@ export const SvgOptimizerTool: React.FC = () => {
                   {/* Bottom Layer: Before SVG (Original) */}
                   <div 
                     className="absolute inset-0 flex items-center justify-center p-4 transition-all opacity-40 filter grayscale pointer-events-none"
-                    dangerouslySetInnerHTML={{ __html: svg || '' }}
+                    dangerouslySetInnerHTML={{ __html: safeSourceSvg }}
                   />
 
                   {/* Top Layer: After SVG (Optimized) with custom clipping width */}
@@ -494,7 +497,7 @@ export const SvgOptimizerTool: React.FC = () => {
                     style={{
                       clipPath: `inset(0 ${100 - sliderValue}% 0 0)`,
                     }}
-                    dangerouslySetInnerHTML={{ __html: result.data || '' }}
+                    dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }}
                   />
 
                   {/* High quality neon-blue slider hairline indicator */}
@@ -963,4 +966,3 @@ export const SvgToReactTool: React.FC = () => {
     </Card>
   );
 };
-
