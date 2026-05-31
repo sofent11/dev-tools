@@ -377,7 +377,7 @@ export default function App() {
               aria-label={locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
             >
               <Languages className="h-4 w-4" />
-              <span>{locale === 'zh-CN' ? 'EN' : '中'}</span>
+              <span>{locale === 'zh-CN' ? 'EN' : 'ZH'}</span>
             </button>
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
