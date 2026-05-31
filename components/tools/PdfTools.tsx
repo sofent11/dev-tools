@@ -9,8 +9,11 @@ import {
   ArrowLeft,
   ArrowRight,
   Loader2,
-  Sparkles
+  Sparkles,
+  ClipboardList,
+  Check
 } from 'lucide-react';
+import { useScratchpadStore } from './shared/scratchpadStore';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
@@ -137,7 +140,9 @@ const PdfMergeTool: React.FC = () => {
     setPages([]);
   };
 
-  const mergePdfs = async () => {
+  const [stashed, setStashed] = useState(false);
+
+  const mergePdfs = async (action: 'download' | 'stash' = 'download') => {
     if (pages.length === 0) return;
     setIsMerging(true);
     try {
@@ -162,13 +167,20 @@ const PdfMergeTool: React.FC = () => {
 
       const pdfBytes = await mergedPdf.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
+      const name = `compiled_${new Date().getTime()}.pdf`;
 
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `compiled_${new Date().getTime()}.pdf`;
-      link.click();
-      URL.revokeObjectURL(url);
+      if (action === 'download') {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await useScratchpadStore.getState().addItemAsync(name, blob, 'pdf', 'application/pdf');
+        setStashed(true);
+        setTimeout(() => setStashed(false), 2000);
+      }
     } catch (e) {
       alert('混编导出 PDF 失败: ' + (e as Error).message);
     } finally {
@@ -226,7 +238,15 @@ const PdfMergeTool: React.FC = () => {
             <div className="flex items-center gap-2">
               <Button size="sm" variant="secondary" onClick={clearAllPages}>清空页面</Button>
               <Button
-                onClick={mergePdfs}
+                onClick={() => mergePdfs('stash')}
+                disabled={isMerging}
+                variant="secondary"
+                icon={stashed ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardList className="w-4 h-4" />}
+              >
+                {stashed ? '已送入暂存箱' : '送入暂存箱'}
+              </Button>
+              <Button
+                onClick={() => mergePdfs('download')}
                 disabled={isMerging}
                 isLoading={isMerging}
                 icon={<Merge className="w-4 h-4" />}
@@ -328,12 +348,26 @@ const PdfToImageTool: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [isConverting, setIsConverting] = useState(false);
+  const [stashedIndices, setStashedIndices] = useState<Record<number, boolean>>({});
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       setFile(e.target.files[0]);
       setImages([]);
+      setStashedIndices({});
     }
+  };
+
+  const stashPage = (imgBase64: string, index: number) => {
+    const baseName = file ? file.name.split('.').shift() : 'pdf_page';
+    useScratchpadStore.getState().addItem(
+      `${baseName}_page_${index + 1}.png`,
+      imgBase64,
+      'image',
+      'image/png'
+    );
+    setStashedIndices(prev => ({ ...prev, [index]: true }));
+    setTimeout(() => setStashedIndices(prev => ({ ...prev, [index]: false })), 2000);
   };
 
   const convert = async () => {
@@ -391,7 +425,7 @@ const PdfToImageTool: React.FC = () => {
         <div className="space-y-4">
           <div className="tool-section flex items-center gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
             <FileText className="w-6 h-6 text-red-500" />
-            <span className="flex-1 font-semibold text-slate-700 dark:text-slate-300">{file.name}</span>
+            <span className="flex-1 font-semibold text-slate-700 dark:text-slate-350">{file.name}</span>
             <Button variant="secondary" size="sm" onClick={() => setFile(null)}>更换文件</Button>
           </div>
 
@@ -412,13 +446,21 @@ const PdfToImageTool: React.FC = () => {
               </div>
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs font-semibold text-slate-500">第 {idx + 1} 页</span>
-                <a
-                  href={img}
-                  download={`page_${idx + 1}.png`}
-                  className="text-primary-600 dark:text-primary-400 text-xs font-bold hover:underline"
-                >
-                  下载 PNG
-                </a>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => stashPage(img, idx)}
+                    className="text-primary-600 dark:text-primary-400 text-xs font-bold hover:underline cursor-pointer"
+                  >
+                    {stashedIndices[idx] ? '已暂存' : '暂存'}
+                  </button>
+                  <a
+                    href={img}
+                    download={`page_${idx + 1}.png`}
+                    className="text-primary-600 dark:text-primary-400 text-xs font-bold hover:underline font-mono"
+                  >
+                    下载 PNG
+                  </a>
+                </div>
               </div>
             </div>
           ))}

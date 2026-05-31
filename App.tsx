@@ -3,7 +3,7 @@ import {
   LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive, Languages
 } from 'lucide-react';
 import JSZip from 'jszip';
-import { useScratchpadStore, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
+import { useScratchpadStore, getScratchpadItemContent, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
@@ -111,11 +111,12 @@ export default function App() {
     if (itemsToExport.length === 0) return;
     try {
       const zip = new JSZip();
-      itemsToExport.forEach(item => {
+      for (const item of itemsToExport) {
         const ext = getScratchpadFallbackExt(item);
         const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
-        zip.file(fileName, item.content);
-      });
+        const fileContent = await getScratchpadItemContent(item);
+        zip.file(fileName, fileContent);
+      }
       const blobContent = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blobContent);
@@ -531,25 +532,52 @@ const ScratchpadItemCard: React.FC<{
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(item.content);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try {
+      const content = await getScratchpadItemContent(item);
+      let textToCopy = '';
+      if (content instanceof Blob) {
+        textToCopy = await content.text();
+      } else if (content instanceof ArrayBuffer) {
+        textToCopy = new TextDecoder().decode(content);
+      } else {
+        textToCopy = content;
+      }
+      await navigator.clipboard.writeText(textToCopy);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      alert('复制失败: ' + (err as Error).message);
+    }
   };
 
-  const handleDownload = () => {
-    const ext = getScratchpadFallbackExt(item);
-    const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
-    const blob = new Blob([item.content], { type: getScratchpadMimeType(item) });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  const handleDownload = async () => {
+    try {
+      const ext = getScratchpadFallbackExt(item);
+      const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
+      const content = await getScratchpadItemContent(item);
+      const blob = content instanceof Blob ? content : new Blob([content], { type: getScratchpadMimeType(item) });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    } catch (err) {
+      alert('下载失败: ' + (err as Error).message);
+    }
   };
 
-  const isSvg = item.type === 'svg' || (item.content.trim().startsWith('<svg') && item.content.includes('</svg>'));
+  const isSvg = item.type === 'svg' || (item.content && item.content.trim().startsWith('<svg') && item.content.includes('</svg>'));
   const isJson = item.type === 'json' || (() => {
+    if (!item.content) return false;
     try {
       const trimmed = item.content.trim();
       return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
@@ -559,7 +587,7 @@ const ScratchpadItemCard: React.FC<{
   })();
 
   const jsonBadge = useMemo(() => {
-    if (!isJson) return '';
+    if (!isJson || !item.content) return '';
     try {
       const parsed = JSON.parse(item.content);
       if (Array.isArray(parsed)) return `Array (${parsed.length})`;
@@ -569,7 +597,7 @@ const ScratchpadItemCard: React.FC<{
   }, [item.content, isJson]);
 
   const sanitizedSvg = useMemo(
-    () => (isSvg ? sanitizeSvgMarkup(item.content) : ''),
+    () => (isSvg && item.content ? sanitizeSvgMarkup(item.content) : ''),
     [isSvg, item.content],
   );
 
@@ -599,8 +627,8 @@ const ScratchpadItemCard: React.FC<{
               {item.name}
             </p>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[9px] text-slate-400">
-                {new Date(item.timestamp).toLocaleTimeString()} • {item.content.length} {t('字符')}
+              <span className="text-[9px] text-slate-400 font-mono">
+                {new Date(item.timestamp).toLocaleTimeString()} • {formatFileSize(item.size || item.content?.length || 0)}
               </span>
               {isJson && (
                 <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
@@ -610,6 +638,11 @@ const ScratchpadItemCard: React.FC<{
               {isSvg && (
                 <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
                   {t('SVG 矢量图')}
+                </span>
+              )}
+              {item.isBinary && (
+                <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/35 px-1 py-0.2 rounded text-[8px] font-bold uppercase">
+                  {item.type}
                 </span>
               )}
             </div>
@@ -642,11 +675,25 @@ const ScratchpadItemCard: React.FC<{
         </div>
 
         {/* Preview dynamic cards */}
-        {isSvg && sanitizedSvg ? (
+        {item.thumbnail ? (
+          <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-850 bg-checkerboard p-1 overflow-hidden hover:scale-[1.01] transition-transform duration-200">
+            <img src={item.thumbnail} alt={item.name} className="h-full w-auto max-w-full object-contain select-none rounded shadow-xs" />
+          </div>
+        ) : item.isBinary ? (
+          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-lg flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-950/40 text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-900/35">
+              <FolderArchive className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-slate-700 dark:text-slate-350 truncate text-[10px] font-mono leading-tight">{item.name}</p>
+              <p className="text-[8px] text-slate-400 mt-0.5 font-bold uppercase">{item.mimeType || item.type || 'BINARY'}</p>
+            </div>
+          </div>
+        ) : isSvg && sanitizedSvg ? (
           <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-checkerboard p-1 overflow-hidden hover:scale-[1.02] transition-transform duration-200">
             <div className="h-full w-auto max-w-full flex items-center justify-center select-none" dangerouslySetInnerHTML={{ __html: sanitizedSvg }} />
           </div>
-        ) : isJson ? (
+        ) : isJson && item.content ? (
           <div className="p-2 bg-slate-900 dark:bg-slate-950 border border-slate-850 rounded-lg font-mono text-[9px] text-emerald-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none leading-normal">
             {(() => {
               try {
@@ -656,9 +703,18 @@ const ScratchpadItemCard: React.FC<{
               }
             })()}
           </div>
-        ) : (
+        ) : item.isLarge ? (
+          <div className="p-2 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-lg font-mono text-[9px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto select-all whitespace-pre-wrap break-all scrollbar-none">
+            <p className="text-slate-400 italic">[{t('大容量文本内容已存入本地 IndexedDB')}]</p>
+            <p className="text-slate-500 font-bold mt-1">{t('大小')}: {formatFileSize(item.size)}</p>
+          </div>
+        ) : item.content ? (
           <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg font-mono text-[9px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none">
             {item.content.slice(0, 180)}{item.content.length > 180 ? '...' : ''}
+          </div>
+        ) : (
+          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg font-mono text-[9px] text-slate-450 italic">
+            {t('无内容预览')}
           </div>
         )}
       </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, ArrowRightLeft, FileCode, Check, Copy, Download, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Shield, ArrowRightLeft, FileCode, Check, Copy, Download, AlertTriangle, CheckCircle2, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { FieldLabel } from '../../ui/ToolUi';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
+import { useScratchpadStore, getScratchpadItemContent } from '../shared/scratchpadStore';
 
 // Standard Helpers for Binary conversions
 function base64ToBytes(base64: string): Uint8Array {
@@ -138,6 +139,40 @@ export const AsymmetricKeyTool: React.FC = () => {
   const { copied, copy } = useCopyToClipboard();
 
   // Audit State
+  const scratchpadItems = useScratchpadStore((state) => state.items);
+  const compatibleItems = scratchpadItems.filter(item => 
+    !item.isBinary && 
+    (item.type === 'text' || item.type === 'json' || item.name.endsWith('.pem') || item.name.endsWith('.json') || item.name.endsWith('.key') || item.name.endsWith('.txt'))
+  );
+
+  const loadFromScratchpad = async (itemId: string) => {
+    const matched = scratchpadItems.find(item => item.id === itemId);
+    if (matched) {
+      const content = await getScratchpadItemContent(matched);
+      if (typeof content === 'string') {
+        setInputKey(content);
+      }
+    }
+  };
+
+  const [stashed, setStashed] = useState(false);
+  const stashConvertedKey = () => {
+    if (!convertedResult) return;
+    const isJwk = outputFormat === 'jwk';
+    const ext = isJwk ? 'json' : outputFormat === 'pem' ? 'pem' : 'hex';
+    const type = isJwk ? 'json' : 'text';
+    const mime = isJwk ? 'application/json' : 'text/plain';
+    
+    useScratchpadStore.getState().addItem(
+      `exported_key.${ext}`,
+      convertedResult,
+      type,
+      mime
+    );
+    setStashed(true);
+    setTimeout(() => setStashed(false), 2000);
+  };
+
   const [auditReport, setAuditReport] = useState<AuditReport>({
     type: 'Unknown',
     keySize: 0,
@@ -422,9 +457,30 @@ export const AsymmetricKeyTool: React.FC = () => {
         {/* Left Side: Inputs and settings (5 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0">
           <div className="flex-1 flex flex-col gap-2 min-h-[220px]">
-            <FieldLabel hint="支持 RSA (PKCS#1 / PKCS#8), EC 私钥, 公钥或标准 JWK JSON">
-              输入密钥文本
-            </FieldLabel>
+            <div className="flex justify-between items-center w-full">
+              <FieldLabel hint="支持 RSA (PKCS#1 / PKCS#8), EC 私钥, 公钥或标准 JWK JSON">
+                输入密钥文本
+              </FieldLabel>
+              {compatibleItems.length > 0 && (
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      loadFromScratchpad(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="text-[10px] font-bold text-primary-600 dark:text-primary-400 bg-transparent border-0 outline-none max-w-[150px] cursor-pointer"
+                  defaultValue=""
+                >
+                  <option value="" disabled>📂 从暂存箱调入...</option>
+                  {compatibleItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
             <textarea
               className="flex-1 w-full p-3 font-mono text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none leading-relaxed"
               placeholder="-----BEGIN PRIVATE KEY-----&#10;MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQD...&#10;-----END PRIVATE KEY-----"
@@ -528,6 +584,15 @@ export const AsymmetricKeyTool: React.FC = () => {
                 </span>
               </div>
               <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!convertedResult}
+                  onClick={stashConvertedKey}
+                  icon={stashed ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ClipboardList className="w-3.5 h-3.5" />}
+                >
+                  暂存
+                </Button>
                 <Button
                   size="sm"
                   variant="secondary"

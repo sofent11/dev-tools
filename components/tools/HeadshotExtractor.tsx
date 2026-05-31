@@ -1,10 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FaceDetector, FilesetResolver, Detection } from '@mediapipe/tasks-vision';
 import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { 
+  installCdnCacheInterceptor, 
+  registerCacheProgressListener, 
+  unregisterCacheProgressListener 
+} from './shared/cdnCacheManager';
 
 export const HeadshotExtractor: React.FC = () => {
   const [imgSrc, setImgSrc] = useState('');
@@ -17,19 +22,44 @@ export const HeadshotExtractor: React.FC = () => {
   
   // MediaPipe references
   const faceDetectorRef = useRef<FaceDetector | null>(null);
+  const [isModelLoading, setIsModelLoading] = useState(false);
   const isModelLoadingRef = useRef(false);
+
+  // Model download progress
+  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
+  
+  const totalProgress = useMemo(() => {
+    const vals = Object.values(progressMap);
+    if (vals.length === 0) return 0;
+    const sum = vals.reduce((a, b) => a + b, 0);
+    return Math.round(sum / vals.length);
+  }, [progressMap]);
 
   useEffect(() => {
     initMediaPipe();
+    return () => {
+      unregisterCacheProgressListener('tasks-vision');
+      unregisterCacheProgressListener('blaze_face_short_range.tflite');
+    };
   }, []);
 
   const initMediaPipe = async () => {
     if (faceDetectorRef.current || isModelLoadingRef.current) return;
     
     isModelLoadingRef.current = true;
+    setIsModelLoading(true);
     setStatus('Loading AI models...');
     
     try {
+      // Install cache interceptor and register progress hooks
+      installCdnCacheInterceptor();
+      registerCacheProgressListener('tasks-vision', (p) => {
+        setProgressMap(prev => ({ ...prev, wasm: p }));
+      });
+      registerCacheProgressListener('blaze_face_short_range.tflite', (p) => {
+        setProgressMap(prev => ({ ...prev, model: p }));
+      });
+
       const vision = await FilesetResolver.forVisionTasks(
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
       );
@@ -49,6 +79,7 @@ export const HeadshotExtractor: React.FC = () => {
       setStatus('Failed to load AI models. Please check your connection.');
     } finally {
       isModelLoadingRef.current = false;
+      setIsModelLoading(false);
     }
   };
 
@@ -335,10 +366,28 @@ export const HeadshotExtractor: React.FC = () => {
             />
         </div>
 
-        <div className="text-center text-sm text-slate-500">
-            {status}
-            {isLoading && <RefreshCw className="inline ml-2 w-4 h-4 animate-spin" />}
-        </div>
+        {isModelLoading ? (
+          <div className="max-w-md mx-auto w-full space-y-2 animate-in fade-in duration-300 p-4 border border-slate-200 bg-white rounded-xl shadow-xs">
+            <div className="flex justify-between text-xs font-semibold text-slate-600">
+              <span className="flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary-500" />
+                {status}
+              </span>
+              <span>{totalProgress}%</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
+              <div 
+                className="bg-primary-600 h-full transition-all duration-300 ease-out" 
+                style={{ width: `${totalProgress}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="text-center text-sm text-slate-500">
+              {status}
+              {isLoading && <RefreshCw className="inline ml-2 w-4 h-4 animate-spin" />}
+          </div>
+        )}
 
         {imgSrc && (
             <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">

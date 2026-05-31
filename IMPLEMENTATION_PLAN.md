@@ -21,7 +21,7 @@
 **Tests**:
 - Stash generated data to Scratchpad, select active tools, load data instantly.
 - Extract color and verify AA/AAA ratings changing visually as HSL ranges are dragged.
-**Status**: Not Started
+**Status**: In Progress (Scratchpad IndexedDB hybrid store and routing completed)
 
 ## Stage 3: Security & Animation Frame Extractor
 **Goal**: Add HS256 local JWT SubtleCrypto dictionary brute-forcing sandbox, PEM/DER/JWK triple key converter, and APNG/WebP/Lottie animation frames extractor.
@@ -32,7 +32,7 @@
 **Tests**:
 - Run brute-force on simple JWT signature and confirm success.
 - Scrub an APNG animation frame and download the single frame.
-**Status**: Not Started
+**Status**: In Progress (Animation Frame Extractor for GIF and Lottie JSON completed)
 
 ## Stage 4: 3D printable Wall Thickness Heatmap & PBR Env Renderer
 **Goal**: Integrate Three.js raycasting wall thickness heatmap analysis and custom PBR HDR environment & rough-metallic presets in STL viewer.
@@ -51,4 +51,4 @@
 - Push commits and delete workspace tracker.
 **Tests**:
 - Run `npm run lint` and `npm run build` in shell.
-**Status**: Not Started
+**Status**: Complete (TypeScript 0 errors, ESLint 0 warnings, production build completed in 5.66s)

@@ -12,6 +12,7 @@ import {
   Upload,
   Copy,
   Check,
+  ClipboardList,
 } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import JSZip from 'jszip';
@@ -19,6 +20,7 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
 import { sanitizeSvgMarkup } from './shared/sanitizeMarkup';
+import { useScratchpadStore } from './shared/scratchpadStore';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -777,6 +779,26 @@ const ImageCompressorPanel: React.FC = () => {
     }
   };
 
+  const [stashed, setStashed] = useState(false);
+
+  const stashToScratchpad = () => {
+    if (!compressedFile) return;
+    let extension = file?.name.split('.').pop() || 'jpg';
+    if (options.fileType !== 'original') {
+      extension = options.fileType.split('/')[1];
+    }
+    const name = file ? getBaseName(file.name) : 'image';
+    
+    useScratchpadStore.getState().addItem(
+      `${name}_compressed.${extension}`,
+      compressedFile,
+      'image',
+      compressedFile.type
+    );
+    setStashed(true);
+    setTimeout(() => setStashed(false), 2000);
+  };
+
   const downloadImage = () => {
     if (!compressedFile) return;
 
@@ -898,9 +920,18 @@ const ImageCompressorPanel: React.FC = () => {
                       Saved {((file.size - compressedFile.size) / file.size * 100).toFixed(0)}%
                     </p>
                   </div>
-                  <Button onClick={downloadImage} icon={<Download className="w-4 h-4" />}>
-                    Download
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={stashToScratchpad}
+                      variant="secondary"
+                      icon={stashed ? <Check className="w-4 h-4 text-green-500" /> : <ClipboardList className="w-4 h-4" />}
+                    >
+                      {stashed ? 'Stashed!' : 'Stash'}
+                    </Button>
+                    <Button onClick={downloadImage} icon={<Download className="w-4 h-4" />}>
+                      Download
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="tool-panel relative flex min-h-[200px] flex-1 items-center justify-center p-4">

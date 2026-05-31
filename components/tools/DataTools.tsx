@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Search, ShieldAlert, Cpu } from 'lucide-react';
+import { useScratchpadStore, getScratchpadItemContent } from './shared/scratchpadStore';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -1198,6 +1199,42 @@ export const BinaryHexViewerTool: React.FC = () => {
   const [magicName, setMagicName] = useState('');
   const [safetyStatus, setSafetyStatus] = useState<'safe' | 'alert' | 'unknown'>('unknown');
   
+  const scratchpadItems = useScratchpadStore((state) => state.items);
+
+  const loadFromScratchpad = async (itemId: string) => {
+    const matched = scratchpadItems.find(item => item.id === itemId);
+    if (matched) {
+      const content = await getScratchpadItemContent(matched);
+      let uint8: Uint8Array;
+      if (content instanceof Blob) {
+        const buffer = await content.arrayBuffer();
+        uint8 = new Uint8Array(buffer);
+      } else if (content instanceof ArrayBuffer) {
+        uint8 = new Uint8Array(content);
+      } else if (typeof content === 'string') {
+        if (content.startsWith('data:')) {
+          const base64 = content.split(',')[1];
+          const binaryString = atob(base64);
+          uint8 = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            uint8[i] = binaryString.charCodeAt(i);
+          }
+        } else {
+          uint8 = new TextEncoder().encode(content);
+        }
+      } else {
+        return;
+      }
+      
+      setFileName(matched.name);
+      setFileSize(uint8.length);
+      setSelectedIdx(null);
+      setCurrentPage(0);
+      setFileData(uint8);
+      detectMagicHeader(uint8, matched.name);
+    }
+  };
+  
   // Grid Pagination
   const [currentPage, setCurrentPage] = useState(0);
   const pageSize = 512; // 32 rows of 16 bytes each
@@ -1398,16 +1435,37 @@ export const BinaryHexViewerTool: React.FC = () => {
               <span className="text-[11px] font-bold text-slate-500 block">拖放或选择二进制文件</span>
               <span className="text-[9px] text-slate-400 block mt-0.5">支持任意格式，最高 10MB</span>
             </div>
-            <label className="relative cursor-pointer">
-              <input 
-                type="file" 
-                onChange={handleFileUpload} 
-                className="hidden" 
-              />
-              <span className="bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm block text-center">
-                选取本地文件
-              </span>
-            </label>
+            <div className="flex flex-col gap-1.5 w-full items-center">
+              <label className="relative cursor-pointer w-full">
+                <input 
+                  type="file" 
+                  onChange={handleFileUpload} 
+                  className="hidden" 
+                />
+                <span className="bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm block text-center">
+                  选取本地文件
+                </span>
+              </label>
+              {scratchpadItems.length > 0 && (
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      loadFromScratchpad(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="text-[9px] font-bold text-primary-600 dark:text-primary-400 bg-transparent border-0 outline-none w-full text-center mt-1 cursor-pointer"
+                  defaultValue=""
+                >
+                  <option value="" disabled>📂 从暂存箱载入文件...</option>
+                  {scratchpadItems.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
 
           {fileData ? (

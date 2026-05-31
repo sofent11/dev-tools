@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, Download, ImagePlus, Palette, Upload } from 'lucide-react';
+import { Check, Copy, Download, ImagePlus, Palette, Upload, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { FieldLabel, Input, Textarea, UploadPanel } from '../../ui/ToolUi';
 import { downloadBlob, readFileAsDataUrl } from '../shared/fileUtils';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
+import { useScratchpadStore } from '../shared/scratchpadStore';
 
 interface Swatch {
   hex: string;
@@ -365,11 +366,22 @@ export const ImageColorExtractTool: React.FC = () => {
 
 export const ImageToBase64Tool: React.FC = () => {
   const [dataUrl, setDataUrl] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [stashed, setStashed] = useState(false);
   const { copied, copy } = useCopyToClipboard();
 
   const handleFile = async (file?: File) => {
     if (!file) return;
+    setFileName(file.name);
     setDataUrl(await readFileAsDataUrl(file));
+  };
+
+  const stash = () => {
+    if (!dataUrl) return;
+    const name = fileName ? `${fileName.split('.').shift()}_base64.txt` : 'image_base64.txt';
+    useScratchpadStore.getState().addItem(name, dataUrl, 'text', 'text/plain');
+    setStashed(true);
+    setTimeout(() => setStashed(false), 2000);
   };
 
   return (
@@ -390,9 +402,14 @@ export const ImageToBase64Tool: React.FC = () => {
           <div className="flex min-h-0 flex-col gap-2">
             <div className="flex items-center justify-between">
               <FieldLabel>Data URL</FieldLabel>
-              <Button size="sm" variant="secondary" onClick={() => copy(dataUrl)} disabled={!dataUrl}>
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              </Button>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={stash} disabled={!dataUrl}>
+                  {stashed ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardList className="h-4 w-4" />}
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => copy(dataUrl)} disabled={!dataUrl}>
+                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono text-xs" value={dataUrl} />
           </div>
@@ -404,7 +421,9 @@ export const ImageToBase64Tool: React.FC = () => {
 
 export const ImageWatermarkTool: React.FC = () => {
   const [imageUrl, setImageUrl] = useState('');
+  const [sourceName, setSourceName] = useState('');
   const [text, setText] = useState('程序员百宝箱');
+  const [stashed, setStashed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const draw = async (src = imageUrl, mark = text) => {
@@ -429,9 +448,26 @@ export const ImageWatermarkTool: React.FC = () => {
 
   const handleFile = async (file?: File) => {
     if (!file) return;
+    setSourceName(file.name);
     const url = await readFileAsDataUrl(file);
     setImageUrl(url);
     window.setTimeout(() => draw(url, text), 0);
+  };
+
+  const stash = () => {
+    canvasRef.current?.toBlob(blob => {
+      if (blob) {
+        const name = sourceName ? `${sourceName.split('.').shift()}_watermarked.png` : 'watermarked.png';
+        useScratchpadStore.getState().addItem(
+          name,
+          blob,
+          'image',
+          'image/png'
+        );
+        setStashed(true);
+        setTimeout(() => setStashed(false), 2000);
+      }
+    }, 'image/png');
   };
 
   const download = () => {
@@ -442,7 +478,18 @@ export const ImageWatermarkTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="图片水印" description="使用 Canvas 在本地添加文字水印。" actions={<Button size="sm" icon={<Download className="h-4 w-4" />} onClick={download} disabled={!imageUrl}>下载</Button>} />
+      <CardHeader 
+        title="图片水印" 
+        description="使用 Canvas 在本地添加文字水印。" 
+        actions={
+          <div className="flex gap-2">
+            <Button size="sm" variant="secondary" icon={stashed ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardList className="h-4 w-4" />} onClick={stash} disabled={!imageUrl}>
+              {stashed ? 'Stashed!' : 'Stash'}
+            </Button>
+            <Button size="sm" icon={<Download className="h-4 w-4" />} onClick={download} disabled={!imageUrl}>下载</Button>
+          </div>
+        } 
+      />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[18rem_1fr]">
         <div className="space-y-4">
           <UploadPanel>

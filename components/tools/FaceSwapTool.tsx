@@ -3,6 +3,7 @@ import FaceSwapCanvas from './faceswap-core/components/FaceSwapCanvas';
 import { processModelImage, processSourceImage } from './faceswap-core/utils/faceProcessor';
 import { ModelFacePack, SourceFacePack } from './faceswap-core/types';
 import { MODELS, SOURCES } from './faceswap-core/utils/mockData';
+import { loadScriptWithCache } from './shared/cdnCacheManager';
 
 /**
  * Wrapper component that integrates faceswap-core as a tool panel.
@@ -20,23 +21,6 @@ const revokeObjectUrl = (url: string | null) => {
     if (url?.startsWith('blob:')) {
         URL.revokeObjectURL(url);
     }
-};
-
-// Helper to load external scripts
-const loadScript = (src: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-        // Check if already loaded
-        if (document.querySelector(`script[src="${src}"]`)) {
-            resolve();
-            return;
-        }
-        const script = document.createElement('script');
-        script.src = src;
-        script.crossOrigin = 'anonymous';
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-        document.head.appendChild(script);
-    });
 };
 
 export const FaceSwapTool: React.FC = () => {
@@ -62,8 +46,8 @@ export const FaceSwapTool: React.FC = () => {
         const loadDependencies = async () => {
             try {
                 await Promise.all([
-                    loadScript(SCRIPT_URLS.faceMesh),
-                    loadScript(SCRIPT_URLS.delaunator)
+                    loadScriptWithCache(SCRIPT_URLS.faceMesh),
+                    loadScriptWithCache(SCRIPT_URLS.delaunator)
                 ]);
                 setIsLoading(false);
             } catch (err) {
