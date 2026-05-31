@@ -18,13 +18,14 @@
 - Studio tab history sync now responds to both hash and browser back/forward navigation.
 
 ## Stage 3: Feature Enhancements
-**Status**: Partially Complete
+**Status**: Complete, hardening ongoing
 
 - Color converter includes WCAG 2.1 contrast analysis, HSL micro-adjusters, and accessible color suggestions.
 - JWT weak-secret auditing runs in a cancellable Web Worker with custom dictionary support and progress feedback.
-- Animation Frame Extractor for GIF and Lottie JSON is integrated in the Image Studio.
+- Animation Frame Extractor for GIF, Lottie JSON, APNG, and animated WebP is integrated in the Image Studio with browser capability and memory-budget safeguards.
 - PDF.js now loads through the shared runtime asset loader.
-- Remaining: APNG/WebP frame extraction, STL wall-thickness heatmap, and full PBR material/environment controls.
+- STL repair includes browser-side wall-thickness heatmap sampling, fast/precise modes, cancellation, and PBR material/environment controls.
+- Remaining hardening: fixtures and E2E coverage for APNG/WebP and representative STL models.
 
 ## Stage 4: Quality Gates
 **Status**: Complete
@@ -36,7 +37,6 @@
 
 ## Next Iteration
 
-- Move sql.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe to the shared runtime asset loader with visible retry/status UI.
+- Continue exposing shared runtime loader states in sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and MediaPipe tool panels.
 - Add scratchpad persistence/quota tests and mobile viewport E2E coverage.
-- Extend animation frame extraction to APNG/WebP.
-- Implement STL wall-thickness heatmap and PBR environment presets.
+- Add fixture-backed tests for APNG/WebP frame extraction and STL wall-thickness fast/precise diagnostics.

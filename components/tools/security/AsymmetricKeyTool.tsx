@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { FieldLabel } from '../../ui/ToolUi';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
-import { useScratchpadStore, getScratchpadItemContent } from '../shared/scratchpadStore';
+import { useScratchpadStore } from '../shared/scratchpadStore';
+import { ScratchpadPicker, isScratchpadKeyLike } from '../shared/ScratchpadControls';
 
 // Standard Helpers for Binary conversions
 function base64ToBytes(base64: string): Uint8Array {
@@ -139,22 +140,6 @@ export const AsymmetricKeyTool: React.FC = () => {
   const { copied, copy } = useCopyToClipboard();
 
   // Audit State
-  const scratchpadItems = useScratchpadStore((state) => state.items);
-  const compatibleItems = scratchpadItems.filter(item => 
-    !item.isBinary && 
-    (item.type === 'text' || item.type === 'json' || item.name.endsWith('.pem') || item.name.endsWith('.json') || item.name.endsWith('.key') || item.name.endsWith('.txt'))
-  );
-
-  const loadFromScratchpad = async (itemId: string) => {
-    const matched = scratchpadItems.find(item => item.id === itemId);
-    if (matched) {
-      const content = await getScratchpadItemContent(matched);
-      if (typeof content === 'string') {
-        setInputKey(content);
-      }
-    }
-  };
-
   const [stashed, setStashed] = useState(false);
   const stashConvertedKey = () => {
     if (!convertedResult) return;
@@ -461,25 +446,13 @@ export const AsymmetricKeyTool: React.FC = () => {
               <FieldLabel hint="支持 RSA (PKCS#1 / PKCS#8), EC 私钥, 公钥或标准 JWK JSON">
                 输入密钥文本
               </FieldLabel>
-              {compatibleItems.length > 0 && (
-                <select
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      loadFromScratchpad(e.target.value);
-                      e.target.value = '';
-                    }
-                  }}
-                  className="text-[10px] font-bold text-primary-600 dark:text-primary-400 bg-transparent border-0 outline-none max-w-[150px] cursor-pointer"
-                  defaultValue=""
-                >
-                  <option value="" disabled>📂 从暂存箱调入...</option>
-                  {compatibleItems.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              )}
+              <ScratchpadPicker
+                placeholder="📂 从暂存箱调入..."
+                filter={isScratchpadKeyLike}
+                onLoad={content => {
+                  if (typeof content === 'string') setInputKey(content);
+                }}
+              />
             </div>
             <textarea
               className="flex-1 w-full p-3 font-mono text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none leading-relaxed"

@@ -49,13 +49,14 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 ## Remaining Known Issues
 
 - Several large vendor chunks remain by nature of Three.js, pdf-lib, and data tooling. They are lazy-loaded and cached, but deeper splitting can be revisited if real-user performance data shows a problem.
-- Browser-only remote CDN dependencies should continue moving onto the shared loader path; PDF.js is covered, while sql.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe still need the same UI-level retry/status treatment.
-- Animation frame extraction and STL wall-thickness/PBR enhancements remain product feature work.
+- Browser-only remote CDN dependencies now share a common runtime loader compatibility path, but more tools should expose the loader state directly in their own panels.
+- Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder` support and use memory/frame budgets.
+- STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The wall-thickness result is a sampling estimate, not a replacement for slicer or industrial inspection.
 
 ## Recommended Next Iterations
 
-1. Finish runtime loader adoption:
-   Move sql.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe to the shared loader with retry/status UI.
+1. Improve runtime loader UI adoption:
+   Continue surfacing cached/loading/retry/error state inside sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and MediaPipe panels.
 
 2. Expand per-tool tests:
    Add focused tests for scratchpad persistence/quota behavior, runtime loader timeout/retry, SQL formatting, SVG sanitizer, and JWT worker auditing.
@@ -63,8 +64,8 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 3. Improve offline resilience:
    Add local `public/vendor` mirrors for self-hostable browser assets where licenses allow.
 
-4. Finish product feature stages:
-   Continue the staged roadmap from `IMPLEMENTATION_PLAN.md`: animation frame extraction and 3D wall-thickness/PBR improvements.
+4. Harden product feature stages:
+   Add fixtures and browser tests for APNG/WebP frame extraction and STL wall-thickness fast/precise modes.
 
 5. Tighten CI over time:
    Add mobile viewport Playwright coverage for the scratchpad drawer and key Studio tabs.

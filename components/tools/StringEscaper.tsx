@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Copy, Check, ShieldAlert, ArrowLeftRight, Sparkles, RefreshCw, FileUp, Binary, ChevronLeft, ChevronRight, FileCode } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
-import { useScratchpadStore } from './shared/scratchpadStore';
+import { ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
 
 type DecodeMode = 'base64' | 'url' | 'html' | 'unicode' | 'hex';
 
@@ -127,8 +127,6 @@ export const StringEscaper: React.FC = () => {
   const [input, setInput] = useState(DEFAULT_INPUT);
   const { copiedId, copy } = useCopyToClipboard();
   
-  const scratchpadItems = useScratchpadStore((state) => state.items);
-
   // Local values initialized dynamically to match default input
   const [b64Val, setB64Val] = useState(() => safeBtoa(DEFAULT_INPUT));
   const [urlVal, setUrlVal] = useState(() => encodeURIComponent(DEFAULT_INPUT));
@@ -435,24 +433,13 @@ export const StringEscaper: React.FC = () => {
               <div className="flex justify-between items-center text-xs">
                 <span className="font-bold text-slate-400 uppercase tracking-wider">输入原始字符串 (同步编辑)</span>
                 <div className="flex items-center gap-2">
-                  {scratchpadItems.length > 0 && (
-                    <select
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val) {
-                          const item = scratchpadItems.find(i => i.id === val);
-                          if (item) updateInputAndSync(item.content);
-                          e.target.value = '';
-                        }
-                      }}
-                      className="p-1 border rounded bg-slate-950 border-slate-800 text-[10px] text-slate-400 focus:outline-none"
-                    >
-                      <option value="">从暂存箱载入...</option>
-                      {scratchpadItems.map(item => (
-                        <option key={item.id} value={item.id}>{item.name}</option>
-                      ))}
-                    </select>
-                  )}
+                  <ScratchpadPicker
+                    placeholder="从暂存箱载入..."
+                    filter={isScratchpadTextLike}
+                    onLoad={content => {
+                      if (typeof content === 'string') updateInputAndSync(content);
+                    }}
+                  />
                   <span className="text-slate-500 font-mono">{input.length} 字符</span>
                 </div>
               </div>

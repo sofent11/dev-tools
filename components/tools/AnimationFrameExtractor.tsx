@@ -27,9 +27,17 @@ const SCRIPT_URLS = {
 
 interface FrameData {
   index: number;
-  dataUrl: string;
-  delay?: number;
+  blob: Blob;
+  objectUrl: string;
+  delayMs: number;
+  width: number;
+  height: number;
+  dataUrl?: string;
 }
+
+const MAX_DECODED_FRAMES = 500;
+const MAX_FRAME_PIXELS = 4096 * 4096;
+const MAX_TOTAL_PIXELS = 160_000_000;
 
 interface ImageDecoderConstructor {
   new(init: { data: Blob; type: string }): {
@@ -46,14 +54,31 @@ declare global {
   }
 }
 
-const blobToDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(reader.error || new Error('读取帧图像失败'));
-  reader.readAsDataURL(blob);
-});
-
 const canvasToBlob = (canvas: HTMLCanvasElement) => new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+
+const createFrameData = async (index: number, canvas: HTMLCanvasElement, delayMs = 100): Promise<FrameData> => {
+  const pixels = canvas.width * canvas.height;
+  if (pixels > MAX_FRAME_PIXELS) {
+    throw new Error(`单帧尺寸过大 (${canvas.width}x${canvas.height})，为避免浏览器内存暴涨已停止解析。`);
+  }
+  const blob = await canvasToBlob(canvas);
+  if (!blob) throw new Error('帧图像导出失败。');
+  return {
+    index,
+    blob,
+    objectUrl: URL.createObjectURL(blob),
+    delayMs,
+    width: canvas.width,
+    height: canvas.height,
+  };
+};
+
+const getFrameBlob = async (frame: FrameData) => {
+  if (frame.blob) return frame.blob;
+  if (!frame.dataUrl) throw new Error('帧数据缺失');
+  const res = await fetch(frame.dataUrl);
+  return res.blob();
+};
 
 export const AnimationFrameExtractor: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -67,6 +92,7 @@ export const AnimationFrameExtractor: React.FC = () => {
   const [fps, setFps] = useState(30);
   const [frames, setFrames] = useState<FrameData[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [extractError, setExtractError] = useState('');
 
   // Success indicator
   const [stashedIndex, setStashedIndex] = useState<number | null>(null);
@@ -75,6 +101,8 @@ export const AnimationFrameExtractor: React.FC = () => {
   // References
   const containerRef = useRef<HTMLDivElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const objectUrlsRef = useRef<string[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const lottieAnimRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -82,6 +110,17 @@ export const AnimationFrameExtractor: React.FC = () => {
 
   // Global Scratchpad Store
   const stashItem = useScratchpadStore(state => state.addItem);
+
+  const clearFrameObjectUrls = useCallback(() => {
+    objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
+    objectUrlsRef.current = [];
+  }, []);
+
+  const setDecodedFrames = useCallback((nextFrames: FrameData[]) => {
+    clearFrameObjectUrls();
+    objectUrlsRef.current = nextFrames.map(frame => frame.objectUrl);
+    setFrames(nextFrames);
+  }, [clearFrameObjectUrls]);
 
   const handleRuntimeStatus = (event: RemoteRuntimeEvent) => {
     if (event.status === 'cached') {
@@ -125,6 +164,8 @@ export const AnimationFrameExtractor: React.FC = () => {
   };
 
   const cleanUpPlayer = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setIsPlaying(false);
     if (playIntervalRef.current) {
       clearInterval(playIntervalRef.current);
@@ -134,12 +175,19 @@ export const AnimationFrameExtractor: React.FC = () => {
       lottieAnimRef.current.destroy();
       lottieAnimRef.current = null;
     }
+    clearFrameObjectUrls();
     setFrames([]);
     setTotalFrames(0);
     setCurrentFrame(0);
+    setExtractError('');
   };
 
-  const decodeAnimatedImageFrames = async (uploadedFile: File, mimeType: string) => {
+  useEffect(() => () => {
+    abortControllerRef.current?.abort();
+    clearFrameObjectUrls();
+  }, [clearFrameObjectUrls]);
+
+  const decodeAnimatedImageFrames = async (uploadedFile: File, mimeType: string, signal: AbortSignal) => {
     if (!window.ImageDecoder) {
       throw new Error('当前浏览器暂不支持 WebCodecs ImageDecoder，请使用最新版 Chrome/Edge，或改用 GIF/Lottie 文件。');
     }
@@ -151,26 +199,33 @@ export const AnimationFrameExtractor: React.FC = () => {
 
     const decoder = new window.ImageDecoder({ data: uploadedFile, type: mimeType });
     const frameCount = decoder.tracks?.selectedTrack?.frameCount || 1;
+    if (frameCount > MAX_DECODED_FRAMES) {
+      throw new Error(`检测到 ${frameCount} 帧，超过当前安全上限 ${MAX_DECODED_FRAMES} 帧。请截取较短片段后重试。`);
+    }
     const parsedFrames: FrameData[] = [];
+    let totalPixels = 0;
 
     try {
       for (let index = 0; index < frameCount; index += 1) {
+        if (signal.aborted) throw new DOMException('用户已取消解析', 'AbortError');
         setStatus(`正在解码 ${mimeType.includes('webp') ? 'WebP' : 'APNG'} 第 ${index + 1} / ${frameCount} 帧...`);
         const { image } = await decoder.decode({ frameIndex: index });
         const canvas = document.createElement('canvas');
         canvas.width = image.displayWidth;
         canvas.height = image.displayHeight;
+        totalPixels += canvas.width * canvas.height;
+        if (totalPixels > MAX_TOTAL_PIXELS) {
+          image.close();
+          throw new Error('累计帧像素过大，已停止解析以保护浏览器内存。');
+        }
         const ctx = canvas.getContext('2d');
         if (!ctx) throw new Error('当前浏览器无法创建 Canvas。');
         ctx.drawImage(image, 0, 0);
+        const duration = typeof image.duration === 'number' && image.duration > 0
+          ? Math.max(16, Math.round(image.duration / 1000))
+          : 100;
         image.close();
-        const blob = await canvasToBlob(canvas);
-        if (!blob) throw new Error('帧图像导出失败。');
-        parsedFrames.push({
-          index,
-          dataUrl: await blobToDataUrl(blob),
-          delay: 100,
-        });
+        parsedFrames.push(await createFrameData(index, canvas, duration));
       }
     } finally {
       decoder.close();
@@ -187,6 +242,9 @@ export const AnimationFrameExtractor: React.FC = () => {
     cleanUpPlayer();
     setFile(uploadedFile);
     setIsExtracting(true);
+    setExtractError('');
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     const ext = uploadedFile.name.split('.').pop()?.toLowerCase();
     if (ext === 'json') {
@@ -245,30 +303,35 @@ export const AnimationFrameExtractor: React.FC = () => {
           throw new Error('GIF 文件中未检测到有效帧');
         }
 
+        if (rawFrames.length > MAX_DECODED_FRAMES) {
+          throw new Error(`检测到 ${rawFrames.length} 帧，超过当前安全上限 ${MAX_DECODED_FRAMES} 帧。`);
+        }
         const parsedFrames: FrameData[] = [];
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d')!;
+        let totalPixels = 0;
 
         // Render each frame offscreen to save as base64 images
         for (let i = 0; i < rawFrames.length; i++) {
+          if (abortController.signal.aborted) throw new DOMException('用户已取消解析', 'AbortError');
           const rawFrame = rawFrames[i];
           canvas.width = rawFrame.dims.width;
           canvas.height = rawFrame.dims.height;
+          totalPixels += canvas.width * canvas.height;
+          if (totalPixels > MAX_TOTAL_PIXELS) {
+            throw new Error('累计帧像素过大，已停止解析以保护浏览器内存。');
+          }
           
           const imgData = ctx.createImageData(rawFrame.dims.width, rawFrame.dims.height);
           imgData.data.set(rawFrame.patch);
           ctx.putImageData(imgData, 0, 0);
 
-          parsedFrames.push({
-            index: i,
-            dataUrl: canvas.toDataURL('image/png'),
-            delay: rawFrame.delay || 100
-          });
+          parsedFrames.push(await createFrameData(i, canvas, rawFrame.delay || 100));
         }
 
-        setFrames(parsedFrames);
+        setDecodedFrames(parsedFrames);
         setTotalFrames(parsedFrames.length);
-        const avgDelay = parsedFrames[0]?.delay || 100;
+        const avgDelay = parsedFrames[0]?.delayMs || 100;
         setFps(Math.round(1000 / avgDelay));
         setCurrentFrame(0);
         
@@ -280,7 +343,9 @@ export const AnimationFrameExtractor: React.FC = () => {
         }, 100);
 
       } catch (err) {
-        setStatus('解析 GIF 格式失败: ' + (err as Error).message);
+        const message = (err as Error).message;
+        setExtractError(message);
+        setStatus('解析 GIF 格式失败: ' + message);
         setIsExtracting(false);
       }
     } else if (ext === 'webp' || ext === 'png' || ext === 'apng') {
@@ -288,11 +353,12 @@ export const AnimationFrameExtractor: React.FC = () => {
       setFileType(ext === 'webp' ? 'webp' : 'apng');
       try {
         setStatus(`正在通过 WebCodecs 解码 ${ext === 'webp' ? 'animated WebP' : 'APNG'}...`);
-        const parsedFrames = await decodeAnimatedImageFrames(uploadedFile, mimeType);
+        const parsedFrames = await decodeAnimatedImageFrames(uploadedFile, mimeType, abortController.signal);
         if (parsedFrames.length === 0) throw new Error('未检测到有效动画帧。');
-        setFrames(parsedFrames);
+        setDecodedFrames(parsedFrames);
         setTotalFrames(parsedFrames.length);
-        setFps(10);
+        const avgDelay = parsedFrames[0]?.delayMs || 100;
+        setFps(Math.max(1, Math.round(1000 / avgDelay)));
         setCurrentFrame(0);
         setTimeout(() => {
           renderGifFrame(0, parsedFrames);
@@ -300,11 +366,15 @@ export const AnimationFrameExtractor: React.FC = () => {
           setStatus(`${ext === 'webp' ? 'WebP' : 'APNG'} 动画帧解析完成`);
         }, 100);
       } catch (err) {
-        setStatus(`解析 ${ext === 'webp' ? 'WebP' : 'APNG'} 失败: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        setExtractError(message);
+        setStatus(`解析 ${ext === 'webp' ? 'WebP' : 'APNG'} 失败: ${message}`);
         setIsExtracting(false);
       }
     } else {
-      setStatus('暂不支持的文件格式，仅支持上传 GIF、APNG、WebP 或 Lottie JSON 文件。');
+      const message = '暂不支持的文件格式，仅支持上传 GIF、APNG、WebP 或 Lottie JSON 文件。';
+      setExtractError(message);
+      setStatus(message);
       setIsExtracting(false);
     }
   };
@@ -345,7 +415,7 @@ export const AnimationFrameExtractor: React.FC = () => {
         ctx.drawImage(img, 0, 0);
       }
     };
-    img.src = frame.dataUrl;
+    img.src = frame.objectUrl || frame.dataUrl || '';
   }, [frames]);
 
   // Handle Scrub slider events
@@ -414,8 +484,7 @@ export const AnimationFrameExtractor: React.FC = () => {
 
       if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
         for (const frame of frames) {
-          const res = await fetch(frame.dataUrl);
-          const blob = await res.blob();
+          const blob = await getFrameBlob(frame);
           const name = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
           await useScratchpadStore.getState().addItemAsync(name, blob, 'image', 'image/png');
         }
@@ -476,8 +545,7 @@ export const AnimationFrameExtractor: React.FC = () => {
 
       if (fileType === 'gif' || fileType === 'webp' || fileType === 'apng') {
         for (const frame of frames) {
-          const res = await fetch(frame.dataUrl);
-          const blob = await res.blob();
+          const blob = await getFrameBlob(frame);
           const fileName = `${baseName}_frame_${String(frame.index + 1).padStart(3, '0')}.png`;
           zip.file(fileName, blob);
         }
@@ -544,8 +612,27 @@ export const AnimationFrameExtractor: React.FC = () => {
             <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{status}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">正在利用 Web Worker 或 Canvas 管道提取分段</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">正在使用 Canvas / WebCodecs 管道提取帧，已启用内存预算保护</p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                abortControllerRef.current?.abort();
+                setIsExtracting(false);
+                setStatus('已取消当前解析任务');
+              }}
+              className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-50"
+            >
+              取消
+            </button>
+          </div>
+        )}
+
+        {extractError && !isExtracting && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+            <div className="font-bold">动画解析未完成</div>
+            <p className="mt-1 leading-5">{extractError}</p>
+            <p className="mt-1 leading-5">如果是 APNG/WebP，请确认浏览器支持 WebCodecs ImageDecoder；大尺寸或超长动画建议先裁剪后再导入。</p>
           </div>
         )}
 
@@ -569,6 +656,9 @@ export const AnimationFrameExtractor: React.FC = () => {
               <div className="space-y-2 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex-none">
                 <div className="flex justify-between items-center text-xs font-bold text-slate-600 dark:text-slate-300">
                   <span className="font-mono">帧率: {fps} FPS</span>
+                  {frames[currentFrame] && (
+                    <span className="font-mono text-slate-400">{frames[currentFrame].delayMs} ms · {frames[currentFrame].width}x{frames[currentFrame].height}</span>
+                  )}
                   <span className="font-mono text-primary-600 dark:text-primary-400">FRAME {currentFrame + 1} / {totalFrames}</span>
                 </div>
 

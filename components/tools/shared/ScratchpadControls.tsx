@@ -12,6 +12,21 @@ export const isScratchpadTextLike = (item: ScratchpadItem) =>
   item.mimeType?.startsWith('text/') ||
   ['text', 'json', 'svg', 'jsx', 'tsx'].includes(item.type);
 
+export const isScratchpadImageLike = (item: ScratchpadItem) =>
+  item.type === 'image' || Boolean(item.mimeType?.startsWith('image/'));
+
+export const isScratchpadPdfLike = (item: ScratchpadItem) =>
+  item.type === 'pdf' || item.mimeType === 'application/pdf' || item.name.toLowerCase().endsWith('.pdf');
+
+export const isScratchpadKeyLike = (item: ScratchpadItem) =>
+  isScratchpadTextLike(item) && (
+    item.type === 'json' ||
+    item.name.endsWith('.pem') ||
+    item.name.endsWith('.json') ||
+    item.name.endsWith('.key') ||
+    item.name.endsWith('.txt')
+  );
+
 export const ScratchpadPicker: React.FC<{
   label?: string;
   placeholder?: string;
