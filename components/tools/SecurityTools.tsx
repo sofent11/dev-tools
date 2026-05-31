@@ -4,6 +4,7 @@ import md5 from 'blueimp-md5';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel, Input, Select } from '../ui/ToolUi';
+import { loadScriptWithCache } from './shared/cdnCacheManager';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -681,13 +682,9 @@ export const PasswordGenTool: React.FC = () => {
             Promise.resolve().then(() => setZxcvbnLoaded(true));
             return;
         }
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js';
-        script.async = true;
-        script.onload = () => {
-            Promise.resolve().then(() => setZxcvbnLoaded(true));
-        };
-        document.body.appendChild(script);
+        loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/zxcvbn/4.4.2/zxcvbn.js')
+            .then(() => setZxcvbnLoaded(true))
+            .catch((err) => console.error('Failed to load zxcvbn script', err));
     }, []);
 
     const generatePassword = useCallback((len: number, opts: typeof options) => {
@@ -924,16 +921,9 @@ export const PgpKeymasterTool: React.FC = () => {
       Promise.resolve().then(() => setOpenpgpLoaded(true));
       return;
     }
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js';
-    script.async = true;
-    script.onload = () => {
-      Promise.resolve().then(() => setOpenpgpLoaded(true));
-    };
-    script.onerror = () => {
-      Promise.resolve().then(() => setError('加载 OpenPGP 库失败，请检查网络连接。'));
-    };
-    document.body.appendChild(script);
+    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/openpgp/5.11.2/openpgp.min.js')
+      .then(() => setOpenpgpLoaded(true))
+      .catch(() => setError('加载 OpenPGP 库失败，请检查网络连接。'));
   }, []);
 
   const handleGenerateKeys = async () => {
@@ -1414,15 +1404,9 @@ export const SmCryptoSuiteTool: React.FC = () => {
       Promise.resolve().then(() => setLoaded(true));
       return;
     }
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js';
-    script.onload = () => {
-      Promise.resolve().then(() => setLoaded(true));
-    };
-    script.onerror = () => {
-      console.error('Failed to dynamically load sm-crypto CDN library.');
-    };
-    document.body.appendChild(script);
+    loadScriptWithCache('https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js')
+      .then(() => setLoaded(true))
+      .catch((err) => console.error('Failed to dynamically load sm-crypto CDN library.', err));
   }, []);
 
   // SM2 Generators

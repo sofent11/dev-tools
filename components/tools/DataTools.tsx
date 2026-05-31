@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Search, ShieldAlert, Cpu } from 'lucide-react';
 import { useScratchpadStore, getScratchpadItemContent } from './shared/scratchpadStore';
+import { loadScriptWithCache } from './shared/cdnCacheManager';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -914,19 +915,12 @@ export const SqliteSandboxTool: React.FC = () => {
     }
 
     Promise.resolve().then(() => setIsLoading(true));
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js';
-    script.async = true;
-    script.onload = () => {
-      Promise.resolve().then(() => initDatabase());
-    };
-    script.onerror = () => {
-      Promise.resolve().then(() => {
+    loadScriptWithCache('https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js')
+      .then(() => initDatabase())
+      .catch(() => {
         setError('加载 SQLite WebAssembly 库失败，请检查网络连接。');
         setIsLoading(false);
       });
-    };
-    document.body.appendChild(script);
   }, [initDatabase]);
 
   const handleExecute = () => {
