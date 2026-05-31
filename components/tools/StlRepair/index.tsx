@@ -724,7 +724,7 @@ export const StlRepairTool: React.FC = () => {
           <div className="grid gap-3 border-t border-slate-200 pt-3">
             <div>
               <FieldLabel>预览渲染材质</FieldLabel>
-              <Select value={materialType} onChange={event => setMaterialType(event.target.value as any)}>
+              <Select value={materialType} onChange={event => setMaterialType(event.target.value as typeof materialType)}>
                 <option value="default">默认 (Matte Green)</option>
                 <option value="gold">🏆 皇家黄金 (Gold PBR)</option>
                 <option value="silver">🥈 抛光白银 (Silver PBR)</option>

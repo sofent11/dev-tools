@@ -228,10 +228,6 @@ const boundsContains = (outer: Bounds, inner: Bounds) =>
 
 const boundsWidth = (bounds: Bounds) => Math.max(1, bounds.right - bounds.left);
 const boundsHeight = (bounds: Bounds) => Math.max(1, bounds.bottom - bounds.top);
-const boundsCenter = (bounds: Bounds): IntPoint => ({
-  X: (bounds.left + bounds.right) / 2,
-  Y: (bounds.top + bounds.bottom) / 2,
-});
 
 const unionBounds = (paths: IntPoint[][]): Bounds | null => {
   const points = paths.flat();
@@ -774,22 +770,6 @@ const buildSmoothBridgeShape = (
   return buildOpenStrokeShape(sampleCubicCenterline(p0, c1, c2, p3, steps), width, scaleUp);
 };
 
-const buildVerticalBridgeShape = (
-  start: IntPoint,
-  end: IntPoint,
-  width: number,
-  scaleUp: number
-): Shape | null => {
-  const dy = end.Y - start.Y;
-  const overlap = Math.max(width * 0.65, 18);
-  const p0 = { X: Math.round(start.X), Y: Math.round(start.Y - Math.sign(dy || 1) * overlap) };
-  const p3 = { X: Math.round(end.X), Y: Math.round(end.Y + Math.sign(dy || 1) * overlap) };
-  const c1 = { X: Math.round(start.X), Y: Math.round(start.Y + dy * 0.35) };
-  const c2 = { X: Math.round(end.X), Y: Math.round(end.Y - dy * 0.35) };
-  const steps = clamp(Math.ceil(Math.abs(dy) / Math.max(width * 0.45, 1)), 8, 24);
-  return buildOpenStrokeShape(sampleCubicCenterline(p0, c1, c2, p3, steps), width, scaleUp);
-};
-
 const findClosestPointPair = (a: Shape, b: Shape): { a: IntPoint; b: IntPoint; dist2: number } | null => {
   const aPts = samplePoints(flattenShapePoints(a), 200);
   const bPts = samplePoints(flattenShapePoints(b), 200);
@@ -886,21 +866,6 @@ const componentArea = (shape: Shape): number =>
   ((shape.paths as IntPoint[][]) ?? []).reduce((total, path) => total + Math.abs(polygonArea(path)), 0);
 
 const textComponentCount = (shape: Shape): number => getTextComponents(shape).length;
-
-const pointClosestTo = (points: IntPoint[], target: IntPoint, yMode?: 'min' | 'max'): IntPoint | null => {
-  if (points.length === 0) return null;
-  let best = points[0];
-  let bestScore = Number.POSITIVE_INFINITY;
-  for (const point of points) {
-    const yBias = yMode === 'min' ? point.Y * 0.01 : yMode === 'max' ? -point.Y * 0.01 : 0;
-    const score = Math.abs(point.X - target.X) * 1.8 + Math.abs(point.Y - target.Y) + yBias;
-    if (score < bestScore) {
-      best = point;
-      bestScore = score;
-    }
-  }
-  return best;
-};
 
 const unionBridge = (merged: Shape, bridgeShape: Shape | null): Shape | null => {
   if (!bridgeShape || bridgeShape.paths.length === 0) return null;
@@ -1548,8 +1513,8 @@ export const generateGeometry = (
       const x1 = boundsForLoops.left + lWidth * 0.15;
       const x2 = boundsForLoops.right - lWidth * 0.15;
       
-      const { top: bodyTop1, cx: ringCx1 } = getClosestGlyphTop(x1, boundsForLoops.top);
-      const { top: bodyTop2, cx: ringCx2 } = getClosestGlyphTop(x2, boundsForLoops.top);
+      const { top: bodyTop1 } = getClosestGlyphTop(x1, boundsForLoops.top);
+      const { top: bodyTop2 } = getClosestGlyphTop(x2, boundsForLoops.top);
       
       const ringCy1 = bodyTop1 - stemH - loopOuterR * 0.1;
       const ringCy2 = bodyTop2 - stemH - loopOuterR * 0.1;

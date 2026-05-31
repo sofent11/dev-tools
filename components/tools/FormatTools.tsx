@@ -9,6 +9,7 @@ import jsyaml from 'js-yaml';
 import Papa from 'papaparse';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { marked } from 'marked';
+import { sanitizeHtmlMarkup } from './shared/sanitizeMarkup';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -30,7 +31,7 @@ export const XmlTool: React.FC = () => {
 
   const handleFormat = () => {
     try {
-      const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+      const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
       const obj = parser.parse(input);
       const builder = new XMLBuilder({ format: true, ignoreAttributes: false });
       setOutput(builder.build(obj));
@@ -42,7 +43,7 @@ export const XmlTool: React.FC = () => {
 
   const handleMinify = () => {
     try {
-      const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+      const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
       const obj = parser.parse(input);
       const builder = new XMLBuilder({ format: false, ignoreAttributes: false });
       setOutput(builder.build(obj));
@@ -54,7 +55,7 @@ export const XmlTool: React.FC = () => {
 
   const handleToJson = () => {
       try {
-        const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+        const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
         const obj = parser.parse(input);
         setOutput(JSON.stringify(obj, null, 2));
         setError(null);
@@ -253,41 +254,6 @@ export const CsvTool: React.FC = () => {
 };
 
 
-// --- Markdown -> HTML Tool ---
-const sanitizeHtml = (htmlStr: string): string => {
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlStr, 'text/html');
-    
-    // Remove dangerous tags
-    const dangerousTags = ['script', 'iframe', 'object', 'embed', 'link', 'style', 'meta', 'base'];
-    dangerousTags.forEach(tag => {
-      doc.querySelectorAll(tag).forEach(el => el.remove());
-    });
-    
-    // Clean up all elements
-    const allElements = doc.querySelectorAll('*');
-    allElements.forEach(el => {
-      // Remove on* attributes (onclick, onload, etc.)
-      const attrs = Array.from(el.attributes);
-      attrs.forEach(attr => {
-        if (attr.name.startsWith('on')) {
-          el.removeAttribute(attr.name);
-        }
-        // Remove javascript: URLs from href, src, etc.
-        if (attr.value.trim().toLowerCase().startsWith('javascript:')) {
-          el.setAttribute(attr.name, '#');
-        }
-      });
-    });
-    
-    return doc.body.innerHTML;
-  } catch (e) {
-    console.error('HTML Sanitization failed, returning empty', e);
-    return '';
-  }
-};
-
 export const MarkdownTool: React.FC = () => {
     const [input, setInput] = useState('# Hello World\n\n- Item 1\n- Item 2');
     const [html, setHtml] = useState('');
@@ -297,7 +263,7 @@ export const MarkdownTool: React.FC = () => {
         // Simple async wrapper for marked
         const parse = async () => {
             const res = await marked.parse(input);
-            setHtml(sanitizeHtml(res));
+            setHtml(sanitizeHtmlMarkup(res));
         }
         parse();
     }, [input]);

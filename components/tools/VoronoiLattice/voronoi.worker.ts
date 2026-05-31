@@ -31,7 +31,7 @@ type SeedPoint = {
   normal: Vec3;
 };
 
-const ctx: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
+const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
 const densitySettings: Record<HoleDensity, { min: number; base: number; factor: number; max: number; neighbors: number; maxEdge: number }> = {
   low: { min: 72, base: 86, factor: 1.1, max: 150, neighbors: 3, maxEdge: 0.42 },
@@ -583,13 +583,17 @@ const processMesh = (request: VoronoiWorkerRequest): VoronoiWorkerResponse => {
 ctx.onmessage = (event: MessageEvent<VoronoiWorkerRequest>) => {
   try {
     const response = processMesh(event.data);
-    ctx.postMessage(response, [
-      response.original.positions,
-      response.original.indices,
-      response.lattice.positions,
-      response.lattice.indices,
-      response.stl,
-    ]);
+    if (response.type === 'success') {
+      ctx.postMessage(response, [
+        response.original.positions,
+        response.original.indices,
+        response.lattice.positions,
+        response.lattice.indices,
+        response.stl,
+      ]);
+    } else {
+      ctx.postMessage(response);
+    }
   } catch (error) {
     ctx.postMessage({
       id: event.data.id,

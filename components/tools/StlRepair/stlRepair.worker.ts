@@ -21,7 +21,7 @@ type CleanupResult = {
   skippedDuplicateFaces: number;
 };
 
-const ctx: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
+const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
 const positionKey = (x: number, y: number, z: number, tolerance = 0) => {
   if (tolerance <= 0) return `${x},${y},${z}`;
@@ -949,7 +949,11 @@ const processMesh = async (request: RepairWorkerRequest): Promise<RepairWorkerRe
 ctx.onmessage = async (event: MessageEvent<RepairWorkerRequest>) => {
   try {
     const response = await processMesh(event.data);
-    ctx.postMessage(response, [response.mesh.positions, response.mesh.indices, response.stl]);
+    if (response.type === 'success') {
+      ctx.postMessage(response, [response.mesh.positions, response.mesh.indices, response.stl]);
+    } else {
+      ctx.postMessage(response);
+    }
   } catch (error) {
     ctx.postMessage({
       id: event.data.id,

@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "check:i18n": "node scripts/check-i18n-coverage.mjs",
+    "check:routes": "node scripts/check-route-map.mjs",
+    "audit:prod": "npm audit --omit=dev",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@doodle3d/clipper-js": "^1.0.11",

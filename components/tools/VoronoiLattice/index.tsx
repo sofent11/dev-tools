@@ -619,11 +619,11 @@ export const VoronoiLatticeTool: React.FC = () => {
               options={thicknessOptions}
               onChange={value => updateOption('thickness', value)}
             />
-            <SegmentedControl
+            <SegmentedControl<PreviewMode>
               label="预览"
               value={viewMode}
               options={viewModeOptions}
-              onChange={value => setViewMode(value as any)}
+              onChange={setViewMode}
             />
           </div>
 

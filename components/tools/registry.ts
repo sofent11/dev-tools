@@ -1,13 +1,13 @@
-import { lazy, type ElementType } from 'react';
+import { lazy, type ComponentType } from 'react';
 import {
   FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files
 } from 'lucide-react';
 import { Category, ToolDef } from '../../types';
 
-const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
+const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   loader: () => Promise<T>,
   exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<any> }));
+) => lazy(async () => ({ default: (await loader())[exportName] as ComponentType<Record<string, never>> }));
 
 // Import consolidated Studios
 const JsonFormatStudio = lazyNamed(() => import('./studios/JsonFormatStudio'), 'JsonFormatStudio');
@@ -48,6 +48,7 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'csv': { studioId: 'json-studio', subToolId: 'csv' },
   'json-diff': { studioId: 'json-studio', subToolId: 'json-diff' },
   'sql-format': { studioId: 'json-studio', subToolId: 'sql-format' },
+  'sqlite-sandbox': { studioId: 'json-studio', subToolId: 'sqlite-sandbox' },
 
   // Crypto & Security Center
   'jwt': { studioId: 'crypto-studio', subToolId: 'jwt' },
@@ -57,6 +58,8 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'basic-auth': { studioId: 'crypto-studio', subToolId: 'basic-auth' },
   'cert-parser': { studioId: 'crypto-studio', subToolId: 'cert-parser' },
   'asymmetric-key': { studioId: 'crypto-studio', subToolId: 'asymmetric-key' },
+  'pgp-keymaster': { studioId: 'crypto-studio', subToolId: 'pgp-keymaster' },
+  'sm-crypto': { studioId: 'crypto-studio', subToolId: 'sm-crypto' },
 
   // Text & Diff Suite
   'case': { studioId: 'text-studio', subToolId: 'case' },
@@ -69,6 +72,7 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   // Encoding & Escaping
   'base64': { studioId: 'encoding-studio', subToolId: 'base64' },
   'file-base64': { studioId: 'encoding-studio', subToolId: 'file-base64' },
+  'hex-viewer': { studioId: 'encoding-studio', subToolId: 'hex-viewer' },
   'url': { studioId: 'encoding-studio', subToolId: 'url' },
   'escape': { studioId: 'encoding-studio', subToolId: 'escape' },
 
@@ -79,6 +83,8 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
 
   // Network & Client Inspector
   'http': { studioId: 'network-studio', subToolId: 'http' },
+  'websocket-sse': { studioId: 'network-studio', subToolId: 'websocket-sse' },
+  'ping': { studioId: 'network-studio', subToolId: 'ping' },
   'urlparser': { studioId: 'network-studio', subToolId: 'urlparser' },
   'useragent': { studioId: 'network-studio', subToolId: 'useragent' },
   'ip': { studioId: 'network-studio', subToolId: 'ip' },
@@ -89,6 +95,8 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'color': { studioId: 'css-studio', subToolId: 'color' },
   'css-generator': { studioId: 'css-studio', subToolId: 'css-generator' },
   'svg-css': { studioId: 'css-studio', subToolId: 'svg-css' },
+  'html-jsx': { studioId: 'css-studio', subToolId: 'html-jsx' },
+  'svg-react': { studioId: 'css-studio', subToolId: 'svg-react' },
 
   // Image & Media Studio
   'image': { studioId: 'image-studio', subToolId: 'image' },
@@ -126,9 +134,10 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'rmb-uppercase': { studioId: 'system-ai-studio', subToolId: 'rmb-uppercase' },
   'chmod': { studioId: 'system-ai-studio', subToolId: 'chmod' },
   'cron': { studioId: 'system-ai-studio', subToolId: 'cron' },
-  'ai': { studioId: 'system-ai-studio', subToolId: 'ai' },
-  'timestamp': { studioId: 'system-ai-studio', subToolId: 'timestamp' },
-  'timestamp-plus': { studioId: 'system-ai-studio', subToolId: 'timestamp-plus' },
-  'datediff': { studioId: 'system-ai-studio', subToolId: 'datediff' },
-  'world-clock': { studioId: 'system-ai-studio', subToolId: 'world-clock' },
+  'unix-time-studio': { studioId: 'system-ai-studio', subToolId: 'unix-time-studio' },
+  'ai': { studioId: 'system-ai-studio', subToolId: 'lorem' },
+  'timestamp': { studioId: 'system-ai-studio', subToolId: 'unix-time-studio' },
+  'timestamp-plus': { studioId: 'system-ai-studio', subToolId: 'unix-time-studio' },
+  'datediff': { studioId: 'system-ai-studio', subToolId: 'unix-time-studio' },
+  'world-clock': { studioId: 'system-ai-studio', subToolId: 'unix-time-studio' },
 };

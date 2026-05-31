@@ -93,6 +93,10 @@ interface SchemaField {
   options?: string;
 }
 
+type SchemaFieldType = SchemaField['type'];
+type MockValue = string | number;
+type MockRecord = Record<string, MockValue>;
+
 const cSurnames = ['赵', '钱', '孙', '李', '周', '吴', '郑', '王', '冯', '陈', '褚', '卫', '蒋', '沈', '韩', '杨', '朱', '秦', '尤', '许', '何', '吕', '施', '张', '孔', '曹', '严', '华'];
 const cNames = ['伟', '芳', '娜', '敏', '静', '丽', '强', '磊', '洋', '勇', '艳', '杰', '娟', '涛', '明', '超', '秀兰', '建国', '宇', '欣', '晨', '悦', '浩', '轩', '雨', '子', '涵'];
 
@@ -139,11 +143,11 @@ export const LoremIpsumTool: React.FC = () => {
 
   const handleGenerate = () => {
     const safeCount = Math.min(500, Math.max(1, count));
-    const rawData: Record<string, any>[] = [];
+    const rawData: MockRecord[] = [];
 
     // 1. Core Generator Engine
     for (let index = 0; index < safeCount; index++) {
-      const row: Record<string, any> = {};
+      const row: MockRecord = {};
       fields.forEach(field => {
         if (!field.name) return;
         
@@ -376,7 +380,7 @@ module.exports = router;`);
                     <span className="text-slate-400 block mb-0.5">类型</span>
                     <select
                       value={field.type}
-                      onChange={e => updateField(field.id, { type: e.target.value as any })}
+                      onChange={e => updateField(field.id, { type: e.target.value as SchemaFieldType })}
                       className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-semibold"
                     >
                       <option value="id">自增 ID</option>

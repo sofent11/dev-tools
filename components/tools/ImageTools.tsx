@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   Download,
@@ -18,6 +18,7 @@ import JSZip from 'jszip';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
+import { sanitizeSvgMarkup } from './shared/sanitizeMarkup';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -1672,19 +1673,23 @@ const ImageVectorizerPanel: React.FC = () => {
     }
   };
 
-  const getSvgContent = () => {
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="100%" height="100%" style="background-color: ${bgColor};">\n  <path d="${svgPath}" fill="${fillColor}" fill-rule="evenodd" />\n</svg>`;
-  };
+  const rawSvgContent = useMemo(
+    () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="100%" height="100%" style="background-color: ${bgColor};">\n  <path d="${svgPath}" fill="${fillColor}" fill-rule="evenodd" />\n</svg>`,
+    [bgColor, fillColor, svgHeight, svgPath, svgWidth],
+  );
+  const safeSvgContent = useMemo(
+    () => (svgPath ? sanitizeSvgMarkup(rawSvgContent) : ''),
+    [rawSvgContent, svgPath],
+  );
 
   const handleCopyCode = async () => {
-    await navigator.clipboard.writeText(getSvgContent());
+    await navigator.clipboard.writeText(safeSvgContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   const handleDownloadSvg = () => {
-    const svgContent = getSvgContent();
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+    const blob = new Blob([safeSvgContent], { type: 'image/svg+xml' });
     const name = file ? getBaseName(file.name) : 'vectorized';
     downloadBlob(blob, `${name}.svg`);
   };
@@ -1695,7 +1700,7 @@ const ImageVectorizerPanel: React.FC = () => {
       const scratchEvent = new CustomEvent('add-scratchpad-item', {
         detail: {
           name: `${file ? getBaseName(file.name) : 'vectorized'}.svg`,
-          content: getSvgContent(),
+          content: safeSvgContent,
           type: 'text'
         }
       });
@@ -1706,7 +1711,7 @@ const ImageVectorizerPanel: React.FC = () => {
     }
   };
 
-  const handleVectorize = () => {
+  const handleVectorize = useCallback(() => {
     if (!previewUrl) return;
     setIsProcessing(true);
 
@@ -1743,13 +1748,19 @@ const ImageVectorizerPanel: React.FC = () => {
       setIsProcessing(false);
     };
     img.src = previewUrl;
-  };
+  }, [invert, previewUrl, simplifyTolerance, threshold]);
 
   useEffect(() => {
     if (previewUrl) {
       Promise.resolve().then(handleVectorize);
     }
-  }, [threshold, simplifyTolerance, invert, previewUrl]);
+  }, [handleVectorize, previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   return (
     <CardContent className="flex-1 flex flex-col lg:flex-row gap-6 overflow-auto p-6 min-h-0 text-slate-700 dark:text-slate-200">
@@ -1900,7 +1911,7 @@ const ImageVectorizerPanel: React.FC = () => {
             </div>
           ) : showCode ? (
             <pre className="w-full h-full p-4 rounded-xl border border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-950 font-mono text-[10px] text-slate-700 dark:text-slate-300 overflow-auto whitespace-pre leading-relaxed">
-              {getSvgContent()}
+              {safeSvgContent}
             </pre>
           ) : svgPath ? (
             <div 
@@ -1910,7 +1921,7 @@ const ImageVectorizerPanel: React.FC = () => {
                 height: `${svgHeight}px`,
                 backgroundColor: bgColor
               }}
-              dangerouslySetInnerHTML={{ __html: getSvgContent() }}
+              dangerouslySetInnerHTML={{ __html: safeSvgContent }}
             />
           ) : (
             <div className="text-slate-400 text-center text-xs animate-pulse">

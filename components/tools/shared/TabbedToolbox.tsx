@@ -2,17 +2,19 @@ import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
-export const lazyNamed = <T extends Record<string, any>, K extends keyof T>(
+type EmptyProps = Record<string, never>;
+
+export const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   loader: () => Promise<T>,
   exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<any> }));
+) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<EmptyProps> }));
 
 export interface SubTool {
   id: string;
   name: string;
   description?: string;
   icon: LucideIcon;
-  component: React.ComponentType<any>;
+  component: React.ComponentType<EmptyProps>;
 }
 
 interface TabbedToolboxProps {
