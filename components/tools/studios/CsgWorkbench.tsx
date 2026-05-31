@@ -25,6 +25,8 @@ interface ShapeConfig {
   uploadedFileName: string;
 }
 
+type MaterialType = 'default' | 'gold' | 'silver' | 'jade' | 'glass';
+
 let globalShapeIdCounter = 0;
 
 const PRESET_COLORS = [
@@ -84,7 +86,7 @@ export const CsgWorkbench: React.FC = () => {
   const [opType, setOpType] = useState<'union' | 'subtract' | 'intersect' | null>(null);
   const [showWireframe, setShowWireframe] = useState(false);
   const [gizmoMode, setGizmoMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
-  const [materialType, setMaterialType] = useState<'default' | 'gold' | 'silver' | 'jade' | 'glass'>('default');
+  const [materialType, setMaterialType] = useState<MaterialType>('default');
 
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -900,7 +902,7 @@ export const CsgWorkbench: React.FC = () => {
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">样式：</span>
             <select
               value={materialType}
-              onChange={event => setMaterialType(event.target.value as any)}
+              onChange={event => setMaterialType(event.target.value as MaterialType)}
               className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-700 dark:text-slate-200 focus:outline-none"
             >
               <option value="default">默认风格</option>

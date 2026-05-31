@@ -3,6 +3,8 @@ import { Copy, Check, ShieldAlert, ArrowLeftRight, Sparkles, RefreshCw, FileUp, 
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { useScratchpadStore } from './shared/scratchpadStore';
 
+type DecodeMode = 'base64' | 'url' | 'html' | 'unicode' | 'hex';
+
 // Safe UTF-8 Base64 Encoder
 const safeBtoa = (str: string): string => {
   try {
@@ -201,7 +203,7 @@ export const StringEscaper: React.FC = () => {
 
   // Manual Decoder States
   const [decodeInput, setDecodeInput] = useState('');
-  const [decodeMode, setDecodeMode] = useState<'base64' | 'url' | 'html' | 'unicode' | 'hex'>('base64');
+  const [decodeMode, setDecodeMode] = useState<DecodeMode>('base64');
   const [decodeOutput, setDecodeOutput] = useState('');
 
   const handleDecode = () => {
@@ -558,16 +560,16 @@ export const StringEscaper: React.FC = () => {
                 <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">选择解码解析算法</span>
                 <div className="p-4 border border-slate-800 rounded-xl bg-slate-950 flex flex-col justify-between flex-1">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {[
+                    {([
                       { value: 'base64', label: 'Base64 解码' },
                       { value: 'url', label: 'URL 解码' },
                       { value: 'html', label: 'HTML 实体还原' },
                       { value: 'unicode', label: 'Unicode 还原' },
                       { value: 'hex', label: 'Hex 还原' }
-                    ].map(opt => (
+                    ] satisfies { value: DecodeMode; label: string }[]).map(opt => (
                       <button
                         key={opt.value}
-                        onClick={() => setDecodeMode(opt.value as any)}
+                        onClick={() => setDecodeMode(opt.value)}
                         className={`py-2 px-3 rounded-lg border text-xs font-semibold text-center transition-all ${decodeMode === opt.value ? 'bg-primary-600 border-primary-600 text-white shadow-md' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
                       >
                         {opt.label}

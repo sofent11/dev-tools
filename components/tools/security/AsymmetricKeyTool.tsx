@@ -178,7 +178,7 @@ export const AsymmetricKeyTool: React.FC = () => {
       let isJwk = false;
       let isPem = false;
 
-      let jwkObj: Record<string, any> | null = null;
+      let jwkObj: JsonWebKey | null = null;
       let parsedDer: Uint8Array | null = null;
       let isPrivateKey = false;
       let isEc = false;
