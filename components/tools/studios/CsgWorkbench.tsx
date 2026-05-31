@@ -8,6 +8,7 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import {
   HelpCircle, Layers, Trash2, Download, RefreshCw, Upload, Eye, EyeOff, Plus, Settings, Ruler
 } from 'lucide-react';
+import { notifyToast } from '../shared/notifyToast';
 
 interface ShapeConfig {
   id: string;
@@ -92,6 +93,10 @@ export const CsgWorkbench: React.FC = () => {
 
   const [progressPercent, setProgressPercent] = useState<number>(0);
   const [progressText, setProgressText] = useState<string>('');
+  const [statusMessage, setStatusMessage] = useState<{ tone: 'info' | 'warning' | 'success'; text: string } | null>({
+    tone: 'warning',
+    text: '实验级浏览器 CSG：适合快速预览布尔结果，导出前仍建议用 STL 修复工具或切片软件复检水密性。',
+  });
 
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef<number>(0);
@@ -146,7 +151,9 @@ export const CsgWorkbench: React.FC = () => {
           return s;
         }));
       } catch {
-        alert('解析 STL 文件失败，请确保格式正确！');
+        const message = '解析 STL 文件失败，请确保格式正确！';
+        setStatusMessage({ tone: 'warning', text: message });
+        notifyToast({ title: 'STL 解析失败', description: message, tone: 'error' });
       }
     };
     reader.readAsArrayBuffer(file);
@@ -208,7 +215,7 @@ export const CsgWorkbench: React.FC = () => {
 
   const deleteShape = (id: string) => {
     if (shapes.length <= 1) {
-      alert('场景中必须保留至少一个实体！');
+      setStatusMessage({ tone: 'warning', text: '场景中必须保留至少一个实体。' });
       return;
     }
     setShapes(prev => prev.filter(s => s.id !== id));
@@ -273,13 +280,13 @@ export const CsgWorkbench: React.FC = () => {
   const executeCsg = (type: 'union' | 'subtract' | 'intersect') => {
     const baseShape = shapes.find(s => s.id === baseShapeId);
     if (!baseShape || !baseShape.visible) {
-      alert('请确保已选定并显示基准实体！');
+      setStatusMessage({ tone: 'warning', text: '请确保已选定并显示基准实体。' });
       return;
     }
 
     const activeTools = shapes.filter(s => s.id !== baseShapeId && toolShapeIds[s.id] && s.visible);
     if (activeTools.length === 0) {
-      alert('请在场景树勾选至少一个工具实体作为布尔计算输入！');
+      setStatusMessage({ tone: 'warning', text: '请在场景树勾选至少一个工具实体作为布尔计算输入。' });
       return;
     }
 
@@ -287,6 +294,7 @@ export const CsgWorkbench: React.FC = () => {
     setOpType(type);
     setProgressPercent(0);
     setProgressText('已启动 Web Worker 线程...');
+    setStatusMessage({ tone: 'info', text: '正在 Worker 中执行实验级布尔运算，请保持页面打开。' });
 
     const id = requestIdRef.current + 1;
     requestIdRef.current = id;
@@ -334,7 +342,9 @@ export const CsgWorkbench: React.FC = () => {
 
       setIsProcessing(false);
       if (data.type === 'error') {
-        alert(data.error || '空间布尔运算失败');
+        const message = data.error || '空间布尔运算失败';
+        setStatusMessage({ tone: 'warning', text: message });
+        notifyToast({ title: '空间布尔运算失败', description: message, tone: 'error' });
         setOpType(null);
         return;
       }
@@ -349,12 +359,15 @@ export const CsgWorkbench: React.FC = () => {
 
       setResultGeometry(resultGeo);
       setResultStats(data.stats || null);
+      setStatusMessage({ tone: 'success', text: '布尔运算完成；结果为浏览器端实验级网格，请导出后复检。' });
     };
 
     worker.onerror = event => {
       if (id !== requestIdRef.current) return;
       setIsProcessing(false);
-      alert(event.message || 'Worker 执行失败');
+      const message = event.message || 'Worker 执行失败';
+      setStatusMessage({ tone: 'warning', text: message });
+      notifyToast({ title: 'CSG Worker 执行失败', description: message, tone: 'error' });
       setOpType(null);
     };
 
@@ -398,7 +411,7 @@ export const CsgWorkbench: React.FC = () => {
     const targetShape = shapes.find(s => s.id === selectedShapeId);
 
     if (!baseShape || !targetShape || baseShape.id === targetShape.id) {
-      alert('请选择一个非基准的工具实体进行对齐！');
+      setStatusMessage({ tone: 'warning', text: '请选择一个非基准的工具实体进行对齐。' });
       return;
     }
 
@@ -474,6 +487,16 @@ export const CsgWorkbench: React.FC = () => {
       }
       return s;
     }));
+  };
+
+  const cancelCsg = () => {
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    requestIdRef.current += 1;
+    setIsProcessing(false);
+    setProgressPercent(0);
+    setOpType(null);
+    setStatusMessage({ tone: 'warning', text: '已取消当前布尔运算。' });
   };
 
   const handleReset = () => {
@@ -937,6 +960,13 @@ export const CsgWorkbench: React.FC = () => {
                 />
               </div>
               <span className="text-[10px] text-slate-400 font-bold">{progressPercent}%</span>
+              <button
+                type="button"
+                onClick={cancelCsg}
+                className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                取消
+              </button>
             </div>
           </div>
         )}
@@ -944,6 +974,17 @@ export const CsgWorkbench: React.FC = () => {
 
       {/* Control Panel Sidebar */}
       <div className="flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm max-h-[750px] overflow-y-auto">
+        {statusMessage && (
+          <div className={`mb-4 rounded-xl border p-3 text-xs leading-5 ${
+            statusMessage.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+              : statusMessage.tone === 'info'
+                ? 'border-blue-200 bg-blue-50 text-blue-800'
+                : 'border-amber-200 bg-amber-50 text-amber-800'
+          }`}>
+            {statusMessage.text}
+          </div>
+        )}
         {!resultGeometry ? (
           <>
             {/* Shared mesh quick loader panel */}
@@ -1306,7 +1347,7 @@ export const CsgWorkbench: React.FC = () => {
                   批量布尔运算成功！
                 </h4>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-                  网格实体已在本地融合成型，生成的实体可完美直接用于 3D 打印！
+                  网格实体已在本地融合成型；这是实验级浏览器布尔结果，导出后请继续用修复工具或切片软件复核。
                 </p>
               </div>
 
@@ -1322,8 +1363,8 @@ export const CsgWorkbench: React.FC = () => {
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.triangles}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">密闭度 (Watetight)</span>
-                  <span className="font-semibold text-emerald-600">100% 水密模型</span>
+                  <span className="text-slate-500">制造可信度</span>
+                  <span className="font-semibold text-amber-600">需导出复检</span>
                 </div>
               </div>
             </div>

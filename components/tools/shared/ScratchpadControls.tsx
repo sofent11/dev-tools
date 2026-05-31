@@ -2,6 +2,7 @@ import React from 'react';
 import { ClipboardList } from 'lucide-react';
 import { Select } from '../../ui/ToolUi';
 import { getScratchpadItemContent, useScratchpadStore, type ScratchpadItem } from './scratchpadStore';
+import { notifyToast } from './notifyToast';
 
 type ScratchpadFilter = (item: ScratchpadItem) => boolean;
 
@@ -68,13 +69,11 @@ export const ScratchpadPicker: React.FC<{
           } catch (err) {
             const error = err instanceof Error ? err : new Error('暂存箱载入失败');
             onError?.(error, selected);
-            window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
-              detail: {
-                title: '暂存箱载入失败',
-                description: error.message,
-                tone: 'error',
-              },
-            }));
+            notifyToast({
+              title: '暂存箱载入失败',
+              description: error.message,
+              tone: 'error',
+            });
           } finally {
             event.target.value = '';
           }

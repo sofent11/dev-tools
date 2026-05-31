@@ -10,6 +10,9 @@ import Papa from 'papaparse';
 import { XMLBuilder, XMLParser } from 'fast-xml-parser';
 import { marked } from 'marked';
 import { sanitizeHtmlMarkup } from './shared/sanitizeMarkup';
+import { ScratchpadActionBar, ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
+import { useScratchpadStore } from './shared/scratchpadStore';
+import { notifyToast } from './shared/notifyToast';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -209,6 +212,18 @@ export const CsvTool: React.FC = () => {
         }
     };
 
+    const stashOutput = async () => {
+        const isJson = output.trim().startsWith('{') || output.trim().startsWith('[');
+        await useScratchpadStore.getState().addItemAsync({
+            name: `csv_json_${Date.now()}${isJson ? '.json' : '.csv'}`,
+            content: output,
+            type: isJson ? 'json' : 'text',
+            mimeType: isJson ? 'application/json' : 'text/csv',
+            sourceTool: 'CSV ↔ JSON',
+        });
+        notifyToast({ title: '转换结果已送入暂存箱', tone: 'success' });
+    };
+
     return (
         <Card className="h-full flex flex-col">
             <CardHeader
@@ -223,6 +238,14 @@ export const CsvTool: React.FC = () => {
             />
             <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
                 <div className="flex-1 p-4 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-100">
+                    <ScratchpadActionBar className="mb-3">
+                        <ScratchpadPicker
+                            label="载入 CSV / JSON"
+                            placeholder="从暂存箱载入..."
+                            filter={isScratchpadTextLike}
+                            onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
+                        />
+                    </ScratchpadActionBar>
                     <textarea
                         className="flex-1 w-full p-4 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-200"
                         placeholder="Paste CSV or JSON here..."
@@ -246,6 +269,15 @@ export const CsvTool: React.FC = () => {
                     >
                         {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                     </Button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-6 right-20 bg-white shadow-sm border border-slate-100"
+                        onClick={stashOutput}
+                        disabled={!output}
+                    >
+                        暂存
+                    </Button>
                 </div>
             </div>
              {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
@@ -268,6 +300,17 @@ export const MarkdownTool: React.FC = () => {
         parse();
     }, [input]);
 
+    const stashHtml = async () => {
+        await useScratchpadStore.getState().addItemAsync({
+            name: `markdown_preview_${Date.now()}.html`,
+            content: html,
+            type: 'text',
+            mimeType: 'text/html',
+            sourceTool: 'Markdown 预览',
+        });
+        notifyToast({ title: 'HTML 预览已送入暂存箱', tone: 'success' });
+    };
+
     return (
         <Card className="h-full flex flex-col">
             <CardHeader
@@ -276,6 +319,14 @@ export const MarkdownTool: React.FC = () => {
             />
             <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
                 <div className="flex-1 p-4 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-100">
+                    <ScratchpadActionBar className="mb-3">
+                        <ScratchpadPicker
+                            label="载入 Markdown"
+                            placeholder="从暂存箱载入 Markdown..."
+                            filter={isScratchpadTextLike}
+                            onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
+                        />
+                    </ScratchpadActionBar>
                     <textarea
                         className="flex-1 w-full p-4 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary-200"
                         placeholder="Type Markdown..."
@@ -292,6 +343,15 @@ export const MarkdownTool: React.FC = () => {
                         onClick={() => copy(html)}
                     >
                         {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-2 right-16 bg-white shadow-sm border border-slate-100"
+                        onClick={stashHtml}
+                        disabled={!html}
+                    >
+                        暂存 HTML
                     </Button>
                 </div>
             </div>

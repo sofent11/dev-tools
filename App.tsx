@@ -9,6 +9,7 @@ import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, LEGACY_TOOL_MAP } from './components/tools/registry';
 import { useI18n } from './src/i18n';
 import { formatBytes } from './components/tools/shared/fileUtils';
+import { notifyToast, type ToastTone } from './components/tools/shared/notifyToast';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
 const TOOL_ROUTE_PREFIX = 'tools';
@@ -82,7 +83,7 @@ interface ToastMessage {
   id: string;
   title: string;
   description?: string;
-  tone?: 'success' | 'error' | 'info';
+  tone?: ToastTone;
 }
 
 const translateTextForSearch = (
@@ -141,7 +142,11 @@ export default function App() {
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      alert('打包 ZIP 失败: ' + (err as Error).message);
+      notifyToast({
+        title: '打包 ZIP 失败',
+        description: (err as Error).message,
+        tone: 'error',
+      });
     }
   };
 
@@ -679,7 +684,7 @@ const ScratchpadItemCard: React.FC<{
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      alert('复制失败: ' + (err as Error).message);
+      notifyToast({ title: '复制失败', description: (err as Error).message, tone: 'error' });
     }
   };
 
@@ -695,7 +700,7 @@ const ScratchpadItemCard: React.FC<{
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      alert('下载失败: ' + (err as Error).message);
+      notifyToast({ title: '下载失败', description: (err as Error).message, tone: 'error' });
     }
   };
 

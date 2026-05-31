@@ -785,7 +785,7 @@ const writeNormal = (view: DataView, offset: number, normal: [number, number, nu
   view.setFloat32(offset + 8, normal[2], true);
 };
 
-const serializeBinaryStl = (mesh: MeshData, fileName: string) => {
+export const serializeBinaryStl = (mesh: MeshData, fileName: string) => {
   const faceCount = mesh.indices.length / 3;
   const buffer = new ArrayBuffer(84 + faceCount * 50);
   const view = new DataView(buffer);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   FileText,
   Merge,
@@ -17,15 +17,44 @@ import { useScratchpadStore } from './shared/scratchpadStore';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
-import { loadRemoteModule } from './shared/runtimeAssetLoader';
+import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
+import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import { notifyToast } from './shared/notifyToast';
 import type { PDFDocument } from 'pdf-lib';
 
-const loadPdfJs = async () => {
-  const pdfjsLib = await loadRemoteModule<typeof import('https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs')>(
-    'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs',
-    'PDF.js 5.4.449',
-  );
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
+const PDFJS_VERSION = '5.4.449';
+const PDFJS_MODULE_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
+const PDFJS_WORKER_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
+const MAX_PDF_PAGES = 120;
+const MAX_PDF_IMAGE_PIXELS = 90_000_000;
+
+interface PdfTaskState {
+  kind: 'loadPages' | 'merge' | 'convertImages';
+  current: number;
+  total: number;
+  progress: number;
+  error?: string;
+}
+
+const createRuntimeState = (): RuntimeAssetLoaderState => ({
+  status: 'idle',
+  label: 'PDF.js',
+  version: PDFJS_VERSION,
+  source: PDFJS_MODULE_URL,
+});
+
+const loadPdfJs = async (onState?: (state: RuntimeAssetLoaderState) => void) => {
+  const pdfjsLib = await loadRuntimeAsset<typeof import('https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs')>({
+    url: PDFJS_MODULE_URL,
+    kind: 'module',
+    label: 'PDF.js',
+    version: PDFJS_VERSION,
+    timeoutMs: 15000,
+    retries: 1,
+    cache: false,
+    onState,
+  });
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
   return pdfjsLib;
 };
 
@@ -66,20 +95,48 @@ const PdfMergeTool: React.FC = () => {
   const [pages, setPages] = useState<PdfPageItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [taskState, setTaskState] = useState<PdfTaskState | null>(null);
+  const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>(() => createRuntimeState());
+  const abortRef = useRef<AbortController | null>(null);
+
+  const updateTask = (kind: PdfTaskState['kind'], current: number, total: number) => {
+    setTaskState({
+      kind,
+      current,
+      total,
+      progress: total > 0 ? Math.round((current / total) * 100) : 0,
+    });
+  };
+
+  const cancelTask = () => {
+    abortRef.current?.abort();
+    setTaskState(previous => previous ? { ...previous, error: '已取消当前 PDF 任务' } : previous);
+    setIsLoading(false);
+    setIsMerging(false);
+  };
 
   const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     setIsLoading(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const pdfjsLib = await loadPdfJs();
+      const pdfjsLib = await loadPdfJs(setRuntimeState);
       const addedFiles = Array.from(e.target.files);
       const newPages: PdfPageItem[] = [];
+      updateTask('loadPages', 0, addedFiles.length);
 
-      for (const file of addedFiles) {
+      for (let fileIndex = 0; fileIndex < addedFiles.length; fileIndex += 1) {
+        if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 页面加载', 'AbortError');
+        const file = addedFiles[fileIndex];
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+        if (pdf.numPages + newPages.length + pages.length > MAX_PDF_PAGES) {
+          throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批处理。`);
+        }
 
         for (let i = 1; i <= pdf.numPages; i++) {
+          if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 页面加载', 'AbortError');
           const page = await pdf.getPage(i);
           const viewport = page.getViewport({ scale: 0.35 }); // Low scale for fast previews
           const canvas = document.createElement('canvas');
@@ -99,14 +156,21 @@ const PdfMergeTool: React.FC = () => {
               thumbnailSrc,
             });
           }
+          updateTask('loadPages', newPages.length + pages.length, Math.min(MAX_PDF_PAGES, pages.length + pdf.numPages));
         }
+        updateTask('loadPages', fileIndex + 1, addedFiles.length);
       }
 
       setPages(prev => [...prev, ...newPages]);
     } catch (err) {
-      alert('加载 PDF 页面失败：' + (err as Error).message);
+      const message = (err as Error).name === 'AbortError' ? '已取消 PDF 页面加载' : (err as Error).message;
+      setTaskState(previous => previous ? { ...previous, error: message } : { kind: 'loadPages', current: 0, total: 0, progress: 0, error: message });
+      if ((err as Error).name !== 'AbortError') {
+        notifyToast({ title: '加载 PDF 页面失败', description: message, tone: 'error' });
+      }
     } finally {
       setIsLoading(false);
+      if (abortRef.current === controller) abortRef.current = null;
       e.target.value = '';
     }
   };
@@ -149,12 +213,16 @@ const PdfMergeTool: React.FC = () => {
   const mergePdfs = async (action: 'download' | 'stash' = 'download') => {
     if (pages.length === 0) return;
     setIsMerging(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const { PDFDocument, degrees } = await import('pdf-lib');
       const mergedPdf = await PDFDocument.create();
       const fileCache = new Map<File, PDFDocument>();
 
-      for (const pageItem of pages) {
+      for (let index = 0; index < pages.length; index += 1) {
+        if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 合并', 'AbortError');
+        const pageItem = pages[index];
         let sourcePdf = fileCache.get(pageItem.file);
         if (!sourcePdf) {
           const arrayBuffer = await pageItem.file.arrayBuffer();
@@ -167,6 +235,7 @@ const PdfMergeTool: React.FC = () => {
           copiedPage.setRotation(degrees(pageItem.rotation));
         }
         mergedPdf.addPage(copiedPage);
+        updateTask('merge', index + 1, pages.length);
       }
 
       const pdfBytes = await mergedPdf.save();
@@ -183,12 +252,18 @@ const PdfMergeTool: React.FC = () => {
       } else {
         await useScratchpadStore.getState().addItemAsync(name, blob, 'pdf', 'application/pdf');
         setStashed(true);
+        notifyToast({ title: 'PDF 已送入暂存箱', description: name, tone: 'success' });
         setTimeout(() => setStashed(false), 2000);
       }
     } catch (e) {
-      alert('混编导出 PDF 失败: ' + (e as Error).message);
+      const message = (e as Error).name === 'AbortError' ? '已取消 PDF 合并' : (e as Error).message;
+      setTaskState(previous => previous ? { ...previous, error: message } : { kind: 'merge', current: 0, total: pages.length, progress: 0, error: message });
+      if ((e as Error).name !== 'AbortError') {
+        notifyToast({ title: '混编导出 PDF 失败', description: message, tone: 'error' });
+      }
     } finally {
       setIsMerging(false);
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
@@ -223,6 +298,28 @@ const PdfMergeTool: React.FC = () => {
           </div>
         )}
       </div>
+
+      <RuntimeAssetStatusPanel state={runtimeState} onRetry={() => loadPdfJs(setRuntimeState).catch(err => {
+        notifyToast({ title: 'PDF.js 加载失败', description: (err as Error).message, tone: 'error' });
+      })} compact />
+
+      {taskState && (
+        <div className={taskState.error ? 'status-warning p-3 text-xs' : 'status-info p-3 text-xs'}>
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              {taskState.kind === 'loadPages' ? 'PDF 页面加载' : 'PDF 合并导出'}：
+              {taskState.current}/{taskState.total} ({taskState.progress}%)
+              {taskState.error ? ` · ${taskState.error}` : ''}
+            </span>
+            {(isLoading || isMerging) && (
+              <Button size="xs" variant="secondary" onClick={cancelTask}>取消</Button>
+            )}
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full bg-primary-500 transition-all" style={{ width: `${taskState.progress}%` }} />
+          </div>
+        </div>
+      )}
 
       {pages.length > 0 && (
         <div className="space-y-4">
@@ -353,6 +450,9 @@ const PdfToImageTool: React.FC = () => {
   const [images, setImages] = useState<string[]>([]);
   const [isConverting, setIsConverting] = useState(false);
   const [stashedIndices, setStashedIndices] = useState<Record<number, boolean>>({});
+  const [taskState, setTaskState] = useState<PdfTaskState | null>(null);
+  const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>(() => createRuntimeState());
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
@@ -365,11 +465,15 @@ const PdfToImageTool: React.FC = () => {
   const stashPage = (imgBase64: string, index: number) => {
     const baseName = file ? file.name.split('.').shift() : 'pdf_page';
     useScratchpadStore.getState().addItem(
-      `${baseName}_page_${index + 1}.png`,
-      imgBase64,
-      'image',
-      'image/png'
+      {
+        name: `${baseName}_page_${index + 1}.png`,
+        content: imgBase64,
+        type: 'image',
+        mimeType: 'image/png',
+        sourceTool: 'PDF 转图片',
+      }
     );
+    notifyToast({ title: 'PDF 页面已暂存', description: `${baseName}_page_${index + 1}.png`, tone: 'success' });
     setStashedIndices(prev => ({ ...prev, [index]: true }));
     setTimeout(() => setStashedIndices(prev => ({ ...prev, [index]: false })), 2000);
   };
@@ -378,16 +482,27 @@ const PdfToImageTool: React.FC = () => {
     if (!file) return;
     setIsConverting(true);
     setImages([]);
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
-      const pdfjsLib = await loadPdfJs();
+      const pdfjsLib = await loadPdfJs(setRuntimeState);
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+      if (pdf.numPages > MAX_PDF_PAGES) {
+        throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批转换。`);
+      }
       const newImages: string[] = [];
+      let totalPixels = 0;
 
       for (let i = 1; i <= pdf.numPages; i++) {
+        if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 转图片', 'AbortError');
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 2 }); // Higher scale for better quality
+        totalPixels += viewport.width * viewport.height;
+        if (totalPixels > MAX_PDF_IMAGE_PIXELS) {
+          throw new Error('累计页面像素过大，已停止转换以保护浏览器内存。');
+        }
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;
@@ -397,13 +512,24 @@ const PdfToImageTool: React.FC = () => {
           await page.render({ canvasContext: context, viewport }).promise;
           newImages.push(canvas.toDataURL('image/png'));
         }
+        setTaskState({
+          kind: 'convertImages',
+          current: i,
+          total: pdf.numPages,
+          progress: Math.round((i / pdf.numPages) * 100),
+        });
       }
       setImages(newImages);
     } catch (e) {
       console.error(e);
-      alert('转换失败: ' + (e as Error).message);
+      const message = (e as Error).name === 'AbortError' ? '已取消 PDF 转图片' : (e as Error).message;
+      setTaskState(previous => previous ? { ...previous, error: message } : { kind: 'convertImages', current: 0, total: 0, progress: 0, error: message });
+      if ((e as Error).name !== 'AbortError') {
+        notifyToast({ title: 'PDF 转图片失败', description: message, tone: 'error' });
+      }
     } finally {
       setIsConverting(false);
+      if (abortRef.current === controller) abortRef.current = null;
     }
   };
 
@@ -438,6 +564,27 @@ const PdfToImageTool: React.FC = () => {
               {isConverting ? '正在转换页面...' : '开始转换为高清图片'}
             </Button>
           )}
+        </div>
+      )}
+
+      <RuntimeAssetStatusPanel state={runtimeState} onRetry={() => loadPdfJs(setRuntimeState).catch(err => {
+        notifyToast({ title: 'PDF.js 加载失败', description: (err as Error).message, tone: 'error' });
+      })} compact />
+
+      {taskState && (
+        <div className={taskState.error ? 'status-warning p-3 text-xs' : 'status-info p-3 text-xs'}>
+          <div className="flex items-center justify-between gap-3">
+            <span>
+              PDF 转图片：{taskState.current}/{taskState.total} ({taskState.progress}%)
+              {taskState.error ? ` · ${taskState.error}` : ''}
+            </span>
+            {isConverting && (
+              <Button size="xs" variant="secondary" onClick={() => abortRef.current?.abort()}>取消</Button>
+            )}
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full bg-primary-500 transition-all" style={{ width: `${taskState.progress}%` }} />
+          </div>
         </div>
       )}
 

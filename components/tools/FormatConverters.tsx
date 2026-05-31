@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Copy, Check, ArrowRightLeft, FileJson, Link, Binary } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { ScratchpadActionBar, ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
+import { useScratchpadStore } from './shared/scratchpadStore';
+import { notifyToast } from './shared/notifyToast';
 
 // --- Shared Helper: Copy to Clipboard ---
 const useCopyToClipboard = () => {
@@ -40,6 +43,17 @@ export const JsonTool: React.FC = () => {
     }
   };
 
+  const stashJson = async () => {
+    await useScratchpadStore.getState().addItemAsync({
+      name: `json_${Date.now()}.json`,
+      content: input,
+      type: 'json',
+      mimeType: 'application/json',
+      sourceTool: 'JSON 格式化',
+    });
+    notifyToast({ title: 'JSON 已送入暂存箱', tone: 'success' });
+  };
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader 
@@ -53,6 +67,19 @@ export const JsonTool: React.FC = () => {
         }
       />
       <CardContent className="flex-1 flex flex-col min-h-0">
+        <ScratchpadActionBar className="mb-3">
+          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <ScratchpadPicker
+              label="载入 JSON / 文本"
+              placeholder="从暂存箱载入 JSON..."
+              filter={isScratchpadTextLike}
+              onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
+            />
+            <Button size="sm" variant="secondary" onClick={stashJson} disabled={!input}>
+              送入暂存箱
+            </Button>
+          </div>
+        </ScratchpadActionBar>
         <div className="relative flex-1">
           <textarea
             className={`w-full h-full p-4 font-mono text-sm bg-slate-50 border rounded-lg resize-none focus:outline-none focus:ring-2 ${error ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-primary-200'}`}
