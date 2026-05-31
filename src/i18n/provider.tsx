@@ -152,7 +152,17 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const originalConfirm = window.confirm;
 
     window.alert = (message?: unknown) => {
-      originalAlert(translateText(String(message ?? ''), locale));
+      const translated = translateText(String(message ?? ''), locale);
+      if (document.body) {
+        window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
+          detail: {
+            title: translated,
+            tone: /失败|错误|error|failed/i.test(translated) ? 'error' : 'info',
+          },
+        }));
+      } else {
+        originalAlert(translated);
+      }
     };
     window.confirm = (message?: string) => originalConfirm(translateText(String(message ?? ''), locale));
 

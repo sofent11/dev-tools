@@ -33,7 +33,8 @@ type JsonSchema =
 
 interface DiffNode {
   key: string;
-  path: string;
+  path: Array<string | number>;
+  displayPath: string;
   kind: DiffKind;
   left?: JsonValue;
   right?: JsonValue;
@@ -96,9 +97,38 @@ const previewValue = (value: JsonValue | undefined) => {
   return JSON.stringify(value);
 };
 
-const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path = 'root'): DiffNode => {
+const formatJsonPath = (segments: Array<string | number>): string =>
+  segments.reduce<string>((path, segment) => {
+    if (typeof segment === 'number') return `${path}[${segment}]`;
+    if (/^[A-Za-z_$][\w$]*$/.test(segment)) return `${path}.${segment}`;
+    return `${path}[${JSON.stringify(segment)}]`;
+  }, 'root');
+
+export const toJsonPointer = (segments: Array<string | number>) =>
+  segments.length === 0
+    ? ''
+    : `/${segments.map(segment => String(segment).replace(/~/g, '~0').replace(/\//g, '~1')).join('/')}`;
+
+const compareJsonPathForPatch = (a: Array<string | number>, b: Array<string | number>) => {
+  const max = Math.max(a.length, b.length);
+  for (let i = 0; i < max; i++) {
+    const aSegment = a[i];
+    const bSegment = b[i];
+    if (aSegment === undefined) return -1;
+    if (bSegment === undefined) return 1;
+    if (typeof aSegment === 'number' && typeof bSegment === 'number' && aSegment !== bSegment) {
+      return bSegment - aSegment;
+    }
+    const diff = String(aSegment).localeCompare(String(bSegment));
+    if (diff !== 0) return diff;
+  }
+  return 0;
+};
+
+export const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path: Array<string | number> = []): DiffNode => {
+  const displayPath = formatJsonPath(path);
   if (stableStringify(left) === stableStringify(right)) {
-    return { key, path, kind: 'same', left, right };
+    return { key, path, displayPath, kind: 'same', left, right };
   }
 
   const bothArrays = Array.isArray(left) && Array.isArray(right);
@@ -119,9 +149,10 @@ const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path = 'root
     const children: DiffNode[] = keys.map(childKey => {
       const hasLeft = Object.prototype.hasOwnProperty.call(leftContainer, childKey);
       const hasRight = Object.prototype.hasOwnProperty.call(rightContainer, childKey);
-      const childPath = bothArrays ? `${path}[${childKey}]` : `${path}.${childKey}`;
-      if (!hasLeft) return { key: childKey, path: childPath, kind: 'added' as const, right: getDiffContainerValue(rightContainer, childKey) };
-      if (!hasRight) return { key: childKey, path: childPath, kind: 'removed' as const, left: getDiffContainerValue(leftContainer, childKey) };
+      const childSegment = bothArrays ? Number(childKey) : childKey;
+      const childPath = [...path, childSegment];
+      if (!hasLeft) return { key: childKey, path: childPath, displayPath: formatJsonPath(childPath), kind: 'added' as const, right: getDiffContainerValue(rightContainer, childKey) };
+      if (!hasRight) return { key: childKey, path: childPath, displayPath: formatJsonPath(childPath), kind: 'removed' as const, left: getDiffContainerValue(leftContainer, childKey) };
       return buildDiff(
         getDiffContainerValue(leftContainer, childKey),
         getDiffContainerValue(rightContainer, childKey),
@@ -133,6 +164,7 @@ const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path = 'root
     return {
       key,
       path,
+      displayPath,
       kind: children.some(child => child.kind !== 'same') ? 'changed' : 'same',
       left,
       right,
@@ -140,7 +172,7 @@ const buildDiff = (left: JsonValue, right: JsonValue, key = 'root', path = 'root
     };
   }
 
-  return { key, path, kind: 'changed', left, right };
+  return { key, path, displayPath, kind: 'changed', left, right };
 };
 
 const countDiffs = (node: DiffNode): Record<DiffKind, number> => {
@@ -151,24 +183,6 @@ const countDiffs = (node: DiffNode): Record<DiffKind, number> => {
   };
   visit(node);
   return counts;
-};
-
-const parsePath = (path: string): (string | number)[] => {
-  const segments = path.split('.');
-  const result: (string | number)[] = [];
-  const startIdx = segments[0] === 'root' ? 1 : 0;
-  for (let i = startIdx; i < segments.length; i++) {
-    const seg = segments[i];
-    const matches = Array.from(seg.matchAll(/([^[]+)|\[(\d+)\]/g));
-    for (const match of matches) {
-      if (match[1]) {
-        result.push(match[1]);
-      } else if (match[2]) {
-        result.push(parseInt(match[2], 10));
-      }
-    }
-  }
-  return result;
 };
 
 const cloneJsonContainer = (value: JsonValue): MutableJsonContainer =>
@@ -233,31 +247,41 @@ interface JsonPatchOp {
   value?: JsonValue;
 }
 
-const generateJsonPatch = (node: DiffNode): JsonPatchOp[] => {
+export const generateJsonPatch = (node: DiffNode): JsonPatchOp[] => {
   const ops: JsonPatchOp[] = [];
   const visit = (n: DiffNode) => {
     if (n.kind === 'added') {
       ops.push({
         op: 'add',
-        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1'),
+        path: toJsonPointer(n.path),
         value: n.right
       });
     } else if (n.kind === 'removed') {
       ops.push({
         op: 'remove',
-        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1')
+        path: toJsonPointer(n.path)
       });
     } else if (n.kind === 'changed' && !n.children) {
       ops.push({
         op: 'replace',
-        path: n.path.replace(/^root/, '').replace(/\./g, '/').replace(/\[(\d+)\]/g, '/$1'),
+        path: toJsonPointer(n.path),
         value: n.right
       });
     }
     n.children?.forEach(visit);
   };
   visit(node);
-  return ops;
+  return ops.sort((a, b) => {
+    if (a.op === 'remove' && b.op === 'remove') {
+      return compareJsonPathForPatch(
+        b.path.split('/').slice(1).map(segment => (/^\d+$/.test(segment) ? Number(segment) : segment)),
+        a.path.split('/').slice(1).map(segment => (/^\d+$/.test(segment) ? Number(segment) : segment)),
+      );
+    }
+    if (a.op === 'remove') return -1;
+    if (b.op === 'remove') return 1;
+    return 0;
+  });
 };
 
 interface JsonDiffContextProps {
@@ -297,7 +321,7 @@ const DiffTree: React.FC<{ node: DiffNode; depth?: number }> = ({ node, depth = 
             )}
             <code className="font-semibold">{node.key}</code>
             <span className="rounded border border-current/20 px-1.5 py-0.5 text-[10px] uppercase font-bold">{node.kind}</span>
-            <span className="text-[11px] opacity-70 font-mono">{node.path}</span>
+            <span className="text-[11px] opacity-70 font-mono">{node.displayPath}</span>
           </div>
           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
             {node.kind !== 'same' && context && (
@@ -335,7 +359,7 @@ const DiffTree: React.FC<{ node: DiffNode; depth?: number }> = ({ node, depth = 
       {hasChildren && isOpen && (
         <div className="space-y-1">
           {node.children!.map(child => (
-            <DiffTree key={child.path} node={child} depth={depth + 1} />
+            <DiffTree key={child.displayPath} node={child} depth={depth + 1} />
           ))}
         </div>
       )}
@@ -378,7 +402,7 @@ export const JsonDiffTool: React.FC = () => {
   const handleMergeLeft = useCallback((node: DiffNode) => {
     try {
       const leftJson = JSON.parse(left);
-      const pathSegments = parsePath(node.path);
+      const pathSegments = node.path;
 
       let newLeft = leftJson;
       if (node.kind === 'added') {
@@ -398,7 +422,7 @@ export const JsonDiffTool: React.FC = () => {
   const handleMergeRight = useCallback((node: DiffNode) => {
     try {
       const rightJson = JSON.parse(right);
-      const pathSegments = parsePath(node.path);
+      const pathSegments = node.path;
 
       let newRight = rightJson;
       if (node.kind === 'added') {

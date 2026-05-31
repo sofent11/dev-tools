@@ -5,20 +5,34 @@ import { saveEntity, deleteEntity, getEntity, clearEntities } from './scratchpad
 export interface ScratchpadItem {
   id: string;
   name: string;
-  content: string; // Lightweight text content, or empty string for large text/binary
-  type: string;    // 'text', 'json', 'svg', 'image', 'pdf', 'zip'
+  content: string;
+  type: string;
   timestamp: number;
+  size: number;
+  mime?: string;
+  mimeType?: string;
+  sourceTool?: string;
   isLarge?: boolean;
   isBinary?: boolean;
-  size: number;
+  thumbnail?: string;
+}
+
+export interface ScratchpadPayload {
+  id?: string;
+  name: string;
+  content: string | Blob | ArrayBuffer;
+  type?: string;
+  mime?: string;
   mimeType?: string;
-  thumbnail?: string; // Tiny Base64 JPEG for visual image previews
+  sourceTool?: string;
+  timestamp?: number;
 }
 
 interface ScratchpadState {
   items: ScratchpadItem[];
-  addItem: (name: string, content: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
-  addItemAsync: (name: string, content: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
+  addItem: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
+  addItemAsync: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
+  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool'>>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 }
@@ -34,6 +48,22 @@ const createScratchpadItemId = () => {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const toPayload = (
+  nameOrPayload: string | ScratchpadPayload,
+  content: string | Blob | ArrayBuffer = '',
+  type = 'text',
+  mimeType?: string,
+): ScratchpadPayload =>
+  typeof nameOrPayload === 'string'
+    ? { name: nameOrPayload, content, type, mimeType }
+    : nameOrPayload;
+
+const getContentSize = (content: string | Blob | ArrayBuffer) => {
+  if (content instanceof Blob) return content.size;
+  if (content instanceof ArrayBuffer) return content.byteLength;
+  return new Blob([content]).size;
 };
 
 const generateImageThumbnail = (content: string | Blob): Promise<string | undefined> => {
@@ -83,12 +113,8 @@ const generateImageThumbnail = (content: string | Blob): Promise<string | undefi
     if (content instanceof Blob) {
       objectUrlToCleanup = URL.createObjectURL(content);
       img.src = objectUrlToCleanup;
-    } else if (typeof content === 'string') {
-      if (content.startsWith('data:image/') || content.startsWith('http')) {
-        img.src = content;
-      } else {
-        resolve(undefined);
-      }
+    } else if (content.startsWith('data:image/') || content.startsWith('http')) {
+      img.src = content;
     } else {
       resolve(undefined);
     }
@@ -112,122 +138,100 @@ export const useScratchpadStore = create<ScratchpadState>()(
     (set, get) => ({
       items: [],
 
-      addItem: (name, content, type = 'text', mimeType) => {
-        // Fire-and-forget wrapper around addItemAsync
-        get().addItemAsync(name, content, type, mimeType).catch((err) => {
+      addItem: (nameOrPayload, content = '', type = 'text', mimeType) => {
+        get().addItemAsync(nameOrPayload, content, type, mimeType).catch((err) => {
           console.error('Background scratchpad stashing failed:', err);
         });
       },
 
-      addItemAsync: async (name, content, type = 'text', mimeType) => {
-        const id = createScratchpadItemId();
-        const timestamp = Date.now();
-        let isLarge = false;
-        let isBinary = false;
-        let size = 0;
-        let resolvedMime = mimeType;
+      addItemAsync: async (nameOrPayload, content = '', type = 'text', mimeType) => {
+        const payload = toPayload(nameOrPayload, content, type, mimeType);
+        const id = payload.id || createScratchpadItemId();
+        const timestamp = payload.timestamp || Date.now();
+        const itemType = payload.type || 'text';
+        const resolvedMime = payload.mime || payload.mimeType;
+        const size = getContentSize(payload.content);
+        const isBinary = payload.content instanceof Blob || payload.content instanceof ArrayBuffer;
+        const isLarge = typeof payload.content === 'string' && size >= 100000;
         let contentForZustand = '';
-        let thumbnail: string | undefined = undefined;
+        let thumbnail: string | undefined;
+        let nextMime = resolvedMime;
 
-        if (content instanceof Blob) {
-          isBinary = true;
-          size = content.size;
-          if (!resolvedMime) resolvedMime = content.type;
-          
-          if (content.type.startsWith('image/')) {
-            thumbnail = await generateImageThumbnail(content);
-          }
-        } else if (content instanceof ArrayBuffer) {
-          isBinary = true;
-          size = content.byteLength;
-        } else if (typeof content === 'string') {
-          size = content.length;
-          // Set threshold for IndexedDB transition to 100KB (approx 100,000 characters)
-          if (size >= 100000) {
-            isLarge = true;
-          } else {
-            contentForZustand = content;
-          }
-
-          if (type === 'image' || content.startsWith('data:image/')) {
-            thumbnail = await generateImageThumbnail(content);
-            if (content.startsWith('data:')) {
-              const match = content.match(/^data:([^;]+);/);
-              if (match) resolvedMime = match[1];
+        if (typeof payload.content === 'string') {
+          contentForZustand = isLarge ? '' : payload.content;
+          if (itemType === 'image' || payload.content.startsWith('data:image/')) {
+            thumbnail = await generateImageThumbnail(payload.content);
+            if (!nextMime && payload.content.startsWith('data:')) {
+              nextMime = payload.content.match(/^data:([^;]+);/)?.[1];
             }
+          }
+        } else if (payload.content instanceof Blob) {
+          nextMime = nextMime || payload.content.type;
+          if (payload.content.type.startsWith('image/')) {
+            thumbnail = await generateImageThumbnail(payload.content);
           }
         }
 
-        // 1. Asynchronously save content payload to IndexedDB
-        await saveEntity(id, content);
+        await saveEntity(id, payload.content);
 
-        // 2. Save metadata to Zustand store
         set((state) => {
           const newItem: ScratchpadItem = {
             id,
-            name,
+            name: payload.name,
             content: contentForZustand,
-            type,
+            type: itemType,
             timestamp,
+            size,
+            mime: nextMime,
+            mimeType: nextMime,
+            sourceTool: payload.sourceTool,
             isLarge,
             isBinary,
-            size,
-            mimeType: resolvedMime,
-            thumbnail
+            thumbnail,
           };
-          const filtered = state.items.filter((item) => item.name !== name);
-          return { items: [newItem, ...filtered] };
+          return { items: [newItem, ...state.items] };
         });
 
         return id;
       },
 
+      updateItem: (id, updates) => set((state) => ({
+        items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
+      })),
+
       removeItem: (id) => {
-        // 1. Asynchronously delete entity from IndexedDB
         deleteEntity(id).catch((err) => {
           console.error(`Failed to delete scratchpad IndexedDB entity for ID: ${id}`, err);
         });
-
-        // 2. Remove metadata from Zustand store
         set((state) => ({
-          items: state.items.filter((item) => item.id !== id)
+          items: state.items.filter((item) => item.id !== id),
         }));
       },
 
       clearAll: () => {
-        // 1. Asynchronously clear all entities in IndexedDB
         clearEntities().catch((err) => {
           console.error('Failed to clear scratchpad IndexedDB entries', err);
         });
-
-        // 2. Reset Zustand store
         set({ items: [] });
-      }
+      },
     }),
     {
       name: 'devtoolbox-scratchpad-storage',
       partialize: (state) => ({
-        // Only persist the metadata list in LocalStorage
-        items: state.items
-      })
-    }
-  )
+        items: state.items,
+      }),
+    },
+  ),
 );
 
-// Optional global bridge listener for tools that dispatch via CustomEvent
 if (typeof window !== 'undefined') {
   if (window.__devToolboxScratchpadBridge) {
     window.removeEventListener('add-scratchpad-item', window.__devToolboxScratchpadBridge);
   }
 
-  const scratchpadBridge = ((e: CustomEvent<{ name: string; content: string | Blob | ArrayBuffer; type?: string; mimeType?: string }>) => {
-    if (e.detail && e.detail.name && e.detail.content) {
-      useScratchpadStore.getState().addItem(
-        e.detail.name,
-        e.detail.content,
-        e.detail.type || 'text',
-        e.detail.mimeType
-      );
+  const scratchpadBridge = ((event: CustomEvent<ScratchpadPayload>) => {
+    if (event.detail && event.detail.name && event.detail.content !== undefined) {
+      useScratchpadStore.getState().addItem(event.detail);
     }
   }) as EventListener;
 

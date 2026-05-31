@@ -37,8 +37,17 @@ jobs:
       - name: Check route map
         run: npm run check:routes
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Audit production dependencies
         run: npm run audit:prod
 
       - name: Build
         run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        run: npm run test:e2e

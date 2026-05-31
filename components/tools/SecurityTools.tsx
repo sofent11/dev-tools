@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { RefreshCcw, Copy, Check, Lock, Unlock, Info } from 'lucide-react';
 import md5 from 'blueimp-md5';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -99,6 +99,10 @@ export const JwtTool: React.FC = () => {
   const [verificationResult, setVerificationResult] = useState<'unchecked' | 'valid' | 'invalid' | 'error'>('unchecked');
   const [crackedKey, setCrackedKey] = useState<string | null>(null);
   const [isAuditing, setIsAuditing] = useState(false);
+  const [auditProgress, setAuditProgress] = useState(0);
+  const [auditMessage, setAuditMessage] = useState('');
+  const [customDictionary, setCustomDictionary] = useState('');
+  const auditWorkerRef = useRef<Worker | null>(null);
 
   const [headerInput, setHeaderInput] = useState('{\n  "alg": "HS256",\n  "typ": "JWT"\n}');
   const [payloadInput, setPayloadInput] = useState('{\n  "sub": "1234567890",\n  "name": "John Doe",\n  "iat": 1516239022\n}');
@@ -233,67 +237,100 @@ export const JwtTool: React.FC = () => {
     }
   };
 
+  useEffect(() => () => {
+    auditWorkerRef.current?.terminate();
+  }, []);
+
   // Weak Secret Brute-forcer
   const handleBruteForce = async () => {
     if (!token) return;
     setIsAuditing(true);
     setCrackedKey(null);
+    setAuditProgress(0);
+    setAuditMessage('正在启动本地 Worker...');
     
-    const dictionary = [
+    const dictionary = Array.from(new Set([
       'secret', '123456', 'admin', 'development', 'jwt', 
       '12345678', 'password', 'key', 'test', 'demo', 
       'config', 'root', 'security', 'welcome', 'auth', 
-      'secretkey', 'mysecret', '1234567890'
-    ];
+      'secretkey', 'mysecret', '1234567890',
+      ...customDictionary.split(/\r?\n/).map(item => item.trim()).filter(Boolean),
+    ]));
 
     try {
       const parts = token.split('.');
       if (parts.length !== 3) throw new Error("无效的 JWT 格式");
-      const enc = new TextEncoder();
-      const messageData = enc.encode(`${parts[0]}.${parts[1]}`);
-      const signatureBase64Url = parts[2];
-      const signatureBase64 = signatureBase64Url.replace(/-/g, '+').replace(/_/g, '/');
-      const paddedBase64 = signatureBase64.padEnd(signatureBase64.length + (4 - signatureBase64.length % 4) % 4, '=');
-      const signatureBinary = atob(paddedBase64);
-      const signatureBytes = new Uint8Array(signatureBinary.length);
-      for (let i = 0; i < signatureBinary.length; i++) {
-        signatureBytes[i] = signatureBinary.charCodeAt(i);
-      }
-
-      let found: string | null = null;
-      for (const secret of dictionary) {
-        const keyData = enc.encode(secret);
-        const cryptoKey = await window.crypto.subtle.importKey(
-          "raw",
-          keyData,
-          { name: "HMAC", hash: "SHA-256" },
-          false,
-          ["verify"]
-        );
-        const isValid = await window.crypto.subtle.verify(
-          "HMAC",
-          cryptoKey,
-          signatureBytes,
-          messageData
-        );
-        if (isValid) {
-          found = secret;
-          break;
+      auditWorkerRef.current?.terminate();
+      const workerUrl = URL.createObjectURL(new Blob([`
+        const toBytes = (base64Url) => {
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, '=');
+          const binary = atob(padded);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return bytes;
+        };
+        self.onmessage = async (event) => {
+          const { token, dictionary } = event.data;
+          const parts = token.split('.');
+          const enc = new TextEncoder();
+          const messageData = enc.encode(parts[0] + '.' + parts[1]);
+          const signatureBytes = toBytes(parts[2]);
+          for (let i = 0; i < dictionary.length; i++) {
+            const secret = dictionary[i];
+            const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+            const ok = await crypto.subtle.verify('HMAC', key, signatureBytes, messageData);
+            if (ok) {
+              self.postMessage({ type: 'found', secret, checked: i + 1, total: dictionary.length });
+              return;
+            }
+            if (i % 5 === 0 || i === dictionary.length - 1) {
+              self.postMessage({ type: 'progress', checked: i + 1, total: dictionary.length });
+            }
+          }
+          self.postMessage({ type: 'done', checked: dictionary.length, total: dictionary.length });
+        };
+      `], { type: 'text/javascript' }));
+      const worker = new Worker(workerUrl);
+      URL.revokeObjectURL(workerUrl);
+      auditWorkerRef.current = worker;
+      worker.onmessage = (event: MessageEvent<{ type: 'progress' | 'found' | 'done'; secret?: string; checked: number; total: number }>) => {
+        const percent = Math.round((event.data.checked / event.data.total) * 100);
+        setAuditProgress(percent);
+        setAuditMessage(`已检查 ${event.data.checked}/${event.data.total} 个候选密钥`);
+        if (event.data.type === 'found') {
+          setCrackedKey(event.data.secret || null);
+          setSecretKey(event.data.secret || '');
+          setVerificationResult('valid');
+          setIsAuditing(false);
+          worker.terminate();
+          auditWorkerRef.current = null;
         }
-      }
-
-      setCrackedKey(found);
-      if (found) {
-        setSecretKey(found);
-        setVerificationResult('valid');
-      } else {
-        alert('安全审计完成：未在内置弱密码字典（' + dictionary.length + ' 个常用键）中碰撞出密钥，签名暂被判定为具备基础强度！');
-      }
+        if (event.data.type === 'done') {
+          setIsAuditing(false);
+          setAuditMessage(`未在 ${event.data.total} 个候选密钥中发现弱密钥。`);
+          worker.terminate();
+          auditWorkerRef.current = null;
+        }
+      };
+      worker.onerror = event => {
+        setIsAuditing(false);
+        setAuditMessage(event.message || 'Worker 执行失败');
+        worker.terminate();
+        auditWorkerRef.current = null;
+      };
+      worker.postMessage({ token, dictionary });
     } catch (e) {
       alert('审计失败: ' + (e as Error).message);
-    } finally {
       setIsAuditing(false);
     }
+  };
+
+  const cancelBruteForce = () => {
+    auditWorkerRef.current?.terminate();
+    auditWorkerRef.current = null;
+    setIsAuditing(false);
+    setAuditMessage('已取消本地字典审计。');
   };
 
   useEffect(() => {
@@ -393,6 +430,30 @@ export const JwtTool: React.FC = () => {
               <Button variant="secondary" onClick={handleBruteForce} disabled={!token} isLoading={isAuditing}>
                 弱密钥审计碰撞
               </Button>
+              {isAuditing && (
+                <Button variant="ghost" onClick={cancelBruteForce}>
+                  取消审计
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_16rem]">
+            <div>
+              <FieldLabel>自定义弱密钥字典（每行一个，仅在本地 Worker 中运行）</FieldLabel>
+              <textarea
+                className="mt-1 h-20 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-2 font-mono text-xs outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-800 dark:bg-slate-900"
+                placeholder="company-secret&#10;staging-key"
+                value={customDictionary}
+                onChange={event => setCustomDictionary(event.target.value)}
+              />
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="font-bold text-slate-700 dark:text-slate-200">审计进度</div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                <div className="h-full bg-primary-600 transition-all" style={{ width: `${auditProgress}%` }} />
+              </div>
+              <div className="mt-2 text-slate-500">{auditMessage || '尚未开始。'}</div>
             </div>
           </div>
 

@@ -22,6 +22,17 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 
 ## Fixed In This Audit Branch
 
+- Fixed JSON Diff path handling with structured path segments and RFC 6901 JSON Pointer escaping.
+- Hardened JSON Patch generation for special object keys and array removals.
+- Improved HTTP cURL import for `--url`, `-G`, repeated data flags, `--data-urlencode`, basic auth, escaped quotes, and form fields.
+- Scoped the HTTP Mock sandbox to the HTTP tool request flow instead of monkey-patching global `window.fetch`.
+- Added a global toast surface and routed non-critical `alert` calls into accessible non-blocking feedback.
+- Expanded scratchpad items with metadata, source labels, size display, rename support, multi-version retention, and mobile-visible actions.
+- Added WCAG 2.1 contrast analysis, HSL micro-adjustment, and accessible color suggestions to the color tool.
+- Moved JWT weak-secret auditing into a cancellable Web Worker with custom dictionary support and progress reporting.
+- Added a shared runtime asset loader and wired PDF.js through the timeout/cached loader path.
+- Fixed studio tab back/forward sync by listening to both `hashchange` and `popstate`.
+- Added Vitest unit tests, Playwright smoke tests, and CI coverage for both.
 - Restored a real typecheck quality gate with `npm run typecheck`.
 - Fixed all TypeScript errors reported by `tsc --noEmit`.
 - Added Vite and remote PDF.js module type declarations.
@@ -37,24 +48,23 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 
 ## Remaining Known Issues
 
-- `npm run lint` still reports warnings, mainly deliberate `any` usage around dynamic JSON transforms, SQLite WASM, OpenPGP, and CDN-loaded crypto globals.
 - Several large vendor chunks remain by nature of Three.js, pdf-lib, and data tooling. They are lazy-loaded and cached, but deeper splitting can be revisited if real-user performance data shows a problem.
-- Browser-only remote CDN dependencies should have clearer offline/error states in tools that rely on sql.js, OpenPGP, sm-crypto, MediaPipe, and PDF.js.
-- The existing `IMPLEMENTATION_PLAN.md` still has several feature stages marked not started.
+- Browser-only remote CDN dependencies should continue moving onto the shared loader path; PDF.js is covered, while sql.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe still need the same UI-level retry/status treatment.
+- Animation frame extraction and STL wall-thickness/PBR enhancements remain product feature work.
 
 ## Recommended Next Iterations
 
-1. Type the dynamic data layer:
-   Define reusable `JsonValue`, SQLite result, OpenPGP facade, and sm-crypto facade types. This should clear most remaining lint warnings without changing behavior.
+1. Finish runtime loader adoption:
+   Move sql.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe to the shared loader with retry/status UI.
 
-2. Add per-tool smoke tests:
-   Start with pure utilities and high-value flows: JSON diff merge, cURL import/export, SQL formatting, SVG sanitizer, scratchpad import/export, and route mapping.
+2. Expand per-tool tests:
+   Add focused tests for scratchpad persistence/quota behavior, runtime loader timeout/retry, SQL formatting, SVG sanitizer, and JWT worker auditing.
 
 3. Improve offline resilience:
-   Add shared script/CDN loader states with retry, version display, timeout, and fallback messaging for tools that require remote runtime assets.
+   Add local `public/vendor` mirrors for self-hostable browser assets where licenses allow.
 
 4. Finish product feature stages:
-   Continue the staged roadmap from `IMPLEMENTATION_PLAN.md`: scratchpad routing shortcuts, color accessibility analyzer, security key conversion/bruteforce sandbox, animation frame extraction, and 3D wall-thickness/PBR improvements.
+   Continue the staged roadmap from `IMPLEMENTATION_PLAN.md`: animation frame extraction and 3D wall-thickness/PBR improvements.
 
 5. Tighten CI over time:
-   Once warnings are reduced, run `eslint . --max-warnings=0` in CI to prevent new warning debt.
+   Add mobile viewport Playwright coverage for the scratchpad drawer and key Studio tabs.

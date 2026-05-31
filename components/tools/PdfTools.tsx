@@ -17,10 +17,14 @@ import { useScratchpadStore } from './shared/scratchpadStore';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { TabButton, Tabs } from '../ui/ToolUi';
+import { loadRemoteModule } from './shared/runtimeAssetLoader';
 import type { PDFDocument } from 'pdf-lib';
 
 const loadPdfJs = async () => {
-  const pdfjsLib = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs');
+  const pdfjsLib = await loadRemoteModule<typeof import('https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs')>(
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs',
+    'PDF.js 5.4.449',
+  );
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.worker.min.mjs';
   return pdfjsLib;
 };

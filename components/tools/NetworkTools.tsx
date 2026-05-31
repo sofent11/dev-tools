@@ -133,6 +133,52 @@ const stripMatchingQuotes = (value: string) => {
     return value;
 };
 
+const shellTokenize = (input: string) => {
+    const tokens: string[] = [];
+    let current = '';
+    let quote: '"' | "'" | null = null;
+    let escaped = false;
+
+    for (let i = 0; i < input.length; i++) {
+        const char = input[i];
+        if (escaped) {
+            current += char;
+            escaped = false;
+            continue;
+        }
+        if (char === '\\' && quote !== "'") {
+            escaped = true;
+            continue;
+        }
+        if ((char === '"' || char === "'") && (!quote || quote === char)) {
+            quote = quote ? null : char;
+            continue;
+        }
+        if (/\s/.test(char) && !quote) {
+            if (current) {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+        current += char;
+    }
+    if (current) tokens.push(current);
+    return tokens;
+};
+
+const appendUrlQuery = (targetUrl: string, entries: Array<readonly [string, string]>) => {
+    if (!targetUrl || entries.length === 0) return targetUrl;
+    try {
+        const parsed = new URL(targetUrl);
+        entries.forEach(([key, value]) => parsed.searchParams.append(key, value));
+        return parsed.toString();
+    } catch {
+        const query = new URLSearchParams(entries.map(([key, value]) => [key, value])).toString();
+        return `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}${query}`;
+    }
+};
+
 const parseFormBodyLines = (input: string) =>
     input
         .split(/\r?\n/)
@@ -150,40 +196,17 @@ const parseFormBodyLines = (input: string) =>
         })
         .filter(([key]) => key);
 
-const parseCurlCommand = (curlCmd: string) => {
+export const parseCurlCommand = (curlCmd: string) => {
     const cleanCmd = curlCmd.trim().replace(/\\\s*\n/g, ' ');
     let method = 'GET';
     let url = '';
     const parsedHeaders: Record<string, string> = {};
-    let body = '';
+    const bodyParts: string[] = [];
+    const queryEntries: Array<readonly [string, string]> = [];
     const formBodyLines: string[] = [];
+    let sendDataAsQuery = false;
 
-    const urlRegex = /(?:https?:\/\/[^\s'"]+)/i;
-    const urlMatch = cleanCmd.match(urlRegex);
-    if (urlMatch) {
-        url = urlMatch[0];
-    }
-
-    const tokens: string[] = [];
-    let current = '';
-    let inDoubleQuotes = false;
-    let inSingleQuotes = false;
-    for (let i = 0; i < cleanCmd.length; i++) {
-        const char = cleanCmd[i];
-        if (char === '"' && !inSingleQuotes) {
-            inDoubleQuotes = !inDoubleQuotes;
-        } else if (char === "'" && !inDoubleQuotes) {
-            inSingleQuotes = !inSingleQuotes;
-        } else if (char === ' ' && !inDoubleQuotes && !inSingleQuotes) {
-            if (current) {
-                tokens.push(current);
-                current = '';
-            }
-        } else {
-            current += char;
-        }
-    }
-    if (current) tokens.push(current);
+    const tokens = shellTokenize(cleanCmd).filter(token => token !== 'curl');
 
     for (let i = 0; i < tokens.length; i++) {
         const token = tokens[i];
@@ -191,6 +214,15 @@ const parseCurlCommand = (curlCmd: string) => {
             const nextMethod = token.startsWith('--request=') ? token.slice('--request='.length) : tokens[i + 1];
             method = nextMethod?.toUpperCase() || 'GET';
             if (!token.startsWith('--request=')) i++;
+        } else if (token === '-G' || token === '--get') {
+            sendDataAsQuery = true;
+        } else if (token === '--url' || token.startsWith('--url=')) {
+            url = stripMatchingQuotes(token.startsWith('--url=') ? token.slice('--url='.length) : (tokens[i + 1] || ''));
+            if (!token.startsWith('--url=')) i++;
+        } else if (token === '-u' || token === '--user' || token.startsWith('--user=')) {
+            const userValue = stripMatchingQuotes(token.startsWith('--user=') ? token.slice('--user='.length) : (tokens[i + 1] || ''));
+            parsedHeaders.Authorization = `Basic ${btoa(unescape(encodeURIComponent(userValue)))}`;
+            if (!token.startsWith('--user=')) i++;
         } else if (token === '-H' || token === '--header' || token.startsWith('--header=')) {
             const headerStr = token.startsWith('--header=') ? token.slice('--header='.length) : (tokens[i + 1] || '');
             const normalizedHeaderStr = stripMatchingQuotes(headerStr);
@@ -206,13 +238,21 @@ const parseCurlCommand = (curlCmd: string) => {
             token === '--data' ||
             token === '--data-raw' ||
             token === '--data-binary' ||
+            token === '--data-urlencode' ||
             token.startsWith('--data=') ||
             token.startsWith('--data-raw=') ||
-            token.startsWith('--data-binary=')
+            token.startsWith('--data-binary=') ||
+            token.startsWith('--data-urlencode=')
         ) {
             const payload = token.includes('=') ? token.slice(token.indexOf('=') + 1) : (tokens[i + 1] || '');
-            body = stripMatchingQuotes(payload);
-            if (method === 'GET') method = 'POST';
+            const normalizedPayload = stripMatchingQuotes(payload);
+            if (sendDataAsQuery || token.includes('urlencode')) {
+                const [key, value = ''] = normalizedPayload.split(/=(.*)/s);
+                if (key) queryEntries.push([key, value]);
+            } else {
+                bodyParts.push(normalizedPayload);
+                if (method === 'GET') method = 'POST';
+            }
             if (!token.includes('=')) i++;
         } else if (
             token === '-F' ||
@@ -231,6 +271,8 @@ const parseCurlCommand = (curlCmd: string) => {
             }
             if (method === 'GET') method = 'POST';
             if (!token.includes('=')) i++;
+        } else if (!token.startsWith('-') && (token.startsWith('http://') || token.startsWith('https://'))) {
+            url = stripMatchingQuotes(token);
         }
     }
 
@@ -239,7 +281,12 @@ const parseCurlCommand = (curlCmd: string) => {
         if (httpToken) url = httpToken;
     }
 
+    if (queryEntries.length > 0) {
+        url = appendUrlQuery(url, queryEntries);
+    }
+
     const bodyMode: RequestBodyMode = formBodyLines.length > 0 ? 'form-data' : 'raw';
+    let body = bodyParts.join('&');
     if (bodyMode === 'form-data') {
         body = formBodyLines.join('\n');
     }
@@ -313,7 +360,12 @@ export const HttpBuilderTool: React.FC = () => {
                 if (hasFormBody) {
                     optsStr += `  body: formData,\n`;
                 } else if (hasRawBody) {
-                    optsStr += `  body: JSON.stringify(${body.trim() || '{}'}),\n`;
+                    try {
+                        const parsedBody = JSON.parse(body);
+                        optsStr += `  body: JSON.stringify(${JSON.stringify(parsedBody, null, 4).replace(/\n/g, '\n  ')}),\n`;
+                    } catch {
+                        optsStr += `  body: ${JSON.stringify(body)},\n`;
+                    }
                 }
                 if (optsStr.endsWith(',\n')) optsStr = optsStr.slice(0, -2) + '\n';
                 optsStr += '}';
@@ -446,32 +498,22 @@ export const HttpBuilderTool: React.FC = () => {
         { id: '1', path: '/api/v1/user', status: 200, body: '{\n  "status": "success",\n  "data": {\n    "name": "Antigravity",\n    "role": "AI Architect"\n  }\n}', delay: 200 }
     ]);
 
-    // Active local fetch hijacking for Mock sandbox
-    useEffect(() => {
-        if (!mockEnabled) return;
-        const originalFetch = window.fetch;
-        
-        window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-            const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-            
-            // Find matched local Mock rule
-            const matched = mockRules.find(rule => rule.path && urlStr.includes(rule.path));
+    const fetchWithLocalMock = async (targetUrl: string, options: RequestInit) => {
+        if (mockEnabled) {
+            const matched = mockRules.find(rule => rule.path && targetUrl.includes(rule.path));
             if (matched) {
                 if (matched.delay > 0) {
                     await new Promise(resolve => setTimeout(resolve, matched.delay));
                 }
                 return new Response(matched.body, {
                     status: matched.status,
+                    statusText: 'Mocked',
                     headers: { 'Content-Type': 'application/json' }
                 });
             }
-            return originalFetch(input, init);
-        };
-
-        return () => {
-            window.fetch = originalFetch;
-        };
-    }, [mockEnabled, mockRules]);
+        }
+        return fetch(targetUrl, options);
+    };
 
     const addMockRule = () => {
         const newRule: MockRule = {
@@ -521,7 +563,7 @@ export const HttpBuilderTool: React.FC = () => {
             // Apply CORS Proxy redirection if checked
             const targetUrl = useProxy ? `${proxyUrl}${encodeURIComponent(url)}` : url;
 
-            const res = await fetch(targetUrl, options);
+            const res = await fetchWithLocalMock(targetUrl, options);
             const text = await res.text();
             setResponse(`Status: ${res.status} ${res.statusText}\n\n${text}`);
         } catch (e) {

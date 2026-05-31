@@ -48,17 +48,28 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
       : (tools[0]?.id || '');
   });
 
-  // Listen for hash changes to support back/forward navigation and deep links
+  // Listen for hash and history changes to support back/forward navigation and deep links
   useEffect(() => {
-    const handleHashChange = () => {
+    const syncTabFromLocation = () => {
       const hash = window.location.hash.replace('#', '');
       if (hash && tools.some(t => t.id === hash)) {
         setActiveTabId(hash);
+        return;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const queryTab = params.get('tab');
+      if (queryTab && tools.some(t => t.id === queryTab)) {
+        setActiveTabId(queryTab);
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', syncTabFromLocation);
+    window.addEventListener('popstate', syncTabFromLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncTabFromLocation);
+      window.removeEventListener('popstate', syncTabFromLocation);
+    };
   }, [tools]);
 
   const handleTabSelect = (id: string) => {

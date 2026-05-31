@@ -71,10 +71,18 @@ const getScratchpadFallbackExt = (item: ScratchpadItem) => {
 };
 
 const getScratchpadMimeType = (item: ScratchpadItem) => {
+  if (item.mime) return item.mime;
   if (item.type === 'svg' || item.name.endsWith('.svg')) return 'image/svg+xml;charset=utf-8';
   if (item.type === 'json' || item.name.endsWith('.json')) return 'application/json;charset=utf-8';
   return 'text/plain;charset=utf-8';
 };
+
+interface ToastMessage {
+  id: string;
+  title: string;
+  description?: string;
+  tone?: 'success' | 'error' | 'info';
+}
 
 const translateTextForSearch = (
   value: string,
@@ -101,7 +109,9 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const scratchpadItems = useScratchpadStore((state) => state.items);
   const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
+  const updateScratchpadItem = useScratchpadStore((state) => state.updateItem);
   const clearScratchpad = useScratchpadStore((state) => state.clearAll);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const validSelectedIds = useMemo(() => {
     const availableIds = new Set(scratchpadItems.map(item => item.id));
     return selectedIds.filter(id => availableIds.has(id));
@@ -150,6 +160,26 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isScratchpadOpen]);
+
+  useEffect(() => {
+    const handleToast = (event: Event) => {
+      const detail = (event as CustomEvent<Omit<ToastMessage, 'id'>>).detail;
+      const toast: ToastMessage = {
+        id: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+        tone: detail?.tone || 'info',
+        title: detail?.title || '',
+        description: detail?.description,
+      };
+      if (!toast.title) return;
+      setToasts(previous => [toast, ...previous].slice(0, 4));
+      window.setTimeout(() => {
+        setToasts(previous => previous.filter(item => item.id !== toast.id));
+      }, toast.tone === 'error' ? 5000 : 3000);
+    };
+
+    window.addEventListener('devtoolbox-toast', handleToast);
+    return () => window.removeEventListener('devtoolbox-toast', handleToast);
+  }, []);
 
   // Fallback to first tool if active one not found
   const activeTool = TOOLS.find(t => t.id === activeToolId) || TOOLS[0];
@@ -486,10 +516,11 @@ export default function App() {
                 </div>
               ) : (
                 scratchpadItems.map(item => (
-                  <ScratchpadItemCard 
+                    <ScratchpadItemCard 
                     key={item.id} 
                     item={item} 
                     onRemove={removeScratchpadItem} 
+                    onUpdate={updateScratchpadItem}
                     isMultiSelectMode={isMultiSelectMode}
                     isSelected={validSelectedIds.includes(item.id)}
                     onToggleSelect={() => {
@@ -518,6 +549,24 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <div className="pointer-events-none fixed right-4 top-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite" aria-atomic="true">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`pointer-events-auto rounded-lg border bg-white px-4 py-3 text-sm shadow-lg ${
+              toast.tone === 'error'
+                ? 'border-red-200 text-red-800'
+                : toast.tone === 'success'
+                  ? 'border-emerald-200 text-emerald-800'
+                  : 'border-slate-200 text-slate-700'
+            }`}
+          >
+            <div className="font-semibold">{t(toast.title)}</div>
+            {toast.description && <div className="mt-1 text-xs opacity-80">{t(toast.description)}</div>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -525,12 +574,15 @@ export default function App() {
 const ScratchpadItemCard: React.FC<{
   item: ScratchpadItem;
   onRemove: (id: string) => void;
+  onUpdate: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'sourceTool'>>) => void;
   isMultiSelectMode: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
-}> = ({ item, onRemove, isMultiSelectMode, isSelected, onToggleSelect }) => {
+}> = ({ item, onRemove, onUpdate, isMultiSelectMode, isSelected, onToggleSelect }) => {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(item.name);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -623,13 +675,49 @@ const ScratchpadItemCard: React.FC<{
       <div className="flex-1 min-w-0 space-y-2">
         <div className="flex justify-between items-start">
           <div className="min-w-0 flex-1 pr-2">
-            <p className="font-bold text-slate-800 dark:text-slate-200 truncate font-mono text-[11px]" title={item.name}>
-              {item.name}
-            </p>
+            {isEditingName ? (
+              <input
+                className="w-full rounded border border-primary-200 bg-white px-1 py-0.5 font-mono text-[11px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-slate-900 dark:text-slate-100"
+                value={draftName}
+                autoFocus
+                onClick={event => event.stopPropagation()}
+                onChange={event => setDraftName(event.target.value)}
+                onBlur={() => {
+                  const nextName = draftName.trim() || item.name;
+                  setDraftName(nextName);
+                  onUpdate(item.id, { name: nextName });
+                  setIsEditingName(false);
+                }}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') event.currentTarget.blur();
+                  if (event.key === 'Escape') {
+                    setDraftName(item.name);
+                    setIsEditingName(false);
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={event => {
+                  event.stopPropagation();
+                  setIsEditingName(true);
+                }}
+                className="block max-w-full truncate text-left font-mono text-[11px] font-bold text-slate-800 hover:text-primary-700 dark:text-slate-200"
+                title={`${item.name} - 点击重命名`}
+              >
+                {item.name}
+              </button>
+            )}
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-[9px] text-slate-400 font-mono">
                 {new Date(item.timestamp).toLocaleTimeString()} • {formatFileSize(item.size || item.content?.length || 0)}
               </span>
+              {item.sourceTool && (
+                <span className="border border-slate-200 bg-white px-1 py-0.2 text-[8px] font-bold text-slate-500 dark:border-slate-800 dark:bg-slate-900">
+                  {item.sourceTool}
+                </span>
+              )}
               {isJson && (
                 <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
                   {jsonBadge}
@@ -648,7 +736,7 @@ const ScratchpadItemCard: React.FC<{
             </div>
           </div>
           {!isMultiSelectMode && (
-            <div className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            <div className="flex gap-1 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
               <button 
                 onClick={handleCopy}
                 className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"

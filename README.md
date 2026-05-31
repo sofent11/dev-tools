@@ -100,13 +100,13 @@
 - lucide-react
 - Google GenAI SDK
 - MediaPipe Tasks Vision / Face Mesh
-- Konva / React Konva
 - pdf-lib
 - browser-image-compression
 - qrcode / turndown
 - js-yaml / fast-xml-parser / papaparse
 - marked / react-markdown / KaTeX
 - Zustand
+- Vitest / Playwright（质量与端到端冒烟测试）
 
 ## 本地运行
 
@@ -150,6 +150,9 @@ npm run dev      # 启动 Vite 开发服务
 npm run build    # 生产构建
 npm run preview  # 预览生产构建
 npm run lint     # ESLint 检查
+npm run typecheck # TypeScript 类型检查
+npm run test:unit # Vitest 单元测试
+npm run test:e2e  # Playwright 端到端冒烟测试
 ```
 
 ## 路由说明
