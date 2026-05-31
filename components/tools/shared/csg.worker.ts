@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { CSGExporter } from './csg';
 
-const ctx: DedicatedWorkerGlobalScope = self as DedicatedWorkerGlobalScope;
+const ctx: DedicatedWorkerGlobalScope = self as unknown as DedicatedWorkerGlobalScope;
 
 interface CsgWorkerRequest {
   id: number;

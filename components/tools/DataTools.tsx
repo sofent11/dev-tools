@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Copy, Minimize2, Wand2, Database, Play, Download, Upload, Terminal, Info, Search, ShieldAlert, FileArchive, Cpu } from 'lucide-react';
-import { format as formatSql, supportedDialects } from 'sql-formatter';
+import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { CodePanel, FieldLabel, Select, Textarea } from '../ui/ToolUi';
@@ -435,7 +435,7 @@ const sampleSql = `select u.id,u.name,count(o.id) as orders from users u left jo
 
 export const SqlFormatterTool: React.FC = () => {
   const [input, setInput] = useState(sampleSql);
-  const [dialect, setDialect] = useState('sql');
+  const [dialect, setDialect] = useState<SqlLanguage | 'sql'>('sql');
   const [keywordCase, setKeywordCase] = useState<'preserve' | 'upper' | 'lower'>('upper');
   const [output, setOutput] = useState('');
   const [error, setError] = useState('');
@@ -479,7 +479,7 @@ export const SqlFormatterTool: React.FC = () => {
         <div className="space-y-4">
           <div>
             <FieldLabel>数据库方言</FieldLabel>
-            <Select value={dialect} onChange={event => setDialect(event.target.value)}>
+            <Select value={dialect} onChange={event => setDialect(event.target.value as SqlLanguage | 'sql')}>
               <option value="sql">Standard SQL</option>
               {supportedDialects.map(item => <option key={item} value={item}>{item}</option>)}
             </Select>
@@ -1554,4 +1554,3 @@ export const BinaryHexViewerTool: React.FC = () => {
     </Card>
   );
 };
-

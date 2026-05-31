@@ -229,8 +229,8 @@ export const AsymmetricKeyTool: React.FC = () => {
       if (isJwk && jwkObj) {
         // Convert JWK to PEM / DER
         const algName = isEc ? 'ECDSA' : 'RSASSA-PKCS1-v1_5';
-        const keyType = isPrivateKey ? 'pkcs8' : 'spki';
-        const usage = isPrivateKey ? ['sign'] : ['verify'];
+        const keyType: 'pkcs8' | 'spki' = isPrivateKey ? 'pkcs8' : 'spki';
+        const usage: KeyUsage[] = isPrivateKey ? ['sign'] : ['verify'];
         const importParams = isEc ? { name: algName, namedCurve: jwkObj.crv || 'P-256' } : { name: algName, hash: 'SHA-256' };
 
         const cryptoKey = await crypto.subtle.importKey(
@@ -241,7 +241,7 @@ export const AsymmetricKeyTool: React.FC = () => {
           usage
         );
 
-        const exportedDerBuffer = await crypto.subtle.exportKey(keyType as any, cryptoKey);
+        const exportedDerBuffer = await crypto.subtle.exportKey(keyType, cryptoKey);
         const derBytes = new Uint8Array(exportedDerBuffer);
 
         // Update audit based on JWK
@@ -299,12 +299,12 @@ export const AsymmetricKeyTool: React.FC = () => {
           isEc = true;
         }
 
-        const usage = isPrivateKey ? ['sign'] : ['verify'];
+        const usage: KeyUsage[] = isPrivateKey ? ['sign'] : ['verify'];
         const algName = isEc ? 'ECDSA' : 'RSASSA-PKCS1-v1_5';
         const importFormat = isPrivateKey ? 'pkcs8' : 'spki';
         const importParams = isEc ? { name: algName, namedCurve: keySize === 384 ? 'P-384' : 'P-256' } : { name: algName, hash: 'SHA-256' };
 
-        let jwkResult: Record<string, any> | null = null;
+        let jwkResult: JsonWebKey | null = null;
         try {
           const cryptoKey = await crypto.subtle.importKey(
             importFormat,

@@ -30,7 +30,7 @@ export const XmlTool: React.FC = () => {
 
   const handleFormat = () => {
     try {
-      const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+      const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
       const obj = parser.parse(input);
       const builder = new XMLBuilder({ format: true, ignoreAttributes: false });
       setOutput(builder.build(obj));
@@ -42,7 +42,7 @@ export const XmlTool: React.FC = () => {
 
   const handleMinify = () => {
     try {
-      const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+      const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
       const obj = parser.parse(input);
       const builder = new XMLBuilder({ format: false, ignoreAttributes: false });
       setOutput(builder.build(obj));
@@ -54,7 +54,7 @@ export const XmlTool: React.FC = () => {
 
   const handleToJson = () => {
       try {
-        const parser = new XMLParser({ removeNsprefix: false, ignoreAttributes: false });
+        const parser = new XMLParser({ removeNSPrefix: false, ignoreAttributes: false });
         const obj = parser.parse(input);
         setOutput(JSON.stringify(obj, null, 2));
         setError(null);

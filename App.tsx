@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FileCode, FolderArchive
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useScratchpadStore } from './components/tools/shared/scratchpadStore';
@@ -44,6 +44,33 @@ const getToolIdFromLocation = () => {
 };
 
 const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}`;
+
+interface ScratchpadItem {
+  id: string;
+  name: string;
+  type: string;
+  content: string;
+  timestamp: number;
+}
+
+const sanitizeSvgPreview = (svg: string) => {
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  const svgEl = doc.querySelector('svg');
+  if (!svgEl || doc.querySelector('parsererror')) return '';
+
+  svgEl.querySelectorAll('script, foreignObject, iframe, object, embed, link, meta').forEach(node => node.remove());
+  svgEl.querySelectorAll('*').forEach(node => {
+    Array.from(node.attributes).forEach(attr => {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim().toLowerCase();
+      if (name.startsWith('on') || value.startsWith('javascript:') || value.includes('url(javascript:')) {
+        node.removeAttribute(attr.name);
+      }
+    });
+  });
+
+  return svgEl.outerHTML;
+};
 
 export default function App() {
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
@@ -457,7 +484,7 @@ export default function App() {
 }
 
 const ScratchpadItemCard: React.FC<{
-  item: any;
+  item: ScratchpadItem;
   onRemove: (id: string) => void;
   isMultiSelectMode: boolean;
   isSelected: boolean;
@@ -496,9 +523,14 @@ const ScratchpadItemCard: React.FC<{
       const parsed = JSON.parse(item.content);
       if (Array.isArray(parsed)) return `Array (${parsed.length})`;
       if (typeof parsed === 'object' && parsed !== null) return `Object (${Object.keys(parsed).length} keys)`;
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
     return 'JSON';
   }, [item.content, isJson]);
+
+  const sanitizedSvg = useMemo(
+    () => (isSvg ? sanitizeSvgPreview(item.content) : ''),
+    [isSvg, item.content],
+  );
 
   return (
     <div 
@@ -569,9 +601,9 @@ const ScratchpadItemCard: React.FC<{
         </div>
 
         {/* Preview dynamic cards */}
-        {isSvg ? (
+        {isSvg && sanitizedSvg ? (
           <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-checkerboard p-1 overflow-hidden hover:scale-[1.02] transition-transform duration-200">
-            <div className="h-full w-auto max-w-full flex items-center justify-center select-none" dangerouslySetInnerHTML={{ __html: item.content }} />
+            <div className="h-full w-auto max-w-full flex items-center justify-center select-none" dangerouslySetInnerHTML={{ __html: sanitizedSvg }} />
           </div>
         ) : isJson ? (
           <div className="p-2 bg-slate-900 dark:bg-slate-950 border border-slate-850 rounded-lg font-mono text-[9px] text-emerald-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none leading-normal">

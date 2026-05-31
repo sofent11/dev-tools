@@ -524,11 +524,12 @@ export const CsgWorkbench: React.FC = () => {
 
     // Block OrbitControls when dragging gizmo
     tControls.addEventListener('dragging-changed', (event) => {
-      controls.enabled = !event.value;
-      isTransformingRef.current = event.value;
+      const isDragging = Boolean(event.value);
+      controls.enabled = !isDragging;
+      isTransformingRef.current = isDragging;
       
       // Update values to React state upon finishing drag
-      if (!event.value && tControls.object) {
+      if (!isDragging && tControls.object) {
         const obj = tControls.object;
         const targetId = obj.name; // We mapped mesh.name = config.id
         

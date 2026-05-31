@@ -16,6 +16,97 @@ interface MockRule {
 
 type RequestBodyMode = 'raw' | 'form-data';
 
+type MockMessageHandler = ((event: MessageEvent) => void) | null;
+
+class MockWebSocket {
+    url: string;
+    readyState: number = WebSocket.CONNECTING;
+    onopen: (() => void) | null = null;
+    onmessage: MockMessageHandler = null;
+    onerror: (() => void) | null = null;
+    onclose: ((event: CloseEvent) => void) | null = null;
+
+    constructor(url: string) {
+        this.url = url;
+        setTimeout(() => {
+            this.readyState = WebSocket.OPEN;
+            if (this.onopen) this.onopen();
+        }, 400);
+    }
+
+    send(data: string) {
+        setTimeout(() => {
+            let responseText = `[Mock Server Response to "${data}"]`;
+            if (data.toLowerCase().includes('ping') || data.toLowerCase().includes('heartbeat')) {
+                responseText = 'pong';
+            } else {
+                responseText = JSON.stringify({
+                    status: 'ok',
+                    timestamp: Date.now(),
+                    received: data,
+                    note: '这是本地 Mock 仿真服务器自动响应。'
+                }, null, 2);
+            }
+
+            if (this.onmessage) {
+                this.onmessage(new MessageEvent('message', { data: responseText }));
+            }
+        }, 300);
+    }
+
+    close() {
+        this.readyState = WebSocket.CLOSED;
+        if (this.onclose) {
+            this.onclose(new CloseEvent('close', { code: 1000, reason: 'Mock connection closed' }));
+        }
+    }
+}
+
+class MockEventSource {
+    url: string;
+    onmessage: MockMessageHandler = null;
+    onerror: (() => void) | null = null;
+    listeners: Record<string, Array<(event: MessageEvent) => void>> = {};
+    timer: ReturnType<typeof setInterval> | null = null;
+
+    constructor(url: string) {
+        this.url = url;
+        let count = 0;
+        this.timer = setInterval(() => {
+            count++;
+            const data = JSON.stringify({
+                event: 'mock-stream',
+                id: count,
+                value: `流式数据块 #${count}`,
+                timestamp: new Date().toLocaleTimeString(),
+                desc: '此消息由本地 SSE 仿真服务器持续推送。'
+            }, null, 2);
+
+            if (this.onmessage) {
+                this.onmessage(new MessageEvent('message', { data }));
+            }
+
+            if (this.listeners.ping) {
+                this.listeners.ping.forEach(callback => {
+                    callback(new MessageEvent('ping', { data: `[心跳] #${count}` }));
+                });
+            }
+        }, 2000);
+    }
+
+    addEventListener(event: string, callback: (event: MessageEvent) => void) {
+        if (!this.listeners[event]) this.listeners[event] = [];
+        this.listeners[event].push(callback);
+    }
+
+    close() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+}
+
 const stripMatchingQuotes = (value: string) => {
     if (
         (value.startsWith('"') && value.endsWith('"')) ||
@@ -188,7 +279,6 @@ export const HttpBuilderTool: React.FC = () => {
 
         const hasFormBody = method !== 'GET' && method !== 'HEAD' && bodyMode === 'form-data' && body.trim();
         const hasRawBody = method !== 'GET' && method !== 'HEAD' && bodyMode === 'raw' && body;
-        const hasBody = Boolean(hasFormBody || hasRawBody);
         const formEntries = hasFormBody ? parseFormBodyLines(body) : [];
         const normalizedHeaders = { ...parsedHeaders };
         delete normalizedHeaders['content-length'];
@@ -944,12 +1034,12 @@ export const PingAnalyzerTool: React.FC = () => {
             const latency = Math.round(performance.now() - start);
             
             setHistory(prev => {
-                const next = [...prev, { time: Date.now(), latency, status: 'success' }];
+                const next: PingRecord[] = [...prev, { time: Date.now(), latency, status: 'success' }];
                 return next.slice(-30);
             });
         } catch {
             setHistory(prev => {
-                const next = [...prev, { time: Date.now(), latency: 0, status: 'error' }];
+                const next: PingRecord[] = [...prev, { time: Date.now(), latency: 0, status: 'error' }];
                 return next.slice(-30);
             });
         }
@@ -1237,51 +1327,6 @@ export const WebSocketSseSandboxTool: React.FC = () => {
         if (useMockServer) {
             try {
                 addLog('info', `正在连接本地 Mock WebSocket 仿真服务器 (mock://local-websocket-server)...`);
-                
-                class MockWebSocket {
-                    url: string;
-                    readyState: number = WebSocket.CONNECTING;
-                    onopen: (() => void) | null = null;
-                    onmessage: ((event: MessageEvent) => void) | null = null;
-                    onerror: (() => void) | null = null;
-                    onclose: ((event: CloseEvent) => void) | null = null;
-
-                    constructor(url: string) {
-                        this.url = url;
-                        setTimeout(() => {
-                            this.readyState = WebSocket.OPEN;
-                            if (this.onopen) this.onopen();
-                        }, 400);
-                    }
-
-                    send(data: string) {
-                        setTimeout(() => {
-                            let responseText = `[Mock Server Response to "${data}"]`;
-                            if (data.toLowerCase().includes('ping') || data.toLowerCase().includes('heartbeat')) {
-                                responseText = 'pong';
-                            } else {
-                                responseText = JSON.stringify({
-                                    status: "ok",
-                                    timestamp: Date.now(),
-                                    received: data,
-                                    note: "这是本地 Mock 仿真服务器自动响应。"
-                                }, null, 2);
-                            }
-
-                            if (this.onmessage) {
-                                this.onmessage(new MessageEvent('message', { data: responseText }));
-                            }
-                        }, 300);
-                    }
-
-                    close() {
-                        this.readyState = WebSocket.CLOSED;
-                        if (this.onclose) {
-                            this.onclose(new CloseEvent('close', { code: 1000, reason: 'Mock connection closed' }));
-                        }
-                    }
-                }
-
                 const ws = new MockWebSocket('mock://local-websocket-server') as unknown as WebSocket;
                 wsRef.current = ws;
 
@@ -1304,7 +1349,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                     });
                 };
 
-                ws.onclose = (event) => {
+                ws.onclose = () => {
                     Promise.resolve().then(() => {
                         setIsConnected(false);
                         wsRef.current = null;
@@ -1379,50 +1424,6 @@ export const WebSocketSseSandboxTool: React.FC = () => {
             try {
                 addLog('info', `正在开启本地 Mock SSE 监听 (mock://local-sse-server)...`);
                 
-                class MockEventSource {
-                    url: string;
-                    onmessage: ((event: MessageEvent) => void) | null = null;
-                    onerror: (() => void) | null = null;
-                    listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
-                    timer: any = null;
-
-                    constructor(url: string) {
-                        this.url = url;
-                        let count = 0;
-                        this.timer = setInterval(() => {
-                            count++;
-                            const data = JSON.stringify({
-                                event: "mock-stream",
-                                id: count,
-                                value: `流式数据块 #${count}`,
-                                timestamp: new Date().toLocaleTimeString(),
-                                desc: "此消息由本地 SSE 仿真服务器持续推送。"
-                            }, null, 2);
-
-                            if (this.onmessage) {
-                                this.onmessage(new MessageEvent('message', { data }));
-                            }
-
-                            if (this.listeners['ping']) {
-                                this.listeners['ping'].forEach(cb => {
-                                    cb(new MessageEvent('ping', { data: `[心跳] #${count}` }));
-                                });
-                            }
-                        }, 2000);
-                    }
-
-                    addEventListener(event: string, callback: any) {
-                        if (!this.listeners[event]) this.listeners[event] = [];
-                        this.listeners[event].push(callback);
-                    }
-
-                    close() {
-                        if (this.timer) {
-                            clearInterval(this.timer);
-                        }
-                    }
-                }
-
                 const sse = new MockEventSource('mock://local-sse-server') as unknown as EventSource;
                 sseRef.current = sse;
                 setIsConnected(true);
@@ -1440,7 +1441,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                     });
                 };
 
-                sse.addEventListener('ping', (event: any) => {
+                sse.addEventListener('ping', (event) => {
                     Promise.resolve().then(() => {
                         addLog('recv', `[自定义事件: ping] ${event.data}`);
                     });
@@ -1471,7 +1472,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
             };
 
             // Common custom events support
-            sse.addEventListener('ping', (event: any) => {
+            sse.addEventListener('ping', (event) => {
                 Promise.resolve().then(() => {
                     addLog('recv', `[自定义事件: ping] ${event.data}`);
                 });
