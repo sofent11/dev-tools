@@ -59,7 +59,7 @@ const enExact: Record<string, string> = {
   'CSS & 矢量图形样式工坊': 'CSS & Vector Styling Workshop',
   '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入': 'Unit conversion, palettes, CSS gradients/shadows, and SVG optimization/embedding',
   '图形与图像创意工坊': 'Graphics & Image Workshop',
-  '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取': 'Image compression, cutout, palette extraction, watermarking, bead art, AI face swap, and headshot extraction',
+  '图片极致压缩、智能抠图、色板提取、水印、拼豆及大头照提取': 'Image compression, cutout, palette extraction, watermarking, bead art, and headshot extraction',
   '文件与文档处理中心': 'File & Document Center',
   '本地 PDF 合并转换、文件属性哈希分析及文件名提取': 'Local PDF merging/conversion, file hash analysis, and filename extraction',
   '3D 建模与 CAD 首饰': '3D Modeling & CAD Jewelry',
@@ -199,7 +199,7 @@ const enExact: Record<string, string> = {
 
   '图片压缩/转换': 'Image Compression / Conversion',
   '压缩 / 格式转换': 'Compression and format conversion',
-  '集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸对齐及换脸的一站式多媒体图形中心': 'A multimedia workspace for image compression, smart color extraction, local background removal, face alignment, and face swapping',
+  '集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸裁剪与动画帧提取的一站式多媒体图形中心': 'A multimedia workspace for image compression, smart color extraction, local background removal, face cropping, and animation frame extraction',
   '智能本地抠图': 'Smart Local Background Removal',
   '本地高精度图片背景色去除与画笔边缘修正': 'Local high-precision background removal with brush edge refinement',
   '图片转 Base64': 'Image to Base64',
@@ -212,8 +212,6 @@ const enExact: Record<string, string> = {
   '图片转拼豆网格 (Worker 异步加速)': 'Image to bead grid with worker acceleration',
   '大头照提取': 'Headshot Extraction',
   '自动人脸/肩部裁剪': 'Automatic face and shoulder crop',
-  'AI 换脸': 'AI Face Swap',
-  '本地 WebGL 换脸': 'Local WebGL face swap',
   '动画帧提取': 'Animation Frame Extraction',
   '动图与 Lottie 逐帧提取': 'Frame-by-frame extraction for GIFs and Lottie',
 

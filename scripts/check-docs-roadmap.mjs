@@ -22,12 +22,12 @@ const stalePatterns = [
   },
   {
     file: 'IMPLEMENTATION_PLAN.md',
-    pattern: /Continue exposing shared runtime loader states in sql\.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and MediaPipe tool panels/i,
+    pattern: /Continue exposing shared runtime loader states in sql\.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe tool panels/i,
     message: 'IMPLEMENTATION_PLAN still lists completed runtime panel migrations as next work.',
   },
   {
     file: 'PROJECT_AUDIT.md',
-    pattern: /Continue surfacing cached\/loading\/retry\/error state inside sql\.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and MediaPipe panels/i,
+    pattern: /Continue surfacing cached\/loading\/retry\/error state inside sql\.js, OpenPGP, sm-crypto, zxcvbn, and MediaPipe panels/i,
     message: 'PROJECT_AUDIT still lists completed runtime panel migrations as next work.',
   },
   {

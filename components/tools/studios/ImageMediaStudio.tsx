@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { Image, Images, Palette, LayoutTemplate, Grid3X3, UserRoundCog, Scissors, FileVideo } from 'lucide-react';
+import { Image, Images, Palette, LayoutTemplate, Grid3X3, Scissors, FileVideo } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const ImageTools = lazyNamed(() => import('../ImageTools'), 'ImageTools');
@@ -9,7 +9,6 @@ const ImageColorExtractTool = lazyNamed(() => import('../images'), 'ImageColorEx
 const ImageWatermarkTool = lazyNamed(() => import('../images'), 'ImageWatermarkTool');
 const PerlerBeadTool = lazyNamed(() => import('../images'), 'PerlerBeadTool');
 const HeadshotExtractor = lazyNamed(() => import('../HeadshotExtractor'), 'HeadshotExtractor');
-const FaceSwapTool = lazyNamed(() => import('../FaceSwapTool'), 'FaceSwapTool');
 const AnimationFrameExtractor = lazy(() => import('../AnimationFrameExtractor').then(m => ({ default: m.AnimationFrameExtractor })));
 
 const subTools: SubTool[] = [
@@ -20,7 +19,6 @@ const subTools: SubTool[] = [
   { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, component: ImageWatermarkTool },
   { id: 'perler-beads', name: '拼豆图纸生成', description: '图片转拼豆网格 (Worker 异步加速)', icon: Grid3X3, component: PerlerBeadTool },
   { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, component: HeadshotExtractor },
-  { id: 'faceswap', name: 'AI 换脸', description: '本地 WebGL 换脸', icon: UserRoundCog, component: FaceSwapTool },
   { id: 'animation-frame', name: '动画帧提取', description: '动图与 Lottie 逐帧提取', icon: FileVideo, component: AnimationFrameExtractor },
 ];
 
@@ -28,7 +26,7 @@ export const ImageMediaStudio: React.FC = () => {
   return (
     <TabbedToolbox
       title="图形与图像创意工坊"
-      description="集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸对齐及换脸的一站式多媒体图形中心"
+      description="集成图片极致压缩、智能颜色提取、本地高精度抠图、人脸裁剪与动画帧提取的一站式多媒体图形中心"
       tools={subTools}
       defaultTab="image"
     />

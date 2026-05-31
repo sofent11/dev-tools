@@ -23,7 +23,8 @@
 - Color converter includes WCAG 2.1 contrast analysis, HSL micro-adjusters, and accessible color suggestions.
 - JWT weak-secret auditing runs in a cancellable Web Worker with custom dictionary support and progress feedback.
 - Animation Frame Extractor for GIF, Lottie JSON, APNG, and animated WebP is integrated in the Image Studio with browser capability and memory-budget safeguards.
-- PDF.js, sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and Headshot/MediaPipe now expose shared runtime loader status, retry, cache, and failure states.
+- PDF.js, sql.js, OpenPGP, sm-crypto, zxcvbn, and Headshot/MediaPipe now expose shared runtime loader status, retry, cache, and failure states.
+- The browser-only WebGL face-swap tool has been removed after product review because its mesh-warping output was not reliable enough for a production toolbox.
 - Animation frame batch export/stash flows expose progress and cancellation; APNG/WebP decoding probes unknown WebCodecs frame counts under frame/pixel budgets.
 - STL repair includes browser-side wall-thickness heatmap sampling, fast/precise modes, cancellation, partial reports, grid prefiltering, and PBR material/environment controls.
 

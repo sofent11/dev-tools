@@ -37,7 +37,8 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Fixed all TypeScript errors reported by `tsc --noEmit`.
 - Added Vite and remote PDF.js module type declarations.
 - Fixed `fast-xml-parser` option casing for namespace handling.
-- Surfaced shared runtime loader state in sql.js, OpenPGP, sm-crypto, zxcvbn, FaceSwap, and Headshot/MediaPipe panels.
+- Surfaced shared runtime loader state in sql.js, OpenPGP, sm-crypto, zxcvbn, and Headshot/MediaPipe panels.
+- Removed the browser-only WebGL face-swap tool because its mesh-warping result did not meet product-quality expectations and browser-local execution cannot reliably deliver photorealistic identity transfer.
 - Added runtime timeout cleanup tests, retry/cached state coverage, and unified retry affordances for major CDN-backed tools.
 - Added scratchpad degraded/error persistence handling, background failure toasts, and Drawer storage health/quota visibility.
 - Added animation batch progress/cancel flows, ZIP filename sanitization, and WebCodecs APNG/WebP unknown-frame probing.
