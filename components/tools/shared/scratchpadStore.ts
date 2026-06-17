@@ -4,6 +4,7 @@ import { saveEntity, deleteEntity, getEntity, clearEntities } from './scratchpad
 import { notifyToast } from './notifyToast';
 
 export type ScratchpadStorageStatus = 'ok' | 'degraded' | 'error';
+const SENSITIVE_ITEM_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface ScratchpadItem {
   id: string;
@@ -17,6 +18,7 @@ export interface ScratchpadItem {
   sourceTool?: string;
   sensitive?: boolean;
   originAction?: string;
+  expiresAt?: number;
   isLarge?: boolean;
   isBinary?: boolean;
   thumbnail?: string;
@@ -32,6 +34,7 @@ export interface ScratchpadPayload {
   sourceTool?: string;
   sensitive?: boolean;
   originAction?: string;
+  expiresAt?: number;
   timestamp?: number;
 }
 
@@ -42,7 +45,8 @@ interface ScratchpadState {
   addItem: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
   addItemAsync: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
   estimateQuota: () => Promise<StorageEstimate | null>;
-  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool' | 'sensitive' | 'originAction'>>) => void;
+  pruneExpiredItems: () => void;
+  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool' | 'sensitive' | 'originAction' | 'expiresAt'>>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 }
@@ -179,6 +183,7 @@ export const useScratchpadStore = create<ScratchpadState>()(
       },
 
       addItemAsync: async (nameOrPayload, content = '', type = 'text', mimeType) => {
+        get().pruneExpiredItems();
         const payload = toPayload(nameOrPayload, content, type, mimeType);
         const id = payload.id || createScratchpadItemId();
         const timestamp = payload.timestamp || Date.now();
@@ -232,6 +237,7 @@ export const useScratchpadStore = create<ScratchpadState>()(
             sourceTool: payload.sourceTool,
             sensitive: payload.sensitive,
             originAction: payload.originAction,
+            expiresAt: payload.expiresAt ?? (payload.sensitive ? timestamp + SENSITIVE_ITEM_TTL_MS : undefined),
             isLarge,
             isBinary,
             thumbnail,
@@ -253,8 +259,33 @@ export const useScratchpadStore = create<ScratchpadState>()(
         }
       },
 
+      pruneExpiredItems: () => {
+        const now = Date.now();
+        const expiredIds = get().items
+          .filter(item => item.expiresAt !== undefined && item.expiresAt <= now)
+          .map(item => item.id);
+        if (expiredIds.length === 0) return;
+
+        expiredIds.forEach(id => {
+          deleteEntity(id).catch((err) => {
+            console.error(`Failed to delete expired scratchpad IndexedDB entity for ID: ${id}`, err);
+          });
+        });
+
+        set((state) => ({
+          items: state.items.filter(item => !expiredIds.includes(item.id)),
+        }));
+      },
+
       updateItem: (id, updates) => set((state) => ({
-        items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
+        items: state.items.map((item) => {
+          if (item.id !== id) return item;
+          const next = { ...item, ...updates };
+          if (updates.sensitive && !next.expiresAt) {
+            next.expiresAt = Date.now() + SENSITIVE_ITEM_TTL_MS;
+          }
+          return next;
+        }),
       })),
 
       removeItem: (id) => {
@@ -276,11 +307,15 @@ export const useScratchpadStore = create<ScratchpadState>()(
     }),
     {
       name: 'devtoolbox-scratchpad-storage',
+      version: 2,
       partialize: (state) => ({
         items: state.items,
         storageStatus: state.storageStatus,
         lastStorageError: state.lastStorageError,
       }),
+      onRehydrateStorage: () => (state) => {
+        state?.pruneExpiredItems();
+      },
     },
   ),
 );

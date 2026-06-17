@@ -12,6 +12,8 @@
     "check:i18n:visible": "node scripts/check-english-visible-text.mjs",
     "check:routes": "node scripts/check-route-map.mjs",
     "check:docs": "node scripts/check-docs-roadmap.mjs",
+    "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "check:modules": "node scripts/check-module-boundaries.mjs",
     "audit:prod": "npm audit --omit=dev",
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
@@ -19,7 +21,6 @@
   },
   "dependencies": {
     "@doodle3d/clipper-js": "^1.0.11",
-    "@google/genai": "^1.32.0",
     "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
     "@types/blueimp-md5": "^2.18.2",
     "@types/js-yaml": "^4.0.9",

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_WORKER_ENDPOINT, videoCapabilityBoundaries } from '../VideoDownloader';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { DEFAULT_WORKER_ENDPOINT, parseFromSource, videoCapabilityBoundaries } from '../VideoDownloader';
+
+const readFixture = (name: string) =>
+  readFileSync(join(process.cwd(), 'components/tools/__fixtures__', name), 'utf8');
 
 describe('video downloader capability boundaries', () => {
   it('documents private Worker limits without absolute unlock claims', () => {
@@ -13,5 +18,18 @@ describe('video downloader capability boundaries', () => {
 
   it('keeps the public sopace Worker endpoint as the default', () => {
     expect(DEFAULT_WORKER_ENDPOINT).toBe('https://api-dev.sopace.top');
+  });
+
+  it('extracts video candidates from an HTML fixture without network access', () => {
+    const result = parseFromSource(readFixture('video-page.html'), 'https://example.com/watch/fixture', 'generic');
+
+    expect(result.title).toBe('Fixture Video Page');
+    expect(result.thumbnail).toBe('https://cdn.example.com/thumb.jpg');
+    expect(result.author).toBe('Fixture Author');
+    expect(result.formats.map(format => format.url)).toEqual(expect.arrayContaining([
+      'https://cdn.example.com/video-720p.mp4',
+      'https://cdn.example.com/stream/master.m3u8',
+      'https://cdn.example.com/backup.webm',
+    ]));
   });
 });

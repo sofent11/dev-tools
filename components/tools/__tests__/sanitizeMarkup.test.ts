@@ -1,16 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { sanitizeHtmlMarkup, sanitizeSvgMarkup } from '../shared/sanitizeMarkup';
+
+const readFixture = (name: string) =>
+  readFileSync(join(process.cwd(), 'components/tools/__fixtures__', name), 'utf8');
 
 describe('sanitize markup allowlist', () => {
   it('removes dangerous HTML tags, handlers, and URL payloads', () => {
-    const sanitized = sanitizeHtmlMarkup(`
-      <div onclick="alert(1)" style="color: red; background-image: url(javascript:alert(1)); position: fixed">
-        <script>alert(1)</script>
-        <a href="javascript:alert(1)">bad</a>
-        <img src="data:text/html;base64,PHNjcmlwdD4=" onerror="alert(1)">
-        <strong>safe</strong>
-      </div>
-    `);
+    const sanitized = sanitizeHtmlMarkup(readFixture('malicious-fragment.html'));
 
     expect(sanitized).toContain('<strong>safe</strong>');
     expect(sanitized).toContain('style="color: red"');
@@ -28,14 +26,7 @@ describe('sanitize markup allowlist', () => {
   });
 
   it('keeps a safe SVG subset and strips active content', () => {
-    const sanitized = sanitizeSvgMarkup(`
-      <svg viewBox="0 0 10 10" onload="alert(1)">
-        <foreignObject><iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe></foreignObject>
-        <path d="M0 0L10 10" stroke="red" style="stroke-width: 2; background: url(javascript:alert(1))" />
-        <image href="javascript:alert(1)" />
-        <text>OK</text>
-      </svg>
-    `);
+    const sanitized = sanitizeSvgMarkup(readFixture('malicious-vector.svg'));
 
     expect(sanitized).toContain('<path');
     expect(sanitized).toContain('<text>OK</text>');

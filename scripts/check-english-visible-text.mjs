@@ -1,15 +1,55 @@
 import { chromium } from 'playwright';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = process.env.CHECK_I18N_APP_URL || 'http://127.0.0.1:3000';
+const shouldManageServer = !process.env.CHECK_I18N_APP_URL && /^http:\/\/127\.0\.0\.1:3000\/?$/i.test(appUrl);
 const hasHan = /[\u3400-\u9fff]/;
 const textSkipClosest = 'script,style,noscript,textarea,input,select,option,code,pre,[contenteditable="true"]';
 const attributeSkipClosest = 'script,style,noscript,code,pre,[contenteditable="true"]';
 
 const read = relativePath => fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
+
+const canReachApp = async () => {
+  try {
+    const response = await fetch(appUrl, { signal: AbortSignal.timeout(1000) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+};
+
+const waitForApp = async (timeoutMs = 30_000) => {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await canReachApp()) return;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  throw new Error(`Timed out waiting for ${appUrl}`);
+};
+
+const startManagedServer = async () => {
+  if (!shouldManageServer || await canReachApp()) return null;
+
+  const server = spawn('npm', ['run', 'dev', '--', '--host', '127.0.0.1'], {
+    cwd: rootDir,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, FORCE_COLOR: '0' },
+  });
+
+  server.stdout.on('data', chunk => {
+    if (process.env.CHECK_I18N_VERBOSE_SERVER) process.stdout.write(chunk);
+  });
+  server.stderr.on('data', chunk => {
+    if (process.env.CHECK_I18N_VERBOSE_SERVER) process.stderr.write(chunk);
+  });
+
+  await waitForApp();
+  return server;
+};
 
 const discoverStudioRoutes = () => {
   const registry = read('components/tools/registry.ts');
@@ -93,28 +133,34 @@ const scanRoute = async (page, route) => {
   });
 };
 
+const server = await startManagedServer();
 const routes = discoverStudioRoutes();
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
-page.setDefaultTimeout(5_000);
+let failures = [];
 
-await page.route('**/*', route => {
-  const requestUrl = route.request().url();
-  if (requestUrl.startsWith(appUrl)) return route.continue();
-  if (/127\.0\.0\.1:3000|localhost:3000/.test(requestUrl)) return route.continue();
-  if (/cdn|jsdelivr|cdnjs|google|mediapipe|api-dev|workers|vimeo|bilibili|ipify|cloudflare/i.test(requestUrl)) {
-    return route.abort().catch(() => {});
+try {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+  page.setDefaultTimeout(5_000);
+
+  await page.route('**/*', route => {
+    const requestUrl = route.request().url();
+    if (requestUrl.startsWith(appUrl)) return route.continue();
+    if (/127\.0\.0\.1:3000|localhost:3000/.test(requestUrl)) return route.continue();
+    if (/cdn|jsdelivr|cdnjs|google|mediapipe|api-dev|workers|vimeo|bilibili|ipify|cloudflare/i.test(requestUrl)) {
+      return route.abort().catch(() => {});
+    }
+    return route.continue();
+  });
+
+  failures = [];
+  for (const route of routes) {
+    const residuals = await scanRoute(page, route);
+    if (residuals.length > 0) failures.push({ route, residuals });
   }
-  return route.continue();
-});
-
-const failures = [];
-for (const route of routes) {
-  const residuals = await scanRoute(page, route);
-  if (residuals.length > 0) failures.push({ route, residuals });
+} finally {
+  await browser.close();
+  server?.kill('SIGTERM');
 }
-
-await browser.close();
 
 if (failures.length > 0) {
   console.error(`English visible text check failed: ${failures.length}/${routes.length} routes still contain visible Chinese text.`);

@@ -103,10 +103,6 @@
 - 小学几何解题工作区：加载 / 保存题目 JSON，支持交互画辅助线、移动端点、撤销、清空，以及教学模式展示
 - STL 修复工具提供壁厚热力图、快速/精细采样模式、Worker 局部报告、网格预筛与 PBR 环境预览；壁厚结果是浏览器端工程辅助估算，打印前仍建议用切片软件复核
 
-### AI 助手
-
-- 内置 Gemini 代码助手，可用于代码解释、正则编写、格式转换等简短开发问答
-
 ## 技术栈
 
 - React 19
@@ -114,7 +110,6 @@
 - Vite 6
 - Tailwind CSS 4
 - lucide-react
-- Google GenAI SDK
 - MediaPipe Tasks Vision / Face Mesh
 - pdf-lib
 - browser-image-compression
@@ -136,16 +131,6 @@
 ```bash
 npm install
 ```
-
-### 配置环境变量
-
-AI 助手需要 Gemini API Key。新建 `.env.local`：
-
-```bash
-GEMINI_API_KEY=your_gemini_api_key
-```
-
-如果不使用 AI 助手，可以跳过该配置；其他本地工具仍可正常使用。
 
 ### 启动开发服务
 
@@ -176,10 +161,10 @@ npm run test:e2e  # Playwright 端到端冒烟测试
 应用支持工具深链访问：
 
 ```text
-/tools/json
-/tools/pdf
-/tools/image
-/tools/smart-geometry
+/tools/json-studio#json
+/tools/file-studio#pdf
+/tools/image-studio#image
+/tools/cad-3d-studio#smart-geometry
 ```
 
 侧边栏切换工具时会同步更新浏览器地址，刷新页面后会恢复到对应工具。
@@ -200,7 +185,6 @@ npm run build
 
 - 大多数工具在浏览器端完成处理，上传的图片、PDF、文本不会主动提交到业务后端。
 - 文件信息、文件 Base64、图片取色、图片水印、二维码生成等新增工具均使用浏览器本地 API 处理。
-- AI 助手会调用 Gemini API，请不要在提示词中输入敏感信息。
 - 大头照、PDF.js、OpenPGP、SQL.js、首饰字体加载等功能会从 CDN 或公开字体仓库加载模型 / 脚本 / 字体资源，需要网络可用；高风险运行时会展示来源、fallback 和校验状态。
 - HTTP 请求工具受浏览器 CORS 策略限制。
 - 证书文本解析器只处理粘贴的 PEM 内容；浏览器无法直接作为纯前端工具连接任意域名读取 TLS 证书链。

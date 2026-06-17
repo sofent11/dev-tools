@@ -13,13 +13,15 @@ vi.stubGlobal('localStorage', {
   removeItem: vi.fn(),
 });
 
-const { saveEntity } = await import('../shared/scratchpadDb');
+const { saveEntity, deleteEntity } = await import('../shared/scratchpadDb');
 const { useScratchpadStore } = await import('../shared/scratchpadStore');
 
 describe('scratchpad store degraded persistence', () => {
   beforeEach(() => {
     useScratchpadStore.setState({ items: [], storageStatus: 'ok', lastStorageError: undefined });
     vi.mocked(saveEntity).mockReset();
+    vi.mocked(deleteEntity).mockReset();
+    vi.mocked(deleteEntity).mockResolvedValue(undefined);
   });
 
   it('keeps small text items in metadata when IndexedDB save fails', async () => {
@@ -65,5 +67,39 @@ describe('scratchpad store degraded persistence', () => {
       sensitive: true,
       originAction: 'generate-key',
     });
+    expect(useScratchpadStore.getState().items[0].expiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it('prunes expired sensitive items and deletes persisted entities', () => {
+    const expiredAt = Date.now() - 1000;
+    useScratchpadStore.setState({
+      items: [
+        {
+          id: 'expired',
+          name: 'old-private.pem',
+          content: '',
+          type: 'text',
+          timestamp: expiredAt - 1000,
+          size: 10,
+          sensitive: true,
+          expiresAt: expiredAt,
+        },
+        {
+          id: 'fresh',
+          name: 'fresh.txt',
+          content: 'fresh',
+          type: 'text',
+          timestamp: Date.now(),
+          size: 5,
+        },
+      ],
+      storageStatus: 'ok',
+      lastStorageError: undefined,
+    });
+
+    useScratchpadStore.getState().pruneExpiredItems();
+
+    expect(useScratchpadStore.getState().items.map(item => item.id)).toEqual(['fresh']);
+    expect(deleteEntity).toHaveBeenCalledWith('expired');
   });
 });

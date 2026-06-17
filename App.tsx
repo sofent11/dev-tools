@@ -5,6 +5,7 @@ import {
 import JSZip from 'jszip';
 import { useScratchpadStore, getScratchpadItemContent, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
+import { notifyToast } from './components/tools/shared/notifyToast';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS, resolveToolRoute } from './components/tools/registry';
 import { useI18n } from './src/i18n';
@@ -141,7 +142,11 @@ export default function App() {
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      alert('打包 ZIP 失败: ' + (err as Error).message);
+      notifyToast({
+        title: '打包 ZIP 失败',
+        description: (err as Error).message,
+        tone: 'error',
+      });
     }
   };
 
@@ -579,7 +584,7 @@ export default function App() {
 const ScratchpadItemCard: React.FC<{
   item: ScratchpadItem;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'sourceTool'>>) => void;
+  onUpdate: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'sourceTool' | 'expiresAt'>>) => void;
   isMultiSelectMode: boolean;
   isSelected: boolean;
   onToggleSelect: () => void;
@@ -612,7 +617,11 @@ const ScratchpadItemCard: React.FC<{
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      alert('复制失败: ' + (err as Error).message);
+      notifyToast({
+        title: '复制失败',
+        description: (err as Error).message,
+        tone: 'error',
+      });
     }
   };
 
@@ -628,7 +637,11 @@ const ScratchpadItemCard: React.FC<{
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      alert('下载失败: ' + (err as Error).message);
+      notifyToast({
+        title: '下载失败',
+        description: (err as Error).message,
+        tone: 'error',
+      });
     }
   };
 
@@ -736,6 +749,11 @@ const ScratchpadItemCard: React.FC<{
               {item.isBinary && (
                 <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/35 px-1 py-0.2 rounded text-[8px] font-bold uppercase">
                   {item.type}
+                </span>
+              )}
+              {item.sensitive && (
+                <span className="bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-100 dark:border-amber-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
+                  {t('敏感')} {item.expiresAt ? `· ${t('自动过期')}` : ''}
                 </span>
               )}
             </div>

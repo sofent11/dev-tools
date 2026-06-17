@@ -140,7 +140,20 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   return (
     <div className="flex h-full flex-col min-h-0 bg-[var(--surface-canvas)]">
       <div className="flex-none border-b border-slate-200 bg-white/50 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50 sticky top-0 z-20">
-        <div className="flex items-center justify-between px-6 py-2 overflow-x-auto scrollbar-none">
+        <div className="px-4 py-3 md:hidden">
+          <label className="sr-only" htmlFor="studio-tool-select">{t('选择工具')}</label>
+          <select
+            id="studio-tool-select"
+            value={activeTabId}
+            onChange={event => handleTabSelect(event.target.value)}
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+          >
+            {tools.map(tool => (
+              <option key={tool.id} value={tool.id}>{t(tool.name)}</option>
+            ))}
+          </select>
+        </div>
+        <div className="hidden items-center justify-between px-6 py-2 overflow-x-auto scrollbar-none md:flex">
           <div className="flex gap-2 min-w-max py-1">
             {tools.map(tool => {
               const isActive = tool.id === activeTabId;
@@ -174,7 +187,15 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
         <div className="h-full min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col">
-          <div className="mb-4 flex-none rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
+          <details className="mb-4 flex-none rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/50 md:hidden">
+            <summary className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">
+              {t(activeTool.name)}
+            </summary>
+            <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
+              {t(description)} · {t(activeTool.description || activeTool.name)}
+            </p>
+          </details>
+          <div className="mb-4 hidden flex-none rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50 md:block">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
               {t(title)} • {t(activeTool.name)}

@@ -37,6 +37,12 @@ jobs:
       - name: Check route map
         run: npm run check:routes
 
+      - name: Check docs roadmap
+        run: npm run check:docs
+
+      - name: Check module boundaries
+        run: npm run check:modules
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -46,8 +52,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check bundle budget
+        run: npm run check:bundle
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Check visible English UI
+        run: npm run check:i18n:visible
 
       - name: E2E smoke tests
         run: npm run test:e2e

@@ -70,6 +70,7 @@ const studioImports = getStudioImports();
 const registryTools = getRegistryTools();
 const registryIds = registryTools.map(tool => tool.studioId);
 const duplicateStudios = registryIds.filter((id, index) => registryIds.indexOf(id) !== index);
+const studioConfigById = new Map();
 const errors = [];
 let subToolCount = 0;
 
@@ -79,8 +80,19 @@ for (const studioId of new Set(duplicateStudios)) {
 
 for (const tool of registryTools) {
   const config = getStudioConfig(tool);
+  if (config.subTools) studioConfigById.set(tool.studioId, config);
   subToolCount += config.subTools?.length || 0;
   errors.push(...config.errors.map(error => `${tool.studioId}: ${error}`));
+}
+
+for (const match of registrySource.matchAll(/'([^']+)':\s*\{\s*studioId:\s*'([^']+)',\s*subToolId:\s*'([^']+)'/g)) {
+  const [, alias, studioId, subToolId] = match;
+  const studioConfig = studioConfigById.get(studioId);
+  if (!studioConfig) {
+    errors.push(`Legacy alias "${alias}" points to unknown studio "${studioId}".`);
+  } else if (!studioConfig.subTools.includes(subToolId)) {
+    errors.push(`Legacy alias "${alias}" points to missing tab "${studioId}#${subToolId}".`);
+  }
 }
 
 if (errors.length > 0) {

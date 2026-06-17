@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem('locale', 'zh-CN');
+  });
+});
+
 test('data format route activates the JSON diff sub-tool', async ({ page }) => {
   await page.goto('/tools/json-studio#json-diff');
 

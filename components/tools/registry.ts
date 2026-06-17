@@ -125,7 +125,6 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'image-watermark': { studioId: 'image-studio', subToolId: 'image-watermark' },
   'perler-beads': { studioId: 'image-studio', subToolId: 'perler-beads' },
   'headshot': { studioId: 'image-studio', subToolId: 'headshot' },
-  'faceswap': { studioId: 'image-studio', subToolId: 'faceswap' },
   'background-removal': { studioId: 'image-studio', subToolId: 'background-removal' },
   'animation-frame': { studioId: 'image-studio', subToolId: 'animation-frame' },
 

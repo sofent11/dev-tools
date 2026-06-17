@@ -4,9 +4,10 @@ import { I18nContext, type I18nContextValue } from './context';
 
 const textNodeOriginals = new WeakMap<Text, string>();
 const elementAttributeOriginals = new WeakMap<Element, Map<string, string>>();
+const optionTextOriginals = new WeakMap<HTMLOptionElement, string>();
 const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'aria-valuetext', 'placeholder', 'title'];
 const I18N_SCOPE_SELECTOR = '[data-i18n-root], main';
-const SKIP_SELECTOR = [
+const TEXT_SKIP_SELECTOR = [
   '[data-i18n-skip]',
   'script',
   'style',
@@ -19,6 +20,19 @@ const SKIP_SELECTOR = [
   'svg',
   'textarea',
   'input',
+  '[contenteditable="true"]',
+].join(',');
+const ATTRIBUTE_SKIP_SELECTOR = [
+  '[data-i18n-skip]',
+  'script',
+  'style',
+  'noscript',
+  'code',
+  'pre',
+  'kbd',
+  'samp',
+  'canvas',
+  'svg',
   '[contenteditable="true"]',
 ].join(',');
 
@@ -34,12 +48,15 @@ const getInitialLocale = (): Locale => {
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US';
 };
 
-const shouldSkipElement = (element: Element | null) =>
-  Boolean(element?.closest(SKIP_SELECTOR));
+const shouldSkipTextElement = (element: Element | null) =>
+  Boolean(element?.closest(TEXT_SKIP_SELECTOR));
+
+const shouldSkipAttributeElement = (element: Element | null) =>
+  Boolean(element?.closest(ATTRIBUTE_SKIP_SELECTOR));
 
 const localizeTextNode = (node: Text, locale: Locale) => {
   const parent = node.parentElement;
-  if (!parent || shouldSkipElement(parent)) return;
+  if (!parent || shouldSkipTextElement(parent)) return;
   if (locale === 'zh-CN' && hasHan(node.data)) {
     textNodeOriginals.set(node, node.data);
     return;
@@ -58,7 +75,7 @@ const localizeTextNode = (node: Text, locale: Locale) => {
 };
 
 const localizeElementAttributes = (element: Element, locale: Locale) => {
-  if (shouldSkipElement(element)) return;
+  if (shouldSkipAttributeElement(element)) return;
 
   for (const attr of TRANSLATABLE_ATTRIBUTES) {
     const value = element.getAttribute(attr);
@@ -86,8 +103,32 @@ const localizeElementAttributes = (element: Element, locale: Locale) => {
   }
 };
 
+const localizeOptionText = (element: Element, locale: Locale) => {
+  if (!(element instanceof HTMLOptionElement)) return;
+
+  const value = element.textContent ?? '';
+  if (locale === 'zh-CN' && hasHan(value)) {
+    optionTextOriginals.set(element, value);
+    return;
+  }
+
+  const existingOriginal = optionTextOriginals.get(element);
+  const original = existingOriginal ?? value;
+  if (!hasHan(original)) return;
+
+  if (!existingOriginal) {
+    optionTextOriginals.set(element, original);
+  }
+
+  const next = locale === 'zh-CN' ? original : translateText(original, locale);
+  if (element.textContent !== next) element.textContent = next;
+};
+
 const walkAndLocalize = (root: ParentNode, locale: Locale) => {
-  if (root instanceof Element) localizeElementAttributes(root, locale);
+  if (root instanceof Element) {
+    localizeElementAttributes(root, locale);
+    localizeOptionText(root, locale);
+  }
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   let current = walker.nextNode();
@@ -96,6 +137,7 @@ const walkAndLocalize = (root: ParentNode, locale: Locale) => {
       localizeTextNode(current as Text, locale);
     } else if (current instanceof Element) {
       localizeElementAttributes(current, locale);
+      localizeOptionText(current, locale);
     }
     current = walker.nextNode();
   }
@@ -129,7 +171,7 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let queuedFrame: number | null = null;
 
     const flushLocalization = () => {
-      if (queuedFrame === null) return;
+      if (queuedFrame !== null) return;
 
       queuedFrame = window.requestAnimationFrame(() => {
         queuedFrame = null;
@@ -189,31 +231,6 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       observer.disconnect();
       if (queuedFrame !== null) window.cancelAnimationFrame(queuedFrame);
       pendingRoots.clear();
-    };
-  }, [locale]);
-
-  useEffect(() => {
-    const originalAlert = window.alert;
-    const originalConfirm = window.confirm;
-
-    window.alert = (message?: unknown) => {
-      const translated = translateText(String(message ?? ''), locale);
-      if (document.body) {
-        window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
-          detail: {
-            title: translated,
-            tone: /失败|错误|error|failed/i.test(translated) ? 'error' : 'info',
-          },
-        }));
-      } else {
-        originalAlert(translated);
-      }
-    };
-    window.confirm = (message?: string) => originalConfirm(translateText(String(message ?? ''), locale));
-
-    return () => {
-      window.alert = originalAlert;
-      window.confirm = originalConfirm;
     };
   }, [locale]);
 

@@ -433,7 +433,7 @@ const parseGenericPage = async (url: string, platform: Platform): Promise<ParseR
   };
 };
 
-const parseFromSource = (source: string, pageUrl: string, platform: Platform): ParseResult => {
+export const parseFromSource = (source: string, pageUrl: string, platform: Platform): ParseResult => {
   const baseUrl = pageUrl || window.location.href;
   const formats = formatsFromText(source, baseUrl, '粘贴源码', platform === 'pinterest' ? 'https://www.pinterest.com/' : undefined);
   return {

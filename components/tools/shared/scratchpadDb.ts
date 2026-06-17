@@ -1,6 +1,7 @@
 const DB_NAME = 'devtoolbox-scratchpad-db';
 const STORE_NAME = 'entries';
-const DB_VERSION = 1;
+const METADATA_STORE_NAME = 'metadata';
+const DB_VERSION = 2;
 
 let dbInstance: IDBDatabase | null = null;
 
@@ -14,8 +15,16 @@ const openDb = (): Promise<IDBDatabase> => {
       reject(new Error('Failed to open scratchpad IndexedDB'));
     };
 
+    request.onblocked = () => {
+      reject(new Error('Scratchpad IndexedDB upgrade is blocked by another open tab'));
+    };
+
     request.onsuccess = (event) => {
       dbInstance = (event.target as IDBOpenDBRequest).result;
+      dbInstance.onversionchange = () => {
+        dbInstance?.close();
+        dbInstance = null;
+      };
       resolve(dbInstance);
     };
 
@@ -24,6 +33,12 @@ const openDb = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
       }
+      if (!db.objectStoreNames.contains(METADATA_STORE_NAME)) {
+        db.createObjectStore(METADATA_STORE_NAME);
+      }
+      request.transaction
+        ?.objectStore(METADATA_STORE_NAME)
+        .put({ version: DB_VERSION, updatedAt: Date.now() }, 'schema');
     };
   });
 };
