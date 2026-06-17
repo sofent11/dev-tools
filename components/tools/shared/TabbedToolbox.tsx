@@ -1,11 +1,15 @@
-import React, { lazy, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
-import { useI18n } from '../../src/i18n';
+import { useI18n } from '../../../src/i18n';
 
 type EmptyProps = Record<string, never>;
 
 export type PreloadableToolComponent = React.ComponentType<EmptyProps> & { preload?: () => Promise<void> };
+
+type PreloadableLazyComponent = React.LazyExoticComponent<PreloadableToolComponent> & {
+  preload: () => Promise<void>;
+};
 
 export const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   loader: () => Promise<T>,
@@ -25,7 +29,7 @@ export const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   const lazyComponent = lazy(async () => {
     const module = await loadModule();
     return { default: module[exportName] as React.ComponentType<EmptyProps> };
-  }) as React.LazyExoticComponent<PreloadableToolComponent>;
+  }) as PreloadableLazyComponent;
 
   lazyComponent.preload = () => loadModule().then(() => undefined);
   return lazyComponent;
@@ -113,7 +117,9 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   }, [activeTabId, isValidTab, syncLocation]);
 
   useEffect(() => {
-    syncTabFromLocation();
+    // activeTabId is already initialized from the location, so only the URL
+    // needs to be normalized on mount; subsequent drift is handled by listeners.
+    syncLocation(getTabFromLocation(), true);
 
     window.addEventListener('hashchange', syncTabFromLocation);
     window.addEventListener('popstate', syncTabFromLocation);
@@ -121,7 +127,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
       window.removeEventListener('hashchange', syncTabFromLocation);
       window.removeEventListener('popstate', syncTabFromLocation);
     };
-  }, [syncTabFromLocation]);
+  }, [syncTabFromLocation, syncLocation, getTabFromLocation]);
 
   useEffect(() => {
     const activeTool = tools.find(t => t.id === activeTabId);

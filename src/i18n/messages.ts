@@ -121,7 +121,7 @@ const enExact: Record<string, string> = {
   'CSS & 矢量图形样式工坊': 'CSS & Vector Styling Workshop',
   '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入': 'Unit conversion, palettes, CSS gradients/shadows, and SVG optimization/embedding',
   '图形与图像创意工坊': 'Graphics & Image Workshop',
-  '图片极致压缩、智能抠图、色板提取、水印、拼豆及大头照提取': 'Image compression, cutout, palette extraction, watermarking, bead art, and headshot extraction',
+  '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取': 'Image compression, cutout, palette extraction, watermarking, bead art, AI face swap, and headshot extraction',
   '文件与文档处理中心': 'File & Document Center',
   '本地 PDF 合并转换、文件属性哈希分析及文件名提取': 'Local PDF merging/conversion, file hash analysis, and filename extraction',
   '3D 建模与 CAD 首饰': '3D Modeling & CAD Jewelry',

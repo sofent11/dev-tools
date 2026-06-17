@@ -45,17 +45,17 @@ const SystemAiStudio = lazyNamed(() => import('./studios/SystemAiStudio'), 'Syst
 const FileDocumentStudio = lazyNamed(() => import('./studios/FileDocumentStudio'), 'FileDocumentStudio');
 
 const TOOLS_DEFINITIONS: ToolDef[] = [
-  { id: 'json-studio', name: 'JSON & 数据格式化', description: 'JSON、XML、YAML、CSV、SQL 转换与对比', icon: FileJson, category: Category.DEV, component: JsonFormatStudio },
+  { id: 'json-studio', name: 'JSON & 数据格式化', description: 'JSON、XML、YAML、CSV、SQL 转换与对比', icon: FileJson, category: Category.DATA, component: JsonFormatStudio },
   { id: 'crypto-studio', name: '安全与加密中心', description: 'JWT、Hash、HMAC、证书及私钥评估', icon: Shield, category: Category.SECURITY, component: CryptoSecurityCenter },
-  { id: 'text-studio', name: '文本编辑与对比', description: '大小写转换、正则测试、差分比对、字数统计', icon: Scissors, category: Category.TEXT, component: TextDiffSuite },
-  { id: 'encoding-studio', name: '编码与字符转义', description: 'Base64、文件转换、URL 编码、转义处理', icon: Binary, category: Category.TEXT, component: EncodingEscaping },
-  { id: 'html-markdown-studio', name: 'HTML & Markdown 预览', description: 'MD 即时渲染、双向转换与 HTML 压缩', icon: FileText, category: Category.TEXT, component: HtmlMarkdownStudio },
+  { id: 'text-studio', name: '文本编辑与对比', description: '大小写转换、正则测试、差分比对、字数统计', icon: Scissors, category: Category.TEXT_MARKUP, component: TextDiffSuite },
+  { id: 'encoding-studio', name: '编码与字符转义', description: 'Base64、文件转换、URL 编码、转义处理', icon: Binary, category: Category.TEXT_MARKUP, component: EncodingEscaping },
+  { id: 'html-markdown-studio', name: 'HTML & Markdown 预览', description: 'MD 即时渲染、双向转换与 HTML 压缩', icon: FileText, category: Category.TEXT_MARKUP, component: HtmlMarkdownStudio },
   { id: 'network-studio', name: '网络请求与探针', description: 'HTTP 客户端、URL 解析、UA、IP 与设备探针及在线视频流解析', icon: Globe, category: Category.NETWORK, component: NetworkClientInspector },
-  { id: 'css-studio', name: 'CSS & 矢量图形样式工坊', description: '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入', icon: Palette, category: Category.MEDIA, component: CssStylingToolkit },
-  { id: 'image-studio', name: '图形与图像创意工坊', description: '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取', icon: Image, category: Category.MEDIA, component: ImageMediaStudio },
-  { id: 'file-studio', name: '文件与文档处理中心', description: '本地 PDF 合并转换、文件属性哈希分析及文件名提取', icon: Files, category: Category.MEDIA, component: FileDocumentStudio },
-  { id: 'cad-3d-studio', name: '3D 建模与 CAD 首饰', description: '首饰定制、STL 修复、镂空设计、小学几何', icon: Gem, category: Category.MEDIA, component: Cad3DStudio },
-  { id: 'system-ai-studio', name: '系统、时间与智能工坊', description: 'UUID、二维码、Mock 假数、人民币大写、Chmod/Cron Linux 计算', icon: Sparkles, category: Category.SMART_AI, component: SystemAiStudio },
+  { id: 'css-studio', name: 'CSS & 矢量图形样式工坊', description: '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入', icon: Palette, category: Category.FRONTEND, component: CssStylingToolkit },
+  { id: 'image-studio', name: '图形与图像创意工坊', description: '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取', icon: Image, category: Category.FILE_MEDIA, component: ImageMediaStudio },
+  { id: 'file-studio', name: '文件与文档处理中心', description: '本地 PDF 合并转换、文件属性哈希分析及文件名提取', icon: Files, category: Category.FILE_MEDIA, component: FileDocumentStudio },
+  { id: 'cad-3d-studio', name: '3D 建模与 CAD 首饰', description: '首饰定制、STL 修复、镂空设计、小学几何', icon: Gem, category: Category.CAD, component: Cad3DStudio },
+  { id: 'system-ai-studio', name: '系统、时间与智能工坊', description: 'UUID、二维码、Mock 假数、人民币大写、Chmod/Cron Linux 计算', icon: Sparkles, category: Category.SYSTEM, component: SystemAiStudio },
 ];
 
 export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: string }> = {
