@@ -1,20 +1,42 @@
-import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
+import React, { lazy, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { useI18n } from '../../src/i18n';
 
 type EmptyProps = Record<string, never>;
+
+export type PreloadableToolComponent = React.ComponentType<EmptyProps> & { preload?: () => Promise<void> };
 
 export const lazyNamed = <T extends Record<string, unknown>, K extends keyof T>(
   loader: () => Promise<T>,
   exportName: K,
-) => lazy(async () => ({ default: (await loader())[exportName] as React.ComponentType<EmptyProps> }));
+) => {
+  let loadPromise: Promise<T> | null = null;
+  const loadModule = () => {
+    if (!loadPromise) {
+      loadPromise = loader().catch((error) => {
+        loadPromise = null;
+        throw error;
+      });
+    }
+    return loadPromise;
+  };
+
+  const lazyComponent = lazy(async () => {
+    const module = await loadModule();
+    return { default: module[exportName] as React.ComponentType<EmptyProps> };
+  }) as React.LazyExoticComponent<PreloadableToolComponent>;
+
+  lazyComponent.preload = () => loadModule().then(() => undefined);
+  return lazyComponent;
+};
 
 export interface SubTool {
   id: string;
   name: string;
   description?: string;
   icon: LucideIcon;
-  component: React.ComponentType<EmptyProps>;
+  component: PreloadableToolComponent;
 }
 
 interface TabbedToolboxProps {
@@ -30,71 +52,87 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   tools,
   defaultTab,
 }) => {
-  const getFallbackTab = useCallback(() => (
-    defaultTab && tools.some(t => t.id === defaultTab)
-      ? defaultTab
-      : (tools[0]?.id || '')
-  ), [defaultTab, tools]);
+  const { t } = useI18n();
+  const [isPending, startTransition] = useTransition();
+  const tabLookup = useMemo(() => new Map(tools.map(tool => [tool.id, tool])), [tools]);
+  const isValidTab = useCallback((tabId: string | null | undefined) => {
+    if (!tabId) return false;
+    return tabLookup.has(tabId);
+  }, [tabLookup]);
 
   const getTabFromLocation = useCallback(() => {
     const hash = window.location.hash.replace('#', '');
-    if (hash && tools.some(t => t.id === hash)) {
-      return hash;
+    if (hash && isValidTab(decodeURIComponent(hash))) {
+      return decodeURIComponent(hash);
     }
 
     const params = new URLSearchParams(window.location.search);
     const queryTab = params.get('tab');
-    if (queryTab && tools.some(t => t.id === queryTab)) {
+    if (queryTab && isValidTab(queryTab)) {
       return queryTab;
     }
 
-    return getFallbackTab();
-  }, [getFallbackTab, tools]);
+    return defaultTab && isValidTab(defaultTab) ? defaultTab : tools[0]?.id || '';
+  }, [isValidTab, defaultTab, tools]);
 
   const [activeTabId, setActiveTabId] = useState<string>(() => getTabFromLocation());
 
-  // Keep tab state aligned with hash navigation and history entries created by pushState.
-  useEffect(() => {
-    const syncActiveTabFromLocation = () => {
-      const hash = window.location.hash.replace('#', '');
-      if (hash && tools.some(t => t.id === hash)) {
-        setActiveTabId(hash);
-        return;
+  const syncLocation = useCallback((nextTabId: string, replace = false) => {
+    const url = new URL(window.location.href);
+    const encoded = encodeURIComponent(nextTabId);
+
+    if (replace) {
+      url.searchParams.delete('tab');
+      url.hash = encoded;
+      if (url.toString() !== window.location.href) {
+        window.history.replaceState(null, '', url);
       }
-
-      const nextTab = getTabFromLocation();
-      setActiveTabId(nextTab);
-
-      if (hash && !tools.some(t => t.id === hash)) {
-        window.history.replaceState(null, '', `#${encodeURIComponent(nextTab)}`);
-      }
-    };
-
-    syncActiveTabFromLocation();
-    window.addEventListener('hashchange', syncActiveTabFromLocation);
-    window.addEventListener('popstate', syncActiveTabFromLocation);
-    return () => {
-      window.removeEventListener('hashchange', syncActiveTabFromLocation);
-      window.removeEventListener('popstate', syncActiveTabFromLocation);
-    };
-  }, [getTabFromLocation, tools]);
-
-  const handleTabSelect = (id: string) => {
-    setActiveTabId(id);
-    
-    // Set URL hash cleanly without jumping the page
-    const nextHash = `#${encodeURIComponent(id)}`;
-    if (window.location.hash !== nextHash) {
-      window.history.pushState(null, '', nextHash);
+      return;
     }
-  };
 
-  const activeTool = tools.find(t => t.id === activeTabId) || tools[0];
+    if (window.location.hash !== `#${encoded}`) {
+      url.hash = encoded;
+      url.searchParams.delete('tab');
+      window.history.pushState(null, '', url);
+    }
+  }, []);
+
+  const syncTabFromLocation = useCallback(() => {
+    const next = getTabFromLocation();
+    setActiveTabId(previous => (previous === next ? previous : next));
+    syncLocation(next, true);
+  }, [getTabFromLocation, syncLocation]);
+
+  const handleTabSelect = useCallback((id: string) => {
+    if (!isValidTab(id) || id === activeTabId) return;
+
+    startTransition(() => {
+      setActiveTabId(id);
+    });
+    syncLocation(id, false);
+  }, [activeTabId, isValidTab, syncLocation]);
+
+  useEffect(() => {
+    syncTabFromLocation();
+
+    window.addEventListener('hashchange', syncTabFromLocation);
+    window.addEventListener('popstate', syncTabFromLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncTabFromLocation);
+      window.removeEventListener('popstate', syncTabFromLocation);
+    };
+  }, [syncTabFromLocation]);
+
+  useEffect(() => {
+    const activeTool = tools.find(t => t.id === activeTabId);
+    activeTool?.component.preload?.();
+  }, [activeTabId, tools]);
+
+  const activeTool = tabLookup.get(activeTabId) || tools[0];
   const ActiveComponent = activeTool?.component;
 
   return (
     <div className="flex h-full flex-col min-h-0 bg-[var(--surface-canvas)]">
-      {/* Premium Tab Bar Wrapper */}
       <div className="flex-none border-b border-slate-200 bg-white/50 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50 sticky top-0 z-20">
         <div className="flex items-center justify-between px-6 py-2 overflow-x-auto scrollbar-none">
           <div className="flex gap-2 min-w-max py-1">
@@ -105,6 +143,8 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
                 <button
                   key={tool.id}
                   type="button"
+                  onMouseEnter={() => tool.component.preload?.()}
+                  onFocus={() => tool.component.preload?.()}
                   onClick={() => handleTabSelect(tool.id)}
                   className={twMerge(
                     "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 select-none",
@@ -112,13 +152,13 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
                       ? "bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-100 dark:bg-primary-950/40 dark:text-primary-400 dark:ring-primary-900/50"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
                   )}
-                  title={tool.description}
+                  title={t(tool.description || '')}
                 >
                   <Icon className={twMerge(
                     "w-4 h-4 transition-transform duration-200 group-hover:scale-110",
                     isActive ? "text-primary-600 dark:text-primary-400" : "text-slate-400 dark:text-slate-500"
                   )} />
-                  <span>{tool.name}</span>
+                  <span>{t(tool.name)}</span>
                 </button>
               );
             })}
@@ -126,28 +166,31 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
         </div>
       </div>
 
-      {/* Toolbox Workbench with lazy suspension */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
         <div className="h-full min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col">
-          {/* Subtle, premium header bar inside the tab content */}
           <div className="mb-4 flex-none rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-              {title} • {activeTool.name}
+              {t(title)} • {t(activeTool.name)}
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {description} — 当前工具：{activeTool.description || activeTool.name}
+              {t(description)} — {t('当前工具')}：{t(activeTool.description || activeTool.name)}
             </p>
           </div>
 
           <div className="flex-1 min-h-0">
+            {isPending && (
+              <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                {t('正在加载')} {t(activeTool.name)}...
+              </div>
+            )}
             {ActiveComponent ? (
               <Suspense
                 fallback={
                   <div className="flex h-full min-h-[25rem] items-center justify-center rounded-xl border border-slate-200/60 bg-white/50 dark:border-slate-800/60 dark:bg-slate-900/50 text-sm font-medium text-slate-500 backdrop-blur-sm">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
-                      <span>正在加载 {activeTool.name}...</span>
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
+                      <span>{t('正在加载')} {t(activeTool.name)}...</span>
                     </div>
                   </div>
                 }
@@ -156,7 +199,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
               </Suspense>
             ) : (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 text-sm text-slate-400">
-                未加载工具组件
+                {t('未加载工具组件')}
               </div>
             )}
           </div>

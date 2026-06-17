@@ -6,10 +6,8 @@ import JSZip from 'jszip';
 import { useScratchpadStore, getScratchpadItemContent, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
 import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
 import { Category, ToolDef } from './types';
-import { TOOLS, TOOL_IDS } from './components/tools/registry';
+import { TOOLS, TOOL_IDS, resolveToolRoute } from './components/tools/registry';
 import { useI18n } from './src/i18n';
-import { formatBytes } from './components/tools/shared/fileUtils';
-import { notifyToast, type ToastTone } from './components/tools/shared/notifyToast';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
 const TOOL_ROUTE_PREFIX = 'tools';
@@ -36,6 +34,18 @@ const getAppPathname = () => {
 const getToolIdFromLocation = () => {
   const segments = getAppPathname().split('/').filter(Boolean).map(decodeURIComponent);
   const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
+
+  const mapping = resolveToolRoute(candidate);
+  if (mapping) {
+    if (mapping.isLegacy && mapping.subToolId) {
+      const { studioId, subToolId } = mapping;
+      const targetPath = `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${studioId}`;
+      window.history.replaceState(null, '', `${targetPath}#${subToolId}`);
+      return studioId;
+    }
+
+    return mapping.studioId;
+  }
 
   return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
 };
@@ -76,9 +86,7 @@ interface ToastMessage {
   id: string;
   title: string;
   description?: string;
-  tone?: ToastTone;
-  actionLabel?: string;
-  onAction?: () => void;
+  tone?: 'success' | 'error' | 'info';
 }
 
 const translateTextForSearch = (
@@ -105,14 +113,10 @@ export default function App() {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const scratchpadItems = useScratchpadStore((state) => state.items);
-  const scratchpadStorageStatus = useScratchpadStore((state) => state.storageStatus);
-  const scratchpadStorageError = useScratchpadStore((state) => state.lastStorageError);
-  const estimateScratchpadQuota = useScratchpadStore((state) => state.estimateQuota);
   const removeScratchpadItem = useScratchpadStore((state) => state.removeItem);
   const updateScratchpadItem = useScratchpadStore((state) => state.updateItem);
   const clearScratchpad = useScratchpadStore((state) => state.clearAll);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [scratchpadQuota, setScratchpadQuota] = useState<StorageEstimate | null>(null);
   const validSelectedIds = useMemo(() => {
     const availableIds = new Set(scratchpadItems.map(item => item.id));
     return selectedIds.filter(id => availableIds.has(id));
@@ -137,11 +141,7 @@ export default function App() {
       document.body.removeChild(link);
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      notifyToast({
-        title: '打包 ZIP 失败',
-        description: (err as Error).message,
-        tone: 'error',
-      });
+      alert('打包 ZIP 失败: ' + (err as Error).message);
     }
   };
 
@@ -158,15 +158,13 @@ export default function App() {
   useEffect(() => {
     if (!isScratchpadOpen) return;
 
-    estimateScratchpadQuota().then(setScratchpadQuota);
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setIsScratchpadOpen(false);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [estimateScratchpadQuota, isScratchpadOpen]);
+  }, [isScratchpadOpen]);
 
   useEffect(() => {
     const handleToast = (event: Event) => {
@@ -176,8 +174,6 @@ export default function App() {
         tone: detail?.tone || 'info',
         title: detail?.title || '',
         description: detail?.description,
-        actionLabel: detail?.actionLabel,
-        onAction: detail?.onAction,
       };
       if (!toast.title) return;
       setToasts(previous => [toast, ...previous].slice(0, 4));
@@ -244,7 +240,7 @@ export default function App() {
   }, {} as Record<string, ToolDef[]>);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--surface-canvas)] font-sans text-slate-950">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--surface-canvas)] font-sans text-slate-950" data-i18n-root>
 
       {/* Mobile Menu Overlay */}
       {!isSidebarOpen && (
@@ -471,13 +467,6 @@ export default function App() {
               </button>
             </div>
 
-            <ScratchpadStorageHealth
-              status={scratchpadStorageStatus}
-              lastError={scratchpadStorageError}
-              quota={scratchpadQuota}
-              onRefresh={() => estimateScratchpadQuota().then(setScratchpadQuota)}
-            />
-
             {/* Header controls bar for multi-select */}
             {scratchpadItems.length > 0 && (
               <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-2 rounded-xl mt-2 flex-none border border-slate-150 dark:border-slate-850 text-xs">
@@ -580,79 +569,12 @@ export default function App() {
           >
             <div className="font-semibold">{t(toast.title)}</div>
             {toast.description && <div className="mt-1 text-xs opacity-80">{t(toast.description)}</div>}
-            {toast.actionLabel && toast.onAction && (
-              <button
-                type="button"
-                className="mt-2 rounded-md border border-current px-2 py-1 text-xs font-semibold opacity-80 transition hover:opacity-100"
-                onClick={toast.onAction}
-              >
-                {t(toast.actionLabel)}
-              </button>
-            )}
           </div>
         ))}
       </div>
     </div>
   );
 }
-
-const ScratchpadStorageHealth: React.FC<{
-  status: 'ok' | 'degraded' | 'error';
-  lastError?: string;
-  quota: StorageEstimate | null;
-  onRefresh: () => void;
-}> = ({ status, lastError, quota, onRefresh }) => {
-  const { t } = useI18n();
-  const usage = quota?.usage ?? 0;
-  const total = quota?.quota ?? 0;
-  const percent = total > 0 ? Math.min(100, Math.round((usage / total) * 100)) : null;
-  const tone = status === 'ok' ? 'emerald' : status === 'degraded' ? 'amber' : 'red';
-  const label = status === 'ok' ? '存储健康' : status === 'degraded' ? '降级存储' : '存储异常';
-  const description = status === 'ok'
-    ? 'IndexedDB 可用，大文件会保存到浏览器本地。'
-    : status === 'degraded'
-      ? 'IndexedDB 不稳定，小文本仍会保存在元数据中。'
-      : '大文件或二进制暂存可能失败，请下载本地文件或清理空间。';
-
-  return (
-    <div className={`mt-3 rounded-xl border p-3 text-xs ${
-      tone === 'emerald'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-        : tone === 'amber'
-          ? 'border-amber-200 bg-amber-50 text-amber-900'
-          : 'border-red-200 bg-red-50 text-red-900'
-    }`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="font-bold">{t(label)}</div>
-          <p className="mt-1 leading-5">{t(description)}</p>
-          {percent !== null && (
-            <div className="mt-2">
-              <div className="flex justify-between text-[10px] font-semibold opacity-80">
-                <span>{formatBytes(usage)} / {formatBytes(total)}</span>
-                <span>{percent}%</span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/70">
-                <div
-                  className={`h-full ${tone === 'red' ? 'bg-red-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {lastError && <p className="mt-2 break-words text-[10px] opacity-80">{lastError}</p>}
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded-lg border border-current/20 bg-white/70 px-2 py-1 text-[10px] font-bold hover:bg-white"
-        >
-          {t('重新检测')}
-        </button>
-      </div>
-    </div>
-  );
-};
 
 const ScratchpadItemCard: React.FC<{
   item: ScratchpadItem;
@@ -690,7 +612,7 @@ const ScratchpadItemCard: React.FC<{
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (err) {
-      notifyToast({ title: '复制失败', description: (err as Error).message, tone: 'error' });
+      alert('复制失败: ' + (err as Error).message);
     }
   };
 
@@ -706,7 +628,7 @@ const ScratchpadItemCard: React.FC<{
       link.click();
       window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     } catch (err) {
-      notifyToast({ title: '下载失败', description: (err as Error).message, tone: 'error' });
+      alert('下载失败: ' + (err as Error).message);
     }
   };
 

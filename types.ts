@@ -21,4 +21,13 @@ export interface ToolDef {
   component: React.ElementType;
 }
 
+export interface ToolRegistration extends ToolDef {
+  loadStrategy?: 'eager' | 'lazy' | 'background';
+  status?: 'stable' | 'beta' | 'deprecated';
+  compatibility?: {
+    introducedIn?: string;
+    compatibilityNote?: string;
+  };
+}
+
 export type Tab = 'input' | 'output';

@@ -3,10 +3,10 @@ import { DEFAULT_LOCALE, LOCALES, type Locale, translateText } from './messages'
 import { I18nContext, type I18nContextValue } from './context';
 
 const textNodeOriginals = new WeakMap<Text, string>();
-const optionTextOriginals = new WeakMap<HTMLOptionElement, string>();
 const elementAttributeOriginals = new WeakMap<Element, Map<string, string>>();
 const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'aria-valuetext', 'placeholder', 'title'];
-const TEXT_NODE_SKIP_SELECTOR = [
+const I18N_SCOPE_SELECTOR = '[data-i18n-root], main';
+const SKIP_SELECTOR = [
   '[data-i18n-skip]',
   'script',
   'style',
@@ -19,19 +19,6 @@ const TEXT_NODE_SKIP_SELECTOR = [
   'svg',
   'textarea',
   'input',
-  '[contenteditable="true"]',
-].join(',');
-const ATTRIBUTE_SKIP_SELECTOR = [
-  '[data-i18n-skip]',
-  'script',
-  'style',
-  'noscript',
-  'code',
-  'pre',
-  'kbd',
-  'samp',
-  'canvas',
-  'svg',
   '[contenteditable="true"]',
 ].join(',');
 
@@ -47,15 +34,12 @@ const getInitialLocale = (): Locale => {
   return navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US';
 };
 
-const shouldSkipTextNode = (element: Element | null) =>
-  Boolean(element?.closest(TEXT_NODE_SKIP_SELECTOR));
-
-const shouldSkipAttributes = (element: Element | null) =>
-  Boolean(element?.closest(ATTRIBUTE_SKIP_SELECTOR));
+const shouldSkipElement = (element: Element | null) =>
+  Boolean(element?.closest(SKIP_SELECTOR));
 
 const localizeTextNode = (node: Text, locale: Locale) => {
   const parent = node.parentElement;
-  if (!parent || shouldSkipTextNode(parent)) return;
+  if (!parent || shouldSkipElement(parent)) return;
   if (locale === 'zh-CN' && hasHan(node.data)) {
     textNodeOriginals.set(node, node.data);
     return;
@@ -74,7 +58,7 @@ const localizeTextNode = (node: Text, locale: Locale) => {
 };
 
 const localizeElementAttributes = (element: Element, locale: Locale) => {
-  if (shouldSkipAttributes(element)) return;
+  if (shouldSkipElement(element)) return;
 
   for (const attr of TRANSLATABLE_ATTRIBUTES) {
     const value = element.getAttribute(attr);
@@ -102,24 +86,8 @@ const localizeElementAttributes = (element: Element, locale: Locale) => {
   }
 };
 
-const localizeOptionText = (element: Element, locale: Locale) => {
-  if (!(element instanceof HTMLOptionElement)) return;
-  const value = element.textContent ?? '';
-  const existingOriginal = optionTextOriginals.get(element);
-  const original = existingOriginal ?? value;
-  if (!hasHan(original)) return;
-
-  if (!existingOriginal) optionTextOriginals.set(element, original);
-
-  const next = locale === 'zh-CN' ? original : translateText(original, locale);
-  if (value !== next) element.textContent = next;
-};
-
 const walkAndLocalize = (root: ParentNode, locale: Locale) => {
-  if (root instanceof Element) {
-    localizeElementAttributes(root, locale);
-    localizeOptionText(root, locale);
-  }
+  if (root instanceof Element) localizeElementAttributes(root, locale);
 
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   let current = walker.nextNode();
@@ -128,10 +96,15 @@ const walkAndLocalize = (root: ParentNode, locale: Locale) => {
       localizeTextNode(current as Text, locale);
     } else if (current instanceof Element) {
       localizeElementAttributes(current, locale);
-      localizeOptionText(current, locale);
     }
     current = walker.nextNode();
   }
+};
+
+const collectLocalizationRoots = () => {
+  const scopedRoots = Array.from(document.querySelectorAll<HTMLElement>(I18N_SCOPE_SELECTOR));
+  if (scopedRoots.length > 0) return scopedRoots;
+  return document.body ? [document.body] : [];
 };
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -152,22 +125,56 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
     document.documentElement.lang = locale;
     document.documentElement.dataset.locale = locale;
 
-    const localize = () => walkAndLocalize(document.body, locale);
-    localize();
+    const pendingRoots = new Set<ParentNode>();
+    let queuedFrame: number | null = null;
+
+    const flushLocalization = () => {
+      if (queuedFrame === null) return;
+
+      queuedFrame = window.requestAnimationFrame(() => {
+        queuedFrame = null;
+        for (const root of pendingRoots) {
+          walkAndLocalize(root, locale);
+        }
+        pendingRoots.clear();
+      });
+    };
+
+    const enqueueLocalization = (roots: ArrayLike<ParentNode>) => {
+      for (let index = 0; index < roots.length; index += 1) {
+        const root = roots[index];
+        pendingRoots.add(root);
+      }
+      if (queuedFrame === null && pendingRoots.size > 0) {
+        flushLocalization();
+      }
+    };
+
+    const initialRoots = collectLocalizationRoots();
+    enqueueLocalization(initialRoots);
 
     const observer = new MutationObserver(mutations => {
+      const pendingMutationRoots = new Set<ParentNode>();
       for (const mutation of mutations) {
         if (mutation.type === 'characterData' && mutation.target instanceof Text) {
           localizeTextNode(mutation.target, locale);
         }
         mutation.addedNodes.forEach(node => {
-          if (node instanceof Text) localizeTextNode(node, locale);
-          if (node instanceof Element) walkAndLocalize(node, locale);
+          if (node instanceof Text) {
+            localizeTextNode(node, locale);
+            return;
+          }
+          if (node instanceof Element) {
+            pendingMutationRoots.add(node);
+          }
         });
         if (mutation.type === 'attributes' && mutation.target instanceof Element) {
           localizeElementAttributes(mutation.target, locale);
         }
       }
+
+      const collected = Array.from(pendingMutationRoots);
+      if (collected.length > 0) enqueueLocalization(collected);
     });
 
     observer.observe(document.body, {
@@ -178,7 +185,36 @@ export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children
       subtree: true,
     });
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (queuedFrame !== null) window.cancelAnimationFrame(queuedFrame);
+      pendingRoots.clear();
+    };
+  }, [locale]);
+
+  useEffect(() => {
+    const originalAlert = window.alert;
+    const originalConfirm = window.confirm;
+
+    window.alert = (message?: unknown) => {
+      const translated = translateText(String(message ?? ''), locale);
+      if (document.body) {
+        window.dispatchEvent(new CustomEvent('devtoolbox-toast', {
+          detail: {
+            title: translated,
+            tone: /失败|错误|error|failed/i.test(translated) ? 'error' : 'info',
+          },
+        }));
+      } else {
+        originalAlert(translated);
+      }
+    };
+    window.confirm = (message?: string) => originalConfirm(translateText(String(message ?? ''), locale));
+
+    return () => {
+      window.alert = originalAlert;
+      window.confirm = originalConfirm;
+    };
   }, [locale]);
 
   const value = useMemo<I18nContextValue>(
