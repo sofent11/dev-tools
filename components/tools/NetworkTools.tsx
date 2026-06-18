@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { FieldLabel } from '../ui/ToolUi';
 import { notifyToast } from './shared/notifyToast';
 import { parseCurlCommand, parseFormBodyLines, type RequestBodyMode } from './network/curlParser';
+import { useI18n } from '../../src/i18n';
 
 export { parseCurlCommand } from './network/curlParser';
 
@@ -755,6 +756,7 @@ interface IpInfoData {
 
 // --- IP Info (Dynamic Client-Side Utility) ---
 export const IpInfoTool: React.FC = () => {
+    const { t } = useI18n();
     const [data, setData] = useState<IpInfoData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -790,18 +792,18 @@ export const IpInfoTool: React.FC = () => {
     const handleCopy = () => {
         if (data?.ip) {
             navigator.clipboard.writeText(data.ip);
-            notifyToast({ title: 'IP 地址已复制到剪贴板', tone: 'success' });
+            notifyToast({ title: t('IP 地址已复制到剪贴板'), tone: 'success' });
         }
     };
 
     return (
         <Card className="h-full flex flex-col">
-             <CardHeader title="IP 地址及网络信息" description="纯本地浏览器获取并解析本机公网 IP 及归属地信息" />
+             <CardHeader title={t('IP 地址及网络信息')} description={t('纯本地浏览器获取并解析本机公网 IP 及归属地信息')} />
              <CardContent className="flex-1 overflow-auto p-6 space-y-6">
                 {loading && (
                     <div className="h-48 flex flex-col items-center justify-center space-y-3">
                         <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
-                        <p className="text-sm text-slate-500 animate-pulse">正在获取本机公网网络信息...</p>
+                        <p className="text-sm text-slate-500 animate-pulse">{t('正在获取本机公网网络信息...')}</p>
                     </div>
                 )}
 
@@ -809,14 +811,14 @@ export const IpInfoTool: React.FC = () => {
                     <div className="space-y-4">
                         <div className="p-4 bg-red-50 text-red-800 rounded-lg text-sm border border-red-200">
                             <Info className="w-4 h-4 inline mr-2 shrink-0" />
-                            无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：{error}
+                            {t('无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：')}{error}
                         </div>
                         <Button
                             className="w-full"
                             onClick={() => window.open('https://ipapi.co/json/', '_blank')}
                             icon={<Globe className="w-4 h-4"/>}
                         >
-                            在新标签页手动打开查询链接
+                            {t('在新标签页手动打开查询链接')}
                         </Button>
                     </div>
                 )}
@@ -826,13 +828,13 @@ export const IpInfoTool: React.FC = () => {
                         {/* Main IP display */}
                         <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 p-6 rounded-xl border border-primary-100 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">您的公网 IP</span>
+                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">{t('您的公网 IP')}</span>
                                 <h3 className="text-3xl font-mono font-bold text-slate-800 tracking-tight mt-1">{data.ip}</h3>
-                                {data.note && <p className="text-xs text-amber-600 mt-1">{data.note}</p>}
+                                {data.note && <p className="text-xs text-amber-600 mt-1">{t(data.note)}</p>}
                             </div>
                             <div className="flex gap-2">
-                                <Button size="sm" onClick={handleCopy}>复制 IP</Button>
-                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>刷新</Button>
+                                <Button size="sm" onClick={handleCopy}>{t('复制 IP')}</Button>
+                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{t('刷新')}</Button>
                             </div>
                         </div>
 
@@ -840,28 +842,28 @@ export const IpInfoTool: React.FC = () => {
                         {!data.note && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">国家 / 地区</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || '未知'} ({data.country_code || 'N/A'})</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('国家 / 地区')}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || t('未知')} ({data.country_code || 'N/A'})</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">城市 / 省份</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.city || '未知'} • {data.region || '未知'}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('城市 / 省份')}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.city || t('未知')} • {data.region || t('未知')}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">网络服务商 (ISP)</span>
-                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || '未知'} {data.asn ? `(${data.asn})` : ''}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('网络服务商 (ISP)')}</span>
+                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || t('未知')} {data.asn ? `(${data.asn})` : ''}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">经纬度 / 时区</span>
+                                    <span className="text-xs text-slate-400 font-medium">{t('经纬度 / 时区')}</span>
                                     <p className="text-sm font-semibold text-slate-700">
-                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : '未知'} • {data.timezone || '未知'}
+                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : t('未知')} • {data.timezone || t('未知')}
                                     </p>
                                 </div>
                             </div>
                         )}
                         
                         <div className="text-center">
-                            <span className="text-xs text-slate-400">信息由免费公共服务提供 • 仅在浏览器本地获取展示</span>
+                            <span className="text-xs text-slate-400">{t('信息由免费公共服务提供 • 仅在浏览器本地获取展示')}</span>
                         </div>
                     </div>
                 )}
