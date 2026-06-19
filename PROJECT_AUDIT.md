@@ -4,7 +4,7 @@ Last updated: 2026-05-31
 
 ## Current Functional Map
 
-The app is a Vite + React browser-side developer toolbox with 11 top-level studios:
+The app is a Vite + React browser-side developer toolbox with 12 top-level studios:
 
 - JSON and data formatting
 - Security and cryptography
@@ -12,6 +12,7 @@ The app is a Vite + React browser-side developer toolbox with 11 top-level studi
 - Encoding and escaping
 - HTML and Markdown preview
 - Network request and client inspection
+- Repository and dependency research
 - CSS and vector styling
 - Image and media tools
 - File and PDF processing
@@ -60,6 +61,9 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Added runtime asset fallback URL, active source, and optional SHA-256 verification state support, with initial adoption in PDF.js, SQL.js, and OpenPGP.
 - Hardened Headshot/MediaPipe failure recovery with a visible manual-crop mode when models fail or no face is detected.
 - Reorganized navigation around user task flows into 8 top-level categories and 12 Studio entries; old direct single-tool aliases are no longer maintained.
+- Added Browser-Based-Tools parity coverage for Hex byte decoding, Unicode inspection, visual centroid calculation, GitHub repository research, GitHub/HuggingFace folder downloads, NuGet/PyPI/Rust dependency trees, and NuGet signature/certificate inspection.
+- Added browser-side repository research guardrails: GitHub/HuggingFace tokens stay in component memory only, non-sensitive caches live in IndexedDB with clear controls, and CORS/API limit errors are surfaced inline.
+- Added focused core tests for Hex decoding, Unicode analysis, centroid/background math, repository URL/tree handling, dependency parsing, and NuGet nuspec/fingerprint helpers.
 
 ## Remaining Known Issues
 
@@ -69,6 +73,8 @@ Cross-cutting capabilities include deep-link routing, a global scratchpad drawer
 - Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder`, now probe unknown frame counts, and still enforce frame/pixel budgets.
 - STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The worker now uses grid prefiltering and partial reports, but the result remains a sampling estimate rather than slicer or industrial inspection truth.
 - The task-oriented Studio IA intentionally breaks older `/tools/<single-tool>` aliases; external docs and bookmarks should use `/tools/<studio-id>#<tab-id>` links.
+- Repository and dependency tools depend on public registry APIs and browser CORS behavior. Optional proxy templates improve connectivity only; they do not bypass private resource authorization, platform limits, or service terms.
+- NuGet signature inspection parses `.signature.p7s` certificate material and fingerprints locally, but remains an inspection aid rather than a replacement for NuGet client trust policy enforcement.
 
 ## Recommended Next Iterations
 

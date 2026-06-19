@@ -1,5 +1,5 @@
 import React, { lazy } from 'react';
-import { FileVideo, Grid3X3, Image, Images, LayoutTemplate, Palette, Scissors } from 'lucide-react';
+import { Crosshair, FileVideo, Grid3X3, Image, Images, LayoutTemplate, Palette, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const ImageTools = lazyNamed(() => import('../ImageTools'), 'ImageTools');
@@ -11,6 +11,7 @@ const PerlerBeadTool = lazyNamed(() => import('../images'), 'PerlerBeadTool');
 const HeadshotExtractor = lazyNamed(() => import('../HeadshotExtractor'), 'HeadshotExtractor');
 const AnimationFrameExtractor = lazy(() => import('../AnimationFrameExtractor').then(m => ({ default: m.AnimationFrameExtractor })));
 const VideoDownloader = lazyNamed(() => import('../VideoDownloader'), 'VideoDownloader');
+const VisualCentroidTool = lazyNamed(() => import('../images/VisualCentroidTool'), 'VisualCentroidTool');
 
 const subTools: SubTool[] = [
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, component: ImageTools },
@@ -18,6 +19,7 @@ const subTools: SubTool[] = [
   { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, component: ImageToBase64Tool },
   { id: 'image-colors', name: '图片颜色提取', description: '主色与色板', icon: Palette, component: ImageColorExtractTool },
   { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, component: ImageWatermarkTool },
+  { id: 'visual-centroid', name: '视觉质心计算器', description: '透明度阈值、包围盒中心与背景移除辅助', icon: Crosshair, component: VisualCentroidTool },
   { id: 'perler-beads', name: '拼豆图纸生成', description: '图片转拼豆网格 (Worker 异步加速)', icon: Grid3X3, component: PerlerBeadTool },
   { id: 'headshot', name: '大头照提取', description: '自动人脸/肩部裁剪', icon: Image, component: HeadshotExtractor },
   { id: 'animation-frame', name: '动画帧提取', description: '动图与 Lottie 逐帧提取', icon: FileVideo, component: AnimationFrameExtractor },

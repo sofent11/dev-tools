@@ -1,6 +1,6 @@
 import { lazy, type ComponentType } from 'react';
 import {
-  FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files
+  FileJson, Shield, FileText, Globe, Palette, Image, Gem, Sparkles, Scissors, Binary, Files, Network
 } from 'lucide-react';
 import { Category, ToolDef, ToolRegistration } from '../../types';
 
@@ -38,6 +38,7 @@ const TextDiffSuite = lazyNamed(() => import('./studios/TextDiffSuite'), 'TextDi
 const EncodingEscaping = lazyNamed(() => import('./studios/EncodingEscaping'), 'EncodingEscaping');
 const HtmlMarkdownStudio = lazyNamed(() => import('./studios/HtmlMarkdownStudio'), 'HtmlMarkdownStudio');
 const NetworkClientInspector = lazyNamed(() => import('./studios/NetworkClientInspector'), 'NetworkClientInspector');
+const RepoDependencyStudio = lazyNamed(() => import('./studios/RepoDependencyStudio'), 'RepoDependencyStudio');
 const CssStylingToolkit = lazyNamed(() => import('./studios/CssStylingToolkit'), 'CssStylingToolkit');
 const ImageMediaStudio = lazyNamed(() => import('./studios/ImageMediaStudio'), 'ImageMediaStudio');
 const Cad3DStudio = lazyNamed(() => import('./studios/Cad3DStudio'), 'Cad3DStudio');
@@ -51,6 +52,7 @@ const TOOLS_DEFINITIONS: ToolDef[] = [
   { id: 'encoding-studio', name: '编码与字符转义', description: 'Base64、文件转换、URL 编码、转义处理', icon: Binary, category: Category.TEXT_MARKUP, component: EncodingEscaping },
   { id: 'html-markdown-studio', name: 'HTML & Markdown 预览', description: 'MD 即时渲染、双向转换与 HTML 压缩', icon: FileText, category: Category.TEXT_MARKUP, component: HtmlMarkdownStudio },
   { id: 'network-studio', name: '网络请求与探针', description: 'HTTP 客户端、URL 解析、UA、IP 与设备探针及在线视频流解析', icon: Globe, category: Category.NETWORK, component: NetworkClientInspector },
+  { id: 'repo-dependency-studio', name: '仓库与依赖研究', description: 'GitHub/HuggingFace 仓库盘点、依赖树和 NuGet 签名检查', icon: Network, category: Category.NETWORK, component: RepoDependencyStudio },
   { id: 'css-studio', name: 'CSS & 矢量图形样式工坊', description: '单位换算、调色板、CSS 渐变阴影、SVG 智能无损压缩与嵌入', icon: Palette, category: Category.FRONTEND, component: CssStylingToolkit },
   { id: 'image-studio', name: '图形与图像创意工坊', description: '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取', icon: Image, category: Category.FILE_MEDIA, component: ImageMediaStudio },
   { id: 'file-studio', name: '文件与文档处理中心', description: '本地 PDF 合并转换、文件属性哈希分析及文件名提取', icon: Files, category: Category.FILE_MEDIA, component: FileDocumentStudio },
@@ -93,6 +95,8 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'base64': { studioId: 'encoding-studio', subToolId: 'base64' },
   'file-base64': { studioId: 'encoding-studio', subToolId: 'file-base64' },
   'hex-viewer': { studioId: 'encoding-studio', subToolId: 'hex-viewer' },
+  'hex-text': { studioId: 'encoding-studio', subToolId: 'hex-text' },
+  'unicode-inspector': { studioId: 'encoding-studio', subToolId: 'unicode-inspector' },
   'url': { studioId: 'encoding-studio', subToolId: 'url' },
   'escape': { studioId: 'encoding-studio', subToolId: 'escape' },
 
@@ -123,6 +127,7 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'image-base64': { studioId: 'image-studio', subToolId: 'image-base64' },
   'image-colors': { studioId: 'image-studio', subToolId: 'image-colors' },
   'image-watermark': { studioId: 'image-studio', subToolId: 'image-watermark' },
+  'visual-centroid': { studioId: 'image-studio', subToolId: 'visual-centroid' },
   'perler-beads': { studioId: 'image-studio', subToolId: 'perler-beads' },
   'headshot': { studioId: 'image-studio', subToolId: 'headshot' },
   'background-removal': { studioId: 'image-studio', subToolId: 'background-removal' },
@@ -138,6 +143,15 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'video-download': { studioId: 'network-studio', subToolId: 'video-download' },
   'svg-optimizer': { studioId: 'css-studio', subToolId: 'svg-optimizer' },
   'qrcode': { studioId: 'system-ai-studio', subToolId: 'qrcode' },
+
+  // Repository & Dependency Studio
+  'github-repos': { studioId: 'repo-dependency-studio', subToolId: 'github-repos' },
+  'github-org-research': { studioId: 'repo-dependency-studio', subToolId: 'github-org-research' },
+  'repo-folder-download': { studioId: 'repo-dependency-studio', subToolId: 'repo-folder-download' },
+  'nuget-deps': { studioId: 'repo-dependency-studio', subToolId: 'nuget-deps' },
+  'pypi-deps': { studioId: 'repo-dependency-studio', subToolId: 'pypi-deps' },
+  'rust-deps': { studioId: 'repo-dependency-studio', subToolId: 'rust-deps' },
+  'nuget-signature': { studioId: 'repo-dependency-studio', subToolId: 'nuget-signature' },
 
   // 3D & CAD Studio
   'jewelry': { studioId: 'cad-3d-studio', subToolId: 'jewelry' },

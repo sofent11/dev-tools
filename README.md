@@ -23,6 +23,8 @@
 - Base64 编码与解码
 - URL 编码与解码
 - HTML / Unicode 转义与反转义
+- 原始 Hex 字节按 UTF-8、UTF-16、Windows-1252、ISO-8859-1 等编码转文本
+- Unicode 字符检查：码点、字符名、区块统计、UTF-8/UTF-16 字节和常见 Emoji 序列
 - HTML 转 Markdown
 - HTML 格式化与基础压缩
 - Markdown 预览
@@ -44,6 +46,11 @@
 - User Agent 解析
 - 本机公网 IP 信息查询
 - 浏览器、屏幕、系统等设备信息查看
+- GitHub 用户/组织仓库浏览：本地缓存、语言/描述筛选、Release 与 `.exe` 资产检查
+- GitHub 组织关联研究：基于 GraphQL、verified domain 和共享成员辅助判断组织关联
+- GitHub / HuggingFace 文件夹递归列取、选择下载，支持 ZIP 打包和可用浏览器中的目录直写
+- NuGet、PyPI、crates.io 递归依赖树查看，支持深度/节点预算、过滤和列表视图
+- NuGet `.nupkg` 签名检查：本地解包、`.nuspec` 元数据、`.signature.p7s` 证书链和 SHA 指纹展示
 
 ### 前端与样式
 
@@ -67,6 +74,7 @@
 - 图片转 Base64
 - 图片主色与色板提取
 - 图片文字水印
+- 图片视觉质心计算：透明度阈值、包围盒中心、背景取样移除和带标记导出
 - 贴纸图 / 素材图自动切片，并支持单图或 ZIP 下载
 - GIF、Lottie JSON、APNG 与 animated WebP 动画帧提取；APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，并带帧数探测、内存预算、批量导出进度与取消
 - 大头照提取：基于 MediaPipe 自动识别人脸并生成裁剪图，MediaPipe WASM/模型加载会展示缓存、进度、错误和重试状态；模型不可用时可继续手动裁剪
@@ -164,6 +172,8 @@ npm run test:e2e  # Playwright 端到端冒烟测试
 /tools/json-studio#json
 /tools/file-studio#pdf
 /tools/image-studio#image
+/tools/repo-dependency-studio#github-repos
+/tools/repo-dependency-studio#nuget-signature
 /tools/cad-3d-studio#smart-geometry
 ```
 
@@ -185,6 +195,9 @@ npm run build
 
 - 大多数工具在浏览器端完成处理，上传的图片、PDF、文本不会主动提交到业务后端。
 - 文件信息、文件 Base64、图片取色、图片水印、二维码生成等新增工具均使用浏览器本地 API 处理。
+- GitHub / HuggingFace 令牌仅保存在当前页面组件内存中，不写入 localStorage 或 IndexedDB；仓库结果、搜索历史和非敏感成员摘要可缓存在 IndexedDB，并可在工具内清除。
+- GitHub、HuggingFace、NuGet、PyPI 和 crates.io 工具受公开 API 额度、权限和 CORS 策略限制；可选 CORS proxy 只用于改善浏览器请求连通性，不绕过平台权限、私有资源访问控制或服务条款。
+- NuGet 签名检查会解析包内签名块和证书指纹，作为浏览器端研究辅助；它不替代 NuGet 客户端的完整包签名信任策略和证书链验证。
 - 大头照、PDF.js、OpenPGP、SQL.js、首饰字体加载等功能会从 CDN 或公开字体仓库加载模型 / 脚本 / 字体资源，需要网络可用；高风险运行时会展示来源、fallback 和校验状态。
 - HTTP 请求工具受浏览器 CORS 策略限制。
 - 证书文本解析器只处理粘贴的 PEM 内容；浏览器无法直接作为纯前端工具连接任意域名读取 TLS 证书链。
