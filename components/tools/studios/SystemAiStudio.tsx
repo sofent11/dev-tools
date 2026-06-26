@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fingerprint, Binary, Wand2, WalletCards, Terminal, CalendarClock, Clock, QrCode } from 'lucide-react';
+import { Fingerprint, Binary, Wand2, WalletCards, Terminal, CalendarClock, Clock, QrCode, Sparkles } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
 
 const UuidTool = lazyNamed(() => import('../SecurityTools'), 'UuidTool');
@@ -11,6 +11,7 @@ const ChmodTool = lazyNamed(() => import('../DevOpsTools'), 'ChmodTool');
 const CronTool = lazyNamed(() => import('../DevOpsTools'), 'CronTool');
 const UnixTimeStudio = lazyNamed(() => import('../time/UnixTimeStudio'), 'UnixTimeStudio');
 const QrCodeTool = lazyNamed(() => import('../WebTools'), 'QrCodeTool');
+const ArithmancyTool = lazyNamed(() => import('../arithmancy'), 'ArithmancyTool');
 
 const subTools: SubTool[] = [
   { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, component: UuidTool },
@@ -22,13 +23,14 @@ const subTools: SubTool[] = [
   { id: 'cron', name: 'Cron 表达式', description: '生成 / 解析 / 预览', icon: CalendarClock, component: CronTool },
   { id: 'unix-time-studio', name: '时间与时区工作室', description: '高精度秒级/毫秒时间戳转换、多维世界时钟、Cron 执行预测与日期计算', icon: Clock, component: UnixTimeStudio },
   { id: 'qrcode', name: '二维码生成', description: '文本/WiFi/名片生成器', icon: QrCode, component: QrCodeTool },
+  { id: 'arithmancy', name: '数字占卜', description: '生命路径、姓名数字与个人年解读', icon: Sparkles, component: ArithmancyTool },
 ];
 
 export const SystemAiStudio: React.FC = () => {
   return (
     <TabbedToolbox
       title="系统计算、数据生成与时间工坊"
-      description="集成高级随机数/UUID/API Mock 数据生成、二维码配置、Cron/Chmod Linux 工具及世界多维时区换算"
+      description="集成高级随机数/UUID/API Mock 数据生成、二维码配置、数字占卜、Cron/Chmod Linux 工具及世界多维时区换算"
       tools={subTools}
       defaultTab="uuid"
     />

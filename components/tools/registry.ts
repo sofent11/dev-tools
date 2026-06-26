@@ -57,7 +57,7 @@ const TOOLS_DEFINITIONS: ToolDef[] = [
   { id: 'image-studio', name: '图形与图像创意工坊', description: '图片极致压缩、智能抠图、色板提取、水印、拼豆、AI 换脸及大头照提取', icon: Image, category: Category.FILE_MEDIA, component: ImageMediaStudio },
   { id: 'file-studio', name: '文件与文档处理中心', description: '本地 PDF 合并转换、文件属性哈希分析及文件名提取', icon: Files, category: Category.FILE_MEDIA, component: FileDocumentStudio },
   { id: 'cad-3d-studio', name: '3D 建模与 CAD 首饰', description: '首饰定制、STL 修复、镂空设计、小学几何', icon: Gem, category: Category.CAD, component: Cad3DStudio },
-  { id: 'system-ai-studio', name: '系统、时间与智能工坊', description: 'UUID、二维码、Mock 假数、人民币大写、Chmod/Cron Linux 计算', icon: Sparkles, category: Category.SYSTEM, component: SystemAiStudio },
+  { id: 'system-ai-studio', name: '系统、时间与智能工坊', description: 'UUID、二维码、Mock 假数、人民币大写、数字占卜、Chmod/Cron Linux 计算', icon: Sparkles, category: Category.SYSTEM, component: SystemAiStudio },
 ];
 
 export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: string }> = {
@@ -143,6 +143,9 @@ export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId: stri
   'video-download': { studioId: 'network-studio', subToolId: 'video-download' },
   'svg-optimizer': { studioId: 'css-studio', subToolId: 'svg-optimizer' },
   'qrcode': { studioId: 'system-ai-studio', subToolId: 'qrcode' },
+  'arithmancy': { studioId: 'system-ai-studio', subToolId: 'arithmancy' },
+  'numerology': { studioId: 'system-ai-studio', subToolId: 'arithmancy' },
+  'number-divination': { studioId: 'system-ai-studio', subToolId: 'arithmancy' },
 
   // Repository & Dependency Studio
   'github-repos': { studioId: 'repo-dependency-studio', subToolId: 'github-repos' },
