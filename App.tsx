@@ -10,7 +10,7 @@ import {
 import { uniqueArchiveName } from './components/tools/shared/archive';
 import { useScratchpadStore, getScratchpadItemContent } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
-import { TOOLS, TOOL_IDS } from './components/tools/registry';
+import { TOOLS, TOOL_IDS, resolveToolRoute } from './components/tools/registry';
 import { useI18n } from './src/i18n';
 import { notifyToast, type ToastTone } from './components/tools/shared/notifyToast';
 
@@ -40,6 +40,11 @@ const getToolIdFromLocation = () => {
   const segments = getAppPathname().split('/').filter(Boolean).map(segment => { try { return decodeURIComponent(segment); } catch { return ''; } });
   const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
 
+  const mapping = resolveToolRoute(candidate);
+  if (mapping && candidate !== mapping.studioId) {
+    window.history.replaceState(null, '', `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${mapping.studioId}${mapping.subToolId ? `#${mapping.subToolId}` : window.location.hash}`);
+    return mapping.studioId;
+  }
   return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
 };
 

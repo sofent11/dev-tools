@@ -56,6 +56,62 @@
     "route": "/tools/data-format-studio#json-diff"
   },
   {
+    "studioId": "repo-dependency-studio",
+    "id": "github-repos",
+    "name": "GitHub 仓库浏览器",
+    "description": "用户/组织仓库缓存、筛选与 Release 资产检查",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#github-repos"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "github-org-research",
+    "name": "GitHub 组织关联研究",
+    "description": "基于验证域名和共享成员分析组织关联",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#github-org-research"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "repo-folder-download",
+    "name": "仓库文件夹下载",
+    "description": "GitHub 与 HuggingFace 文件夹递归选择下载",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#repo-folder-download"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "nuget-deps",
+    "name": "NuGet 依赖树",
+    "description": "递归依赖、命名空间过滤和 verified prefix 标记",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#nuget-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "pypi-deps",
+    "name": "PyPI 依赖树",
+    "description": "Python 包依赖、extras 和维护者过滤",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#pypi-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "rust-deps",
+    "name": "Rust Crate 依赖树",
+    "description": "crates.io 递归依赖和深度控制",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#rust-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "nuget-signature",
+    "name": "NuGet 签名检查",
+    "description": "本地解析 nupkg 签名、证书链和指纹",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#nuget-signature"
+  },
+  {
     "studioId": "sql-database-studio",
     "id": "sql-format",
     "name": "SQL 格式化",
@@ -142,6 +198,22 @@
     "description": "HTML 美化与压缩",
     "stage": "supported",
     "route": "/tools/text-markup-studio#html-format"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "unicode-inspector",
+    "name": "Unicode 字符检查器",
+    "description": "码点、字符名、区块和 Emoji 序列分析",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#unicode-inspector"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "hex-text",
+    "name": "Hex 字节转文本",
+    "description": "按字符编码解码十六进制字节",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#hex-text"
   },
   {
     "studioId": "encoding-binary-studio",
@@ -369,6 +441,14 @@
   },
   {
     "studioId": "image-media-studio",
+    "id": "visual-centroid",
+    "name": "视觉质心计算器",
+    "description": "透明度阈值、包围盒中心与背景移除辅助",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#visual-centroid"
+  },
+  {
+    "studioId": "image-media-studio",
     "id": "perler-beads",
     "name": "拼豆图纸生成",
     "description": "图片转拼豆网格 (Worker 异步加速)",
@@ -470,6 +550,14 @@
     "description": "中国商用国密离线加密/签名/哈希套件",
     "stage": "supported",
     "route": "/tools/security-key-studio#sm-crypto"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "arithmancy",
+    "name": "数字占卜",
+    "description": "生命路径、姓名数字与个人年解读",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#arithmancy"
   },
   {
     "studioId": "generator-utility-studio",

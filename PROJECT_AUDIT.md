@@ -13,13 +13,15 @@ Updated: 2026-09-12
 7. Regex and SQLite execute in disposable workers. SQLite commits its snapshot only on successful completion. Tool failures are contained and malformed routes are handled.
 8. The app shell dynamically loads ZIP functionality and does not preload PDF/Three.js engines. A gzip budget is enforced against production output.
 9. Strict TypeScript is enabled. Regression tests cover schema semantics, transactional aborts, sensitive persistence, worker cancellation, real SQLite queries, GIF delays/pixels, PDF pages and STL wall-thickness measurements. Browser tests use a production build and deterministic locale.
-10. The generated 73-entry catalog powers sub-tool search and route documentation. Unreachable Studio wrappers and unused AI SDK/key configuration have been removed.
+10. The generated 84-entry catalog powers sub-tool search and route documentation. Unreachable Studio wrappers and unused AI SDK/key configuration have been removed.
 
 ## Validation
 
 Run `npm run verify` for the release gate. It includes typecheck, lint, translation coverage, routes, generated catalog, documentation, runtime manifest, unit tests, dependency audit, production build budget and browser regression tests. Browser coverage includes the English catalog scan.
 
 Verified on 2026-09-12: all release gates passed, including 59 unit tests across 15 files and 21 Chromium browser tests. The browser suite includes all 73 English tool routes. The production dependency audit reported 0 vulnerabilities. Production app-shell JavaScript measured 121.4 KB gzip, below the 240 KB budget (approximately 363 KB at the initial audit).
+
+Integration with main on 2026-09-12 preserves the newly added repository, arithmancy, character inspection and image tools, plus legacy route redirects and the iPhone shortcut. The integrated release gate passed: 82 unit tests across 19 files, 23 Chromium tests including all 84 English tool routes, 0 production dependency vulnerabilities, and 129.7 KB gzip app-shell JavaScript.
 
 ## Deliberate product limits
 

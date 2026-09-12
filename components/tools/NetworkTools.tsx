@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { FieldLabel } from '../ui/ToolUi';
 import { notifyToast } from './shared/notifyToast';
+import { parseCurlCommand, parseFormBodyLines, type RequestBodyMode } from './network/curlParser';
+import { useI18n } from '../../src/i18n';
+
+export { parseCurlCommand } from './network/curlParser';
 
 // --- HTTP Request Builder (Simplified) ---
 
@@ -16,8 +20,6 @@ interface MockRule {
     body: string;
     delay: number;
 }
-
-type RequestBodyMode = 'raw' | 'form-data';
 
 type MockMessageHandler = ((event: MessageEvent) => void) | null;
 
@@ -125,177 +127,6 @@ class MockEventSource {
         }
     }
 }
-
-const stripMatchingQuotes = (value: string) => {
-    if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-    ) {
-        return value.slice(1, -1);
-    }
-    return value;
-};
-
-const shellTokenize = (input: string) => {
-    const tokens: string[] = [];
-    let current = '';
-    let quote: '"' | "'" | null = null;
-    let escaped = false;
-
-    for (let i = 0; i < input.length; i++) {
-        const char = input[i];
-        if (escaped) {
-            current += char;
-            escaped = false;
-            continue;
-        }
-        if (char === '\\' && quote !== "'") {
-            escaped = true;
-            continue;
-        }
-        if ((char === '"' || char === "'") && (!quote || quote === char)) {
-            quote = quote ? null : char;
-            continue;
-        }
-        if (/\s/.test(char) && !quote) {
-            if (current) {
-                tokens.push(current);
-                current = '';
-            }
-            continue;
-        }
-        current += char;
-    }
-    if (current) tokens.push(current);
-    return tokens;
-};
-
-const appendUrlQuery = (targetUrl: string, entries: Array<readonly [string, string]>) => {
-    if (!targetUrl || entries.length === 0) return targetUrl;
-    try {
-        const parsed = new URL(targetUrl);
-        entries.forEach(([key, value]) => parsed.searchParams.append(key, value));
-        return parsed.toString();
-    } catch {
-        const query = new URLSearchParams(entries.map(([key, value]) => [key, value])).toString();
-        return `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}${query}`;
-    }
-};
-
-const parseFormBodyLines = (input: string) =>
-    input
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(Boolean)
-        .map(line => {
-            const separatorIndex = line.indexOf('=');
-            if (separatorIndex === -1) {
-                return [line, ''] as const;
-            }
-            return [
-                line.slice(0, separatorIndex).trim(),
-                line.slice(separatorIndex + 1).trim()
-            ] as const;
-        })
-        .filter(([key]) => key);
-
-export const parseCurlCommand = (curlCmd: string) => {
-    const cleanCmd = curlCmd.trim().replace(/\\\s*\n/g, ' ');
-    let method = 'GET';
-    let url = '';
-    const parsedHeaders: Record<string, string> = {};
-    const bodyParts: string[] = [];
-    const queryEntries: Array<readonly [string, string]> = [];
-    const formBodyLines: string[] = [];
-    let sendDataAsQuery = false;
-
-    const tokens = shellTokenize(cleanCmd).filter(token => token !== 'curl');
-
-    for (let i = 0; i < tokens.length; i++) {
-        const token = tokens[i];
-        if (token === '-X' || token === '--request' || token.startsWith('--request=')) {
-            const nextMethod = token.startsWith('--request=') ? token.slice('--request='.length) : tokens[i + 1];
-            method = nextMethod?.toUpperCase() || 'GET';
-            if (!token.startsWith('--request=')) i++;
-        } else if (token === '-G' || token === '--get') {
-            sendDataAsQuery = true;
-        } else if (token === '--url' || token.startsWith('--url=')) {
-            url = stripMatchingQuotes(token.startsWith('--url=') ? token.slice('--url='.length) : (tokens[i + 1] || ''));
-            if (!token.startsWith('--url=')) i++;
-        } else if (token === '-u' || token === '--user' || token.startsWith('--user=')) {
-            const userValue = stripMatchingQuotes(token.startsWith('--user=') ? token.slice('--user='.length) : (tokens[i + 1] || ''));
-            parsedHeaders.Authorization = `Basic ${btoa(unescape(encodeURIComponent(userValue)))}`;
-            if (!token.startsWith('--user=')) i++;
-        } else if (token === '-H' || token === '--header' || token.startsWith('--header=')) {
-            const headerStr = token.startsWith('--header=') ? token.slice('--header='.length) : (tokens[i + 1] || '');
-            const normalizedHeaderStr = stripMatchingQuotes(headerStr);
-            const colonIndex = normalizedHeaderStr.indexOf(':');
-            if (colonIndex > 0) {
-                const key = normalizedHeaderStr.slice(0, colonIndex).trim();
-                const value = normalizedHeaderStr.slice(colonIndex + 1).trim();
-                parsedHeaders[key] = value;
-            }
-            if (!token.startsWith('--header=')) i++;
-        } else if (
-            token === '-d' ||
-            token === '--data' ||
-            token === '--data-raw' ||
-            token === '--data-binary' ||
-            token === '--data-urlencode' ||
-            token.startsWith('--data=') ||
-            token.startsWith('--data-raw=') ||
-            token.startsWith('--data-binary=') ||
-            token.startsWith('--data-urlencode=')
-        ) {
-            const payload = token.includes('=') ? token.slice(token.indexOf('=') + 1) : (tokens[i + 1] || '');
-            const normalizedPayload = stripMatchingQuotes(payload);
-            if (sendDataAsQuery || token.includes('urlencode')) {
-                const [key, value = ''] = normalizedPayload.split(/=(.*)/s);
-                if (key) queryEntries.push([key, value]);
-            } else {
-                bodyParts.push(normalizedPayload);
-                if (method === 'GET') method = 'POST';
-            }
-            if (!token.includes('=')) i++;
-        } else if (
-            token === '-F' ||
-            token === '--form' ||
-            token === '--form-string' ||
-            token.startsWith('--form=') ||
-            token.startsWith('--form-string=')
-        ) {
-            const formToken = token.includes('=') ? token.slice(token.indexOf('=') + 1) : (tokens[i + 1] || '');
-            const normalizedFormToken = stripMatchingQuotes(formToken);
-            const separatorIndex = normalizedFormToken.indexOf('=');
-            if (separatorIndex > 0) {
-                const key = normalizedFormToken.slice(0, separatorIndex).trim();
-                const value = stripMatchingQuotes(normalizedFormToken.slice(separatorIndex + 1).trim());
-                formBodyLines.push(`${key}=${value}`);
-            }
-            if (method === 'GET') method = 'POST';
-            if (!token.includes('=')) i++;
-        } else if (!token.startsWith('-') && (token.startsWith('http://') || token.startsWith('https://'))) {
-            url = stripMatchingQuotes(token);
-        }
-    }
-
-    if (!url) {
-        const httpToken = tokens.find(t => t.startsWith('http://') || t.startsWith('https://'));
-        if (httpToken) url = httpToken;
-    }
-
-    if (queryEntries.length > 0) {
-        url = appendUrlQuery(url, queryEntries);
-    }
-
-    const bodyMode: RequestBodyMode = formBodyLines.length > 0 ? 'form-data' : 'raw';
-    let body = bodyParts.join('&');
-    if (bodyMode === 'form-data') {
-        body = formBodyLines.join('\n');
-    }
-
-    return { method, url, headers: JSON.stringify(parsedHeaders, null, 2), body, bodyMode };
-};
 
 export const HttpBuilderTool: React.FC = () => {
   useLocaleRender();
@@ -921,7 +752,7 @@ interface IpInfoData {
 
 // --- IP Info (Dynamic Client-Side Utility) ---
 export const IpInfoTool: React.FC = () => {
-  useLocaleRender();
+    const { t } = useI18n();
     const [data, setData] = useState<IpInfoData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -957,18 +788,18 @@ export const IpInfoTool: React.FC = () => {
     const handleCopy = () => {
         if (data?.ip) {
             navigator.clipboard.writeText(data.ip);
-            notifyToast({ title: 'IP 地址已复制到剪贴板', tone: 'success' });
+            notifyToast({ title: t('IP 地址已复制到剪贴板'), tone: 'success' });
         }
     };
 
     return (
         <Card className="h-full flex flex-col">
-             <CardHeader title={tr("IP 地址及网络信息")} description={tr("纯本地浏览器获取并解析本机公网 IP 及归属地信息")} />
+             <CardHeader title={t('IP 地址及网络信息')} description={t('纯本地浏览器获取并解析本机公网 IP 及归属地信息')} />
              <CardContent className="flex-1 overflow-auto p-6 space-y-6">
                 {loading && (
                     <div className="h-48 flex flex-col items-center justify-center space-y-3">
                         <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
-                        <p className="text-sm text-slate-500 animate-pulse">{tr("正在获取本机公网网络信息...")}</p>
+                        <p className="text-sm text-slate-500 animate-pulse">{t('正在获取本机公网网络信息...')}</p>
                     </div>
                 )}
 
@@ -976,14 +807,15 @@ export const IpInfoTool: React.FC = () => {
                     <div className="space-y-4">
                         <div className="p-4 bg-red-50 text-red-800 rounded-lg text-sm border border-red-200">
                             <Info className="w-4 h-4 inline mr-2 shrink-0" />
-                            {tr("无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：")}{tr(error)}
+                            {t('无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：')}{error}
                         </div>
                         <Button
                             className="w-full"
                             onClick={() => window.open('https://ipapi.co/json/', '_blank')}
                             icon={<Globe className="w-4 h-4"/>}
                         >
-                            {tr("在新标签页手动打开查询链接")}</Button>
+                            {t('在新标签页手动打开查询链接')}
+                        </Button>
                     </div>
                 )}
 
@@ -992,13 +824,13 @@ export const IpInfoTool: React.FC = () => {
                         {/* Main IP display */}
                         <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 p-6 rounded-xl border border-primary-100 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">{tr("您的公网 IP")}</span>
+                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">{t('您的公网 IP')}</span>
                                 <h3 className="text-3xl font-mono font-bold text-slate-800 tracking-tight mt-1">{data.ip}</h3>
-                                {data.note && <p className="text-xs text-amber-600 mt-1">{data.note}</p>}
+                                {data.note && <p className="text-xs text-amber-600 mt-1">{t(data.note)}</p>}
                             </div>
                             <div className="flex gap-2">
-                                <Button size="sm" onClick={handleCopy}>{tr("复制 IP")}</Button>
-                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{tr("刷新")}</Button>
+                                <Button size="sm" onClick={handleCopy}>{t('复制 IP')}</Button>
+                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{t('刷新')}</Button>
                             </div>
                         </div>
 
@@ -1006,28 +838,28 @@ export const IpInfoTool: React.FC = () => {
                         {!data.note && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">{tr("国家 / 地区")}</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || tr('未知')} ({data.country_code || 'N/A'})</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('国家 / 地区')}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || t('未知')} ({data.country_code || 'N/A'})</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">{tr("城市 / 省份")}</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.city || tr('未知')} • {data.region || tr('未知')}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('城市 / 省份')}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.city || t('未知')} • {data.region || t('未知')}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">{tr("网络服务商 (ISP)")}</span>
-                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || tr('未知')} {data.asn ? `(${data.asn})` : ''}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{t('网络服务商 (ISP)')}</span>
+                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || t('未知')} {data.asn ? `(${data.asn})` : ''}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">{tr("经纬度 / 时区")}</span>
+                                    <span className="text-xs text-slate-400 font-medium">{t('经纬度 / 时区')}</span>
                                     <p className="text-sm font-semibold text-slate-700">
-                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : tr('未知')} • {data.timezone || tr('未知')}
+                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : t('未知')} • {data.timezone || t('未知')}
                                     </p>
                                 </div>
                             </div>
                         )}
                         
                         <div className="text-center">
-                            <span className="text-xs text-slate-400">{tr("信息由免费公共服务提供 • 仅在浏览器本地获取展示")}</span>
+                            <span className="text-xs text-slate-400">{t('信息由免费公共服务提供 • 仅在浏览器本地获取展示')}</span>
                         </div>
                     </div>
                 )}

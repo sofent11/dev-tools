@@ -1,6 +1,6 @@
 # 程序员百宝箱
 
-基于 React、TypeScript、Vite 和 Tailwind CSS 的浏览器工具箱。当前提供 8 个分类、12 个 Studio 和 73 个工具标签，涵盖数据格式、文本编码、网络请求、前端样式、文件媒体、安全密钥、时间生成器及 3D/CAD。
+基于 React、TypeScript、Vite 和 Tailwind CSS 的浏览器工具箱。当前提供 8 个分类、13 个 Studio 和 84 个工具标签，涵盖数据格式、文本编码、网络请求、前端样式、文件媒体、安全密钥、时间生成器及 3D/CAD。
 
 完整工具、地址和成熟度见[自动生成的工具目录](docs/tool-catalog.md)。目录来源是注册的 Studio 定义；搜索可以直接定位子工具。
 

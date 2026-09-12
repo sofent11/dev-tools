@@ -10,7 +10,10 @@ const LoremIpsumTool = lazyNamed(() => import('../generators'), 'LoremIpsumTool'
 const RmbUppercaseTool = lazyNamed(() => import('../text'), 'RmbUppercaseTool');
 const QrCodeTool = lazyNamed(() => import('../WebTools'), 'QrCodeTool');
 
+const ArithmancyTool = lazyNamed(() => import('../arithmancy'), 'ArithmancyTool');
+
 const subTools: SubTool[] = [
+  { id: 'arithmancy', name: '数字占卜', description: '生命路径、姓名数字与个人年解读', icon: Fingerprint, component: ArithmancyTool },
   { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, component: UuidTool },
   { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, component: RandomStringTool },
   { id: 'random-number', name: '随机数生成器', description: '范围随机整数', icon: Binary, component: RandomNumberTool },

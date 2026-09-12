@@ -1,0 +1,6 @@
+<svg viewBox="0 0 10 10" onload="alert(1)">
+  <foreignObject><iframe srcdoc="&lt;script&gt;alert(1)&lt;/script&gt;"></iframe></foreignObject>
+  <path d="M0 0L10 10" stroke="red" style="stroke-width: 2; background: url(javascript:alert(1))" />
+  <image href="javascript:alert(1)" />
+  <text>OK</text>
+</svg>

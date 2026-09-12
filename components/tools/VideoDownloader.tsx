@@ -12,10 +12,12 @@ import {
   Copy,
   Download,
   ExternalLink,
+  FileDown,
   FileVideo,
   Link2,
   Loader2,
   PlayCircle,
+  Smartphone,
   Terminal,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
@@ -153,6 +155,8 @@ const platformHints: Record<Platform, string> = {
 const sampleUrl = 'https://vimeo.com/76979871';
 const WORKER_ENDPOINT_STORAGE_KEY = 'video-catch-worker-endpoint';
 export const DEFAULT_WORKER_ENDPOINT = 'https://api-dev.sopace.top';
+const SHORTCUT_NAME = '视频下载解析器';
+const SHORTCUT_FILE_PATH = '/shortcuts/video-catch-default-worker.shortcut';
 
 export const videoCapabilityBoundaries: VideoCapabilityBoundary[] = [
   {
@@ -436,7 +440,7 @@ const parseGenericPage = async (url: string, platform: Platform): Promise<ParseR
   };
 };
 
-const parseFromSource = (source: string, pageUrl: string, platform: Platform): ParseResult => {
+export const parseFromSource = (source: string, pageUrl: string, platform: Platform): ParseResult => {
   const baseUrl = pageUrl || window.location.href;
   const formats = formatsFromText(source, baseUrl, '粘贴源码', platform === 'pinterest' ? 'https://www.pinterest.com/' : undefined);
   return {
@@ -543,6 +547,14 @@ export const VideoDownloader: React.FC = () => {
   const selectedFormats = result?.formats ?? [];
   const hasPreview = selectedFormats.some(format => ['mp4', 'm4v', 'webm', 'mov'].includes(format.format));
   const previewUrl = selectedFormats.find(format => ['mp4', 'm4v', 'webm', 'mov'].includes(format.format))?.url;
+  const shortcutFileUrl = useMemo(() => {
+    if (typeof window === 'undefined') return SHORTCUT_FILE_PATH;
+    return new URL(SHORTCUT_FILE_PATH, window.location.origin).href;
+  }, []);
+  const shortcutInstallUrl = useMemo(
+    () => `shortcuts://import-shortcut?url=${encodeURIComponent(shortcutFileUrl)}&name=${encodeURIComponent(SHORTCUT_NAME)}`,
+    [shortcutFileUrl],
+  );
 
   const copyText = async (id: string, text: string) => {
     await navigator.clipboard.writeText(text);
@@ -739,6 +751,34 @@ export const VideoDownloader: React.FC = () => {
                 className="w-full"
               >
                 {tr("开始解析")}</Button>
+
+              <div className="tool-section overflow-hidden border-sky-200 bg-gradient-to-br from-white to-sky-50/70 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 shadow-sm">
+                    <Smartphone className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900">{tr("iPhone 快捷指令")}</div>
+                    <p className="mt-1 text-xs leading-5 text-slate-600">
+                      {tr("从 Safari 或 App 分享视频页面到快捷指令，自动调用默认 Worker 并保存第一个视频到相册。")}</p>
+                  </div>
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <a href={shortcutInstallUrl} className="min-w-0">
+                    <Button size="sm" className="w-full justify-center" icon={<Smartphone className="h-3.5 w-3.5" />}>
+                      {tr("安装快捷指令")}</Button>
+                  </a>
+                  <a href={SHORTCUT_FILE_PATH} download={`${SHORTCUT_NAME}.shortcut`} className="min-w-0">
+                    <Button size="sm" variant="secondary" className="w-full justify-center" icon={<FileDown className="h-3.5 w-3.5" />}>
+                      {tr("下载 .shortcut 文件")}</Button>
+                  </a>
+                </div>
+                <div className="mt-2 break-all rounded-lg border border-sky-100 bg-white/70 px-2.5 py-2 font-mono text-[11px] leading-4 text-slate-500">
+                  {tr("固定调用默认 Worker：")}{DEFAULT_WORKER_ENDPOINT}
+                </div>
+                <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                  {tr("导入后可在分享表单里选择「视频下载解析器」；MP4/WebM 等直链会自动保存到系统相册，流媒体或需 Referer 的资源仍可能受 iOS 限制。")}</p>
+              </div>
 
               <div className="tool-section overflow-hidden rounded-xl border border-slate-200/80 bg-white/50 p-4 shadow-sm backdrop-blur-sm transition-all duration-300">
                 <button

@@ -129,3 +129,22 @@ test('APNG preserves frame count and delays where ImageDecoder is supported', as
   await page.getByTitle('后一帧').click();
   await expect(page.getByText('200 ms · 1x1')).toBeVisible();
 });
+
+ test('legacy aliases preserve tools added on main', async ({ page }) => {
+  for (const [alias, studio, tab] of [
+    ['numerology', 'generator-utility-studio', 'arithmancy'],
+    ['hex-text', 'encoding-binary-studio', 'hex-text'],
+    ['github-repos', 'repo-dependency-studio', 'github-repos'],
+  ]) {
+    await page.goto(`/tools/${alias}`);
+    await expect(page).toHaveURL(new RegExp(`/tools/${studio}#${tab}$`));
+    await expect(page.getByRole('tab', { selected: true })).toBeVisible();
+  }
+});
+
+test('IP success state translates its public-service notice', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('locale', 'en-US'));
+  await page.route('https://ipapi.co/json/', route => route.fulfill({ json: { ip: '203.0.113.1', city: 'Test', country_name: 'Test', timezone: 'UTC' } }));
+  await page.goto('/tools/network-diagnostics-studio#ip');
+  await expect(page.getByText('Information is provided by free public services • fetched and displayed locally in your browser')).toBeVisible();
+});

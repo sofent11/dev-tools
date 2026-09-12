@@ -23,8 +23,11 @@ const GeneratorUtilityStudio = lazyNamed(() => import('./studios/GeneratorUtilit
 const TimeOpsStudio = lazyNamed(() => import('./studios/TimeOpsStudio'), 'TimeOpsStudio');
 const CadGeometryStudio = lazyNamed(() => import('./studios/CadGeometryStudio'), 'CadGeometryStudio');
 
+const RepoDependencyStudio = lazyNamed(() => import('./studios/RepoDependencyStudio'), 'RepoDependencyStudio');
+
 export const TOOLS: ToolDef[] = [
   { id: 'data-format-studio', name: '数据格式与结构', description: 'JSON、XML、YAML、CSV、Schema 与结构化对比', icon: Braces, category: Category.DATA, component: DataFormatStudio },
+  { id: 'repo-dependency-studio', name: '仓库与依赖研究', description: 'GitHub/HuggingFace 仓库盘点、依赖树和 NuGet 签名检查', icon: Globe, category: Category.NETWORK, component: RepoDependencyStudio },
   { id: 'sql-database-studio', name: 'SQL 与本地数据库', description: 'SQL 格式化与浏览器本地 SQLite WASM 沙箱', icon: Database, category: Category.DATA, component: SqlDatabaseStudio },
   { id: 'text-markup-studio', name: '文本与标记处理', description: '文本清理、正则、Diff、Markdown 与 HTML 转换', icon: Code2, category: Category.TEXT_MARKUP, component: TextMarkupStudio },
   { id: 'encoding-binary-studio', name: '编码、转义与二进制', description: 'Base64、Data URL、Hex、URL 编码与字符实体转义', icon: FileArchive, category: Category.TEXT_MARKUP, component: EncodingBinaryStudio },
@@ -39,3 +42,120 @@ export const TOOLS: ToolDef[] = [
 ];
 
 export const TOOL_IDS = new Set(TOOLS.map(tool => tool.id));
+
+export const LEGACY_TOOL_MAP: Record<string, { studioId: string; subToolId?: string }> = {
+  'json': { studioId: 'data-format-studio', subToolId: 'json' },
+  'json2ts': { studioId: 'data-format-studio', subToolId: 'json2ts' },
+  'json-schema': { studioId: 'data-format-studio', subToolId: 'json-schema' },
+  'xml': { studioId: 'data-format-studio', subToolId: 'xml' },
+  'yaml': { studioId: 'data-format-studio', subToolId: 'yaml' },
+  'csv': { studioId: 'data-format-studio', subToolId: 'csv' },
+  'json-diff': { studioId: 'data-format-studio', subToolId: 'json-diff' },
+  'sql-format': { studioId: 'sql-database-studio', subToolId: 'sql-format' },
+  'sqlite-sandbox': { studioId: 'sql-database-studio', subToolId: 'sqlite-sandbox' },
+  'jwt': { studioId: 'security-key-studio', subToolId: 'jwt' },
+  'hash': { studioId: 'security-key-studio', subToolId: 'hash' },
+  'hmac': { studioId: 'security-key-studio', subToolId: 'hmac' },
+  'password': { studioId: 'security-key-studio', subToolId: 'password' },
+  'basic-auth': { studioId: 'security-key-studio', subToolId: 'basic-auth' },
+  'cert-parser': { studioId: 'security-key-studio', subToolId: 'cert-parser' },
+  'asymmetric-key': { studioId: 'security-key-studio', subToolId: 'asymmetric-key' },
+  'pgp-keymaster': { studioId: 'security-key-studio', subToolId: 'pgp-keymaster' },
+  'sm-crypto': { studioId: 'security-key-studio', subToolId: 'sm-crypto' },
+  'case': { studioId: 'text-markup-studio', subToolId: 'case' },
+  'text-manip': { studioId: 'text-markup-studio', subToolId: 'text-manip' },
+  'slug': { studioId: 'text-markup-studio', subToolId: 'slug' },
+  'stats': { studioId: 'text-markup-studio', subToolId: 'stats' },
+  'regex': { studioId: 'text-markup-studio', subToolId: 'regex' },
+  'diff': { studioId: 'text-markup-studio', subToolId: 'diff' },
+  'base64': { studioId: 'encoding-binary-studio', subToolId: 'base64' },
+  'file-base64': { studioId: 'encoding-binary-studio', subToolId: 'file-base64' },
+  'hex-viewer': { studioId: 'encoding-binary-studio', subToolId: 'hex-viewer' },
+  'hex-text': { studioId: 'encoding-binary-studio', subToolId: 'hex-text' },
+  'unicode-inspector': { studioId: 'encoding-binary-studio', subToolId: 'unicode-inspector' },
+  'url': { studioId: 'encoding-binary-studio', subToolId: 'url' },
+  'escape': { studioId: 'encoding-binary-studio', subToolId: 'escape' },
+  'markdown': { studioId: 'text-markup-studio', subToolId: 'markdown' },
+  'html-markdown': { studioId: 'text-markup-studio', subToolId: 'html-markdown' },
+  'html-format': { studioId: 'text-markup-studio', subToolId: 'html-format' },
+  'http': { studioId: 'network-diagnostics-studio', subToolId: 'http' },
+  'websocket-sse': { studioId: 'network-diagnostics-studio', subToolId: 'websocket-sse' },
+  'ping': { studioId: 'network-diagnostics-studio', subToolId: 'ping' },
+  'urlparser': { studioId: 'network-diagnostics-studio', subToolId: 'urlparser' },
+  'useragent': { studioId: 'network-diagnostics-studio', subToolId: 'useragent' },
+  'ip': { studioId: 'network-diagnostics-studio', subToolId: 'ip' },
+  'device': { studioId: 'network-diagnostics-studio', subToolId: 'device' },
+  'pxrem': { studioId: 'frontend-style-studio', subToolId: 'pxrem' },
+  'color': { studioId: 'frontend-style-studio', subToolId: 'color' },
+  'css-generator': { studioId: 'frontend-style-studio', subToolId: 'css-generator' },
+  'svg-css': { studioId: 'frontend-style-studio', subToolId: 'svg-css' },
+  'html-jsx': { studioId: 'frontend-style-studio', subToolId: 'html-jsx' },
+  'svg-react': { studioId: 'frontend-style-studio', subToolId: 'svg-react' },
+  'image': { studioId: 'image-media-studio', subToolId: 'image' },
+  'image-base64': { studioId: 'image-media-studio', subToolId: 'image-base64' },
+  'image-colors': { studioId: 'image-media-studio', subToolId: 'image-colors' },
+  'image-watermark': { studioId: 'image-media-studio', subToolId: 'image-watermark' },
+  'visual-centroid': { studioId: 'image-media-studio', subToolId: 'visual-centroid' },
+  'perler-beads': { studioId: 'image-media-studio', subToolId: 'perler-beads' },
+  'headshot': { studioId: 'image-media-studio', subToolId: 'headshot' },
+  'background-removal': { studioId: 'image-media-studio', subToolId: 'background-removal' },
+  'animation-frame': { studioId: 'image-media-studio', subToolId: 'animation-frame' },
+  'pdf': { studioId: 'file-document-studio', subToolId: 'pdf' },
+  'file-info': { studioId: 'file-document-studio', subToolId: 'file-info' },
+  'filename': { studioId: 'file-document-studio', subToolId: 'filename' },
+  'mime': { studioId: 'file-document-studio', subToolId: 'mime' },
+  'video-download': { studioId: 'image-media-studio', subToolId: 'video-download' },
+  'svg-optimizer': { studioId: 'frontend-style-studio', subToolId: 'svg-optimizer' },
+  'qrcode': { studioId: 'generator-utility-studio', subToolId: 'qrcode' },
+  'arithmancy': { studioId: 'generator-utility-studio', subToolId: 'arithmancy' },
+  'numerology': { studioId: 'generator-utility-studio', subToolId: 'arithmancy' },
+  'number-divination': { studioId: 'generator-utility-studio', subToolId: 'arithmancy' },
+  'github-repos': { studioId: 'repo-dependency-studio', subToolId: 'github-repos' },
+  'github-org-research': { studioId: 'repo-dependency-studio', subToolId: 'github-org-research' },
+  'repo-folder-download': { studioId: 'repo-dependency-studio', subToolId: 'repo-folder-download' },
+  'nuget-deps': { studioId: 'repo-dependency-studio', subToolId: 'nuget-deps' },
+  'pypi-deps': { studioId: 'repo-dependency-studio', subToolId: 'pypi-deps' },
+  'rust-deps': { studioId: 'repo-dependency-studio', subToolId: 'rust-deps' },
+  'nuget-signature': { studioId: 'repo-dependency-studio', subToolId: 'nuget-signature' },
+  'jewelry': { studioId: 'cad-geometry-studio', subToolId: 'jewelry' },
+  'stl-repair': { studioId: 'cad-geometry-studio', subToolId: 'stl-repair' },
+  'stl-voronoi': { studioId: 'cad-geometry-studio', subToolId: 'stl-voronoi' },
+  '3d-csg': { studioId: 'cad-geometry-studio', subToolId: '3d-csg' },
+  'smart-geometry': { studioId: 'cad-geometry-studio', subToolId: 'smart-geometry' },
+  'uuid': { studioId: 'generator-utility-studio', subToolId: 'uuid' },
+  'random-str': { studioId: 'generator-utility-studio', subToolId: 'random-str' },
+  'random-number': { studioId: 'generator-utility-studio', subToolId: 'random-number' },
+  'lorem': { studioId: 'generator-utility-studio', subToolId: 'lorem' },
+  'rmb-uppercase': { studioId: 'generator-utility-studio', subToolId: 'rmb-uppercase' },
+  'chmod': { studioId: 'time-ops-studio', subToolId: 'chmod' },
+  'cron': { studioId: 'time-ops-studio', subToolId: 'cron' },
+  'unix-time-studio': { studioId: 'time-ops-studio', subToolId: 'unix-time-studio' },
+  'ai': { studioId: 'generator-utility-studio', subToolId: 'lorem' },
+  'timestamp': { studioId: 'time-ops-studio', subToolId: 'unix-time-studio' },
+  'timestamp-plus': { studioId: 'time-ops-studio', subToolId: 'unix-time-studio' },
+  'datediff': { studioId: 'time-ops-studio', subToolId: 'unix-time-studio' },
+  'world-clock': { studioId: 'time-ops-studio', subToolId: 'unix-time-studio' }
+};
+const LEGACY_STUDIOS: Record<string, string> = {
+  "json-studio": "data-format-studio",
+  "crypto-studio": "security-key-studio",
+  "text-studio": "text-markup-studio",
+  "encoding-studio": "encoding-binary-studio",
+  "html-markdown-studio": "text-markup-studio",
+  "network-studio": "network-diagnostics-studio",
+  "css-studio": "frontend-style-studio",
+  "image-studio": "image-media-studio",
+  "file-studio": "file-document-studio",
+  "cad-3d-studio": "cad-geometry-studio",
+  "system-ai-studio": "generator-utility-studio"
+};
+export const resolveToolRoute = (segment: string | undefined) => {
+  if (!segment) return null;
+  if (TOOL_IDS.has(segment)) return { studioId: segment, subToolId: undefined };
+  if (LEGACY_STUDIOS[segment]) {
+    const tab = window.location.hash.slice(1);
+    const target = Object.values(LEGACY_TOOL_MAP).find(route => route.subToolId === tab);
+    return { studioId: target?.studioId || LEGACY_STUDIOS[segment], subToolId: target?.subToolId };
+  }
+  return LEGACY_TOOL_MAP[segment] || null;
+};

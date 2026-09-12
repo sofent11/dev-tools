@@ -11,6 +11,13 @@ Generated from the registered Studio definitions. Run `npm run catalog:generate`
 | YAML ↔ JSON | /tools/data-format-studio#yaml | supported |
 | CSV ↔ JSON | /tools/data-format-studio#csv | supported |
 | JSON 结构化对比 | /tools/data-format-studio#json-diff | supported |
+| GitHub 仓库浏览器 | /tools/repo-dependency-studio#github-repos | supported |
+| GitHub 组织关联研究 | /tools/repo-dependency-studio#github-org-research | supported |
+| 仓库文件夹下载 | /tools/repo-dependency-studio#repo-folder-download | supported |
+| NuGet 依赖树 | /tools/repo-dependency-studio#nuget-deps | supported |
+| PyPI 依赖树 | /tools/repo-dependency-studio#pypi-deps | supported |
+| Rust Crate 依赖树 | /tools/repo-dependency-studio#rust-deps | supported |
+| NuGet 签名检查 | /tools/repo-dependency-studio#nuget-signature | supported |
 | SQL 格式化 | /tools/sql-database-studio#sql-format | supported |
 | SQLite WASM 沙箱 | /tools/sql-database-studio#sqlite-sandbox | supported |
 | 大小写转换 | /tools/text-markup-studio#case | supported |
@@ -22,6 +29,8 @@ Generated from the registered Studio definitions. Run `npm run catalog:generate`
 | Markdown 预览 | /tools/text-markup-studio#markdown | supported |
 | HTML 转 Markdown | /tools/text-markup-studio#html-markdown | supported |
 | HTML 格式化/压缩器 | /tools/text-markup-studio#html-format | supported |
+| Unicode 字符检查器 | /tools/encoding-binary-studio#unicode-inspector | supported |
+| Hex 字节转文本 | /tools/encoding-binary-studio#hex-text | supported |
 | Base64 转换 | /tools/encoding-binary-studio#base64 | supported |
 | Base64/文件转换器 | /tools/encoding-binary-studio#file-base64 | supported |
 | 十六进制 Hex 查看器 | /tools/encoding-binary-studio#hex-viewer | supported |
@@ -50,6 +59,7 @@ Generated from the registered Studio definitions. Run `npm run catalog:generate`
 | 图片转 Base64 | /tools/image-media-studio#image-base64 | supported |
 | 图片颜色提取 | /tools/image-media-studio#image-colors | supported |
 | 图片水印 | /tools/image-media-studio#image-watermark | supported |
+| 视觉质心计算器 | /tools/image-media-studio#visual-centroid | supported |
 | 拼豆图纸生成 | /tools/image-media-studio#perler-beads | supported |
 | 大头照提取 | /tools/image-media-studio#headshot | supported |
 | 动画帧提取 | /tools/image-media-studio#animation-frame | supported |
@@ -63,6 +73,7 @@ Generated from the registered Studio definitions. Run `npm run catalog:generate`
 | 非对称密钥转换 | /tools/security-key-studio#asymmetric-key | supported |
 | GPG / PGP 密钥中心 | /tools/security-key-studio#pgp-keymaster | supported |
 | 国密算法套件 (SM2/3/4) | /tools/security-key-studio#sm-crypto | supported |
+| 数字占卜 | /tools/generator-utility-studio#arithmancy | supported |
 | UUID 生成 | /tools/generator-utility-studio#uuid | supported |
 | 随机字符串 | /tools/generator-utility-studio#random-str | supported |
 | 随机数生成器 | /tools/generator-utility-studio#random-number | supported |
