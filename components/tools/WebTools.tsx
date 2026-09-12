@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useMemo, useState, useEffect } from 'react';
 import { ArrowRightLeft, Check, Copy, QrCode, Upload } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -64,6 +66,7 @@ const wcagBadge = (ratio: number) => {
 
 // --- PX to REM Tool ---
 export const PxRemTool: React.FC = () => {
+  useLocaleRender();
   const [px, setPx] = useState<number>(16);
   const [root, setRoot] = useState<number>(16);
   const [rem, setRem] = useState<number>(1);
@@ -88,7 +91,7 @@ export const PxRemTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="PX / REM 转换器" description="CSS 像素与 REM 单位互转。" />
+      <CardHeader title={tr("PX / REM 转换器")} description={tr("CSS 像素与 REM 单位互转。")} />
       <CardContent className="flex-1 flex flex-col items-center justify-center space-y-8">
         <div className="tool-panel w-full max-w-md p-6">
             <div className="mb-6">
@@ -130,6 +133,7 @@ export const PxRemTool: React.FC = () => {
 
 // --- Color Converter Tool ---
 export const ColorConverterTool: React.FC = () => {
+  useLocaleRender();
     const [hex, setHex] = useState('#3b82f6');
     const [rgb, setRgb] = useState({ r: 59, g: 130, b: 246 });
     const [customBackground, setCustomBackground] = useState('#ffffff');
@@ -257,9 +261,9 @@ export const ColorConverterTool: React.FC = () => {
     return (
         <Card className="h-full flex flex-col">
             <CardHeader
-              title="颜色转换器"
-              description="HEX、RGB/RGBA、HSL、HSV 实时互转及预览。"
-              actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制颜色值</Button>}
+              title={tr("颜色转换器")}
+              description={tr("HEX、RGB/RGBA、HSL、HSV 实时互转及预览。")}
+              actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制颜色值")}</Button>}
             />
             <CardContent className="flex-1 overflow-auto space-y-8">
                  <div className="flex flex-col items-center justify-center space-y-4">
@@ -334,18 +338,17 @@ export const ColorConverterTool: React.FC = () => {
                     <div className="tool-panel p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800">WCAG 2.1 对比度分析</h3>
-                                <p className="text-xs text-slate-500">按普通文本 4.5:1、AAA 7:1 评估。</p>
+                                <h3 className="text-sm font-bold text-slate-800">{tr("WCAG 2.1 对比度分析")}</h3>
+                                <p className="text-xs text-slate-500">{tr("按普通文本 4.5:1、AAA 7:1 评估。")}</p>
                             </div>
                             <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                自定义背景
-                                <input type="color" value={customBackground} onChange={e => setCustomBackground(e.target.value)} className="h-8 w-10 rounded border border-slate-200 bg-white" />
+                                {tr("自定义背景")}<input type="color" value={customBackground} onChange={e => setCustomBackground(e.target.value)} className="h-8 w-10 rounded border border-slate-200 bg-white" />
                             </label>
                         </div>
                         <div className="grid gap-3 md:grid-cols-3">
                             {contrastChecks.map(check => (
-                                <div key={check.label} className="rounded-lg border border-slate-200 p-3" style={{ backgroundColor: check.bg, color: check.fg }}>
-                                    <div className="text-xs font-bold">{check.label}</div>
+                                <div key={tr(check.label)} className="rounded-lg border border-slate-200 p-3" style={{ backgroundColor: check.bg, color: check.fg }}>
+                                    <div className="text-xs font-bold">{tr(check.label)}</div>
                                     <div className="mt-2 text-2xl font-black">{check.ratio.toFixed(2)}:1</div>
                                     <div className="mt-1 inline-flex rounded bg-white/80 px-2 py-0.5 text-xs font-bold text-slate-900">{wcagBadge(check.ratio)}</div>
                                 </div>
@@ -353,7 +356,7 @@ export const ColorConverterTool: React.FC = () => {
                         </div>
                     </div>
                     <div className="tool-panel p-4">
-                        <h3 className="text-sm font-bold text-slate-800">合规颜色建议</h3>
+                        <h3 className="text-sm font-bold text-slate-800">{tr("合规颜色建议")}</h3>
                         {nearestAccessible ? (
                             <div className="mt-3 space-y-3">
                                 <button
@@ -367,10 +370,10 @@ export const ColorConverterTool: React.FC = () => {
                                 >
                                     {nearestAccessible.hex.toUpperCase()}
                                 </button>
-                                <p className="text-xs text-slate-500">与自定义背景对比 {nearestAccessible.ratio.toFixed(2)}:1，L 调整到 {nearestAccessible.lightness}%。</p>
+                                <p className="text-xs text-slate-500">{tr("与自定义背景对比")}{nearestAccessible.ratio.toFixed(2)}{tr(":1，L 调整到")}{nearestAccessible.lightness}%。</p>
                             </div>
                         ) : (
-                            <p className="mt-3 text-xs text-slate-500">当前色相/饱和度下未找到 AA 普通文本建议，请调整色相或背景。</p>
+                            <p className="mt-3 text-xs text-slate-500">{tr("当前色相/饱和度下未找到 AA 普通文本建议，请调整色相或背景。")}</p>
                         )}
                     </div>
                  </div>
@@ -381,9 +384,10 @@ export const ColorConverterTool: React.FC = () => {
 
 // --- QR Code Tool ---
 export const QrCodeTool: React.FC = () => {
+  useLocaleRender();
     const [tab, setTab] = useState<'generate' | 'decode'>('generate');
     const [mode, setMode] = useState<'text' | 'wifi' | 'vcard' | 'event'>('text');
-    const [text, setText] = useState('https://example.com');
+    const [text, setText] = useDraftState("components/tools/WebTools.tsx:QrCodeTool:text", 'https://example.com');
     const [wifi, setWifi] = useState({ ssid: 'MyWifi', password: 'password', encryption: 'WPA' });
     const [vcard, setVcard] = useState({ name: '张三', phone: '13800000000', email: 'hello@example.com' });
     const [event, setEvent] = useState({ title: 'Demo Event', start: '20260428T090000', end: '20260428T100000' });
@@ -450,10 +454,10 @@ export const QrCodeTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="二维码生成器" description="本地生成文本、WiFi、名片和事件二维码。" />
+            <CardHeader title={tr("二维码生成器")} description={tr("本地生成文本、WiFi、名片和事件二维码。")} />
             <div className="flex gap-1 border-b border-slate-100 px-5">
-                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'generate' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('generate')}>生成</button>
-                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>解析</button>
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'generate' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('generate')}>{tr("生成")}</button>
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>{tr("解析")}</button>
             </div>
             {tab === 'generate' ? (
             <CardContent className="flex-1 flex flex-col md:flex-row gap-8 p-6">
@@ -461,14 +465,14 @@ export const QrCodeTool: React.FC = () => {
                     <div className="flex flex-wrap gap-2">
                         {(['text', 'wifi', 'vcard', 'event'] as const).map(item => (
                             <Button key={item} size="sm" variant={mode === item ? 'primary' : 'secondary'} onClick={() => setMode(item)}>
-                                {item === 'text' ? '文本' : item === 'wifi' ? 'WiFi' : item === 'vcard' ? '名片' : '事件'}
+                                {item === 'text' ? tr('文本') : item === 'wifi' ? 'WiFi' : item === 'vcard' ? tr('名片') : tr('事件')}
                             </Button>
                         ))}
                     </div>
                     <div>
                         {mode === 'text' && (
                             <>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">内容 (文本 / URL)</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("内容 (文本 / URL)")}</label>
                                 <textarea
                                     value={text}
                                     onChange={e => setText(e.target.value)}
@@ -479,7 +483,7 @@ export const QrCodeTool: React.FC = () => {
                         {mode === 'wifi' && (
                             <div className="grid gap-3">
                                 <input className="p-2 border rounded-lg" placeholder="SSID" value={wifi.ssid} onChange={e => setWifi({ ...wifi, ssid: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="密码" value={wifi.password} onChange={e => setWifi({ ...wifi, password: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("密码")} value={wifi.password} onChange={e => setWifi({ ...wifi, password: e.target.value })} />
                                 <select className="p-2 border rounded-lg bg-white" value={wifi.encryption} onChange={e => setWifi({ ...wifi, encryption: e.target.value })}>
                                     <option>WPA</option>
                                     <option>WEP</option>
@@ -489,21 +493,21 @@ export const QrCodeTool: React.FC = () => {
                         )}
                         {mode === 'vcard' && (
                             <div className="grid gap-3">
-                                <input className="p-2 border rounded-lg" placeholder="姓名" value={vcard.name} onChange={e => setVcard({ ...vcard, name: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="电话" value={vcard.phone} onChange={e => setVcard({ ...vcard, phone: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="邮箱" value={vcard.email} onChange={e => setVcard({ ...vcard, email: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("姓名")} value={vcard.name} onChange={e => setVcard({ ...vcard, name: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("电话")} value={vcard.phone} onChange={e => setVcard({ ...vcard, phone: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("邮箱")} value={vcard.email} onChange={e => setVcard({ ...vcard, email: e.target.value })} />
                             </div>
                         )}
                         {mode === 'event' && (
                             <div className="grid gap-3">
-                                <input className="p-2 border rounded-lg" placeholder="标题" value={event.title} onChange={e => setEvent({ ...event, title: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="开始 YYYYMMDDTHHmmss" value={event.start} onChange={e => setEvent({ ...event, start: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="结束 YYYYMMDDTHHmmss" value={event.end} onChange={e => setEvent({ ...event, end: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("标题")} value={event.title} onChange={e => setEvent({ ...event, title: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("开始 YYYYMMDDTHHmmss")} value={event.start} onChange={e => setEvent({ ...event, start: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("结束 YYYYMMDDTHHmmss")} value={event.end} onChange={e => setEvent({ ...event, end: e.target.value })} />
                             </div>
                         )}
                     </div>
                     <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">尺寸 ({size}px)</label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">{tr("尺寸 (")}{size}px)</label>
                          <input 
                             type="range" 
                             min="100" 
@@ -521,7 +525,7 @@ export const QrCodeTool: React.FC = () => {
                     ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                             <QrCode className="w-12 h-12 mb-2 opacity-20"/>
-                            <p>输入文本以生成</p>
+                            <p>{tr("输入文本以生成")}</p>
                         </div>
                     )}
                 </div>
@@ -530,15 +534,15 @@ export const QrCodeTool: React.FC = () => {
             <CardContent className="flex-1 grid gap-6 p-6 md:grid-cols-2">
                 <label className="tool-upload flex min-h-[300px] cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center">
                     <Upload className="h-10 w-10 text-slate-400" />
-                    <div className="text-sm font-medium text-slate-700">上传二维码图片</div>
-                    <div className="text-xs text-slate-500">PNG、JPG、WebP 均可，本地 Canvas 解析</div>
+                    <div className="text-sm font-medium text-slate-700">{tr("上传二维码图片")}</div>
+                    <div className="text-xs text-slate-500">{tr("PNG、JPG、WebP 均可，本地 Canvas 解析")}</div>
                     <input type="file" accept="image/*" className="hidden" onChange={event => event.target.files?.[0] && decodeFile(event.target.files[0])} />
                 </label>
                 <div className="tool-panel flex min-h-[300px] flex-col gap-3 p-4">
-                    <div className="text-sm font-semibold text-slate-700">解析结果</div>
+                    <div className="text-sm font-semibold text-slate-700">{tr("解析结果")}</div>
                     {decodeError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{decodeError}</div>}
-                    <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder="解析出的文本会显示在这里" />
-                    <Button variant="secondary" disabled={!decodedText} onClick={() => navigator.clipboard.writeText(decodedText)}>复制结果</Button>
+                    <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder={tr("解析出的文本会显示在这里")} />
+                    <Button variant="secondary" disabled={!decodedText} onClick={() => navigator.clipboard.writeText(decodedText)}>{tr("复制结果")}</Button>
                 </div>
             </CardContent>
             )}
@@ -548,8 +552,9 @@ export const QrCodeTool: React.FC = () => {
 
 // --- Device Info Tool ---
 export const DeviceInfoTool: React.FC = () => {
+  useLocaleRender();
     // Lazily initialize state to avoid setting it in effect
-    const [info, setInfo] = useState<Record<string, string>>(() => {
+    const [info, setInfo] = useState<Record<string, string>>((): Record<string, string> => {
         // Check if window is defined (for safety, though we are client-side)
         if (typeof window !== 'undefined') {
             return {
@@ -583,7 +588,7 @@ export const DeviceInfoTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="设备信息" description="查看当前浏览器和系统环境信息。" />
+            <CardHeader title={tr("设备信息")} description={tr("查看当前浏览器和系统环境信息。")} />
             <CardContent className="flex-1 overflow-auto">
                 <div className="grid grid-cols-1 gap-4">
                     {Object.entries(info).map(([key, value]) => (

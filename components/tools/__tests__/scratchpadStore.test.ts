@@ -13,10 +13,14 @@ vi.stubGlobal('localStorage', {
   removeItem: vi.fn(),
 });
 
-const { saveEntity } = await import('../shared/scratchpadDb');
-const { useScratchpadStore } = await import('../shared/scratchpadStore');
+const { saveEntity, getEntity } = await import('../shared/scratchpadDb');
+const { useScratchpadStore, getScratchpadItemContent } = await import('../shared/scratchpadStore');
 
 describe('scratchpad store degraded persistence', () => {
+  it('propagates missing binary content instead of exporting an empty file', async () => {
+    vi.mocked(getEntity).mockRejectedValueOnce(new Error('missing content'));
+    await expect(getScratchpadItemContent({ id: 'missing', name: 'missing.bin', type: 'binary', content: '', isBinary: true, size: 10, timestamp: 1 })).rejects.toThrow('missing content');
+  });
   beforeEach(() => {
     useScratchpadStore.setState({ items: [], storageStatus: 'ok', lastStorageError: undefined });
     vi.mocked(saveEntity).mockReset();
@@ -47,6 +51,11 @@ describe('scratchpad store degraded persistence', () => {
     expect(useScratchpadStore.getState().items).toHaveLength(0);
   });
 
+  it('rejects a save when metadata persistence is unavailable', async () => {
+    vi.mocked(localStorage.setItem).mockImplementationOnce(() => { throw new Error('metadata quota'); }).mockImplementationOnce(() => { throw new Error('metadata quota'); });
+    await expect(useScratchpadStore.getState().addItemAsync('note', 'text')).rejects.toThrow('metadata quota');
+  });
+
   it('preserves source, sensitive, and origin metadata', async () => {
     vi.mocked(saveEntity).mockResolvedValueOnce(undefined);
 
@@ -60,6 +69,9 @@ describe('scratchpad store degraded persistence', () => {
       originAction: 'generate-key',
     });
 
+    expect(saveEntity).not.toHaveBeenCalled();
+    expect(await getScratchpadItemContent(useScratchpadStore.getState().items[0])).toBe('secret-key');
+    expect(JSON.stringify(vi.mocked(localStorage.setItem).mock.calls.at(-1))).not.toContain('secret-key');
     expect(useScratchpadStore.getState().items[0]).toMatchObject({
       sourceTool: 'PGP',
       sensitive: true,

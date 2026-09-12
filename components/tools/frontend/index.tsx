@@ -1,3 +1,5 @@
+import { useDraftState } from '../shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import { Check, Copy, Download, Search, Info } from 'lucide-react';
 import { optimize } from 'svgo/browser';
@@ -31,6 +33,7 @@ const mimeRows = [
 ];
 
 export const MimeTypeTool: React.FC = () => {
+  useLocaleRender();
   const [query, setQuery] = useState('');
 
   const rows = useMemo(() => {
@@ -43,7 +46,7 @@ export const MimeTypeTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="MIME 类型" description="查询常见文件扩展名与 MIME 类型。" />
+      <CardHeader title={tr("MIME 类型")} description={tr("查询常见文件扩展名与 MIME 类型。")} />
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -75,6 +78,7 @@ const encodeSvg = (svg: string) =>
     .replace(/>/g, '%3E');
 
 export const SvgToCssTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#2563eb"/></svg>');
   const { copied, copy } = useCopyToClipboard();
   const encoded = encodeSvg(svg);
@@ -83,7 +87,7 @@ export const SvgToCssTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="SVG 转 CSS" description="把内联 SVG 转换为 CSS Data URL，可用于 background 或 mask。" />
+      <CardHeader title={tr("SVG 转 CSS")} description={tr("把内联 SVG 转换为 CSS Data URL，可用于 background 或 mask。")} />
       <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-2">
           <FieldLabel>SVG</FieldLabel>
@@ -119,9 +123,9 @@ const RangeField: React.FC<{
   step?: number;
   unit?: string;
   onChange: (value: number) => void;
-}> = ({ label, value, min, max, step = 1, unit = 'px', onChange }) => (
+}> = ({ label, value, min, max, step = 1, unit = 'px', onChange }) => { useLocaleRender(); return (
   <div>
-    <FieldLabel hint={`${value}${unit}`}>{label}</FieldLabel>
+    <FieldLabel hint={tr(`${value}${unit}`)}>{tr(label)}</FieldLabel>
     <input
       type="range"
       min={min}
@@ -132,9 +136,10 @@ const RangeField: React.FC<{
       className="w-full accent-primary-600"
     />
   </div>
-);
+); };
 
 export const CssGeneratorTool: React.FC = () => {
+  useLocaleRender();
   const [mode, setMode] = useState<CssGeneratorMode>('shadow');
   const [shadow, setShadow] = useState({ x: 0, y: 18, blur: 38, spread: -12, opacity: 0.28 });
   const [gradient, setGradient] = useState({ angle: 135, from: '#0f766e', to: '#f59e0b' });
@@ -163,55 +168,54 @@ export const CssGeneratorTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="CSS 可视化生成器"
-        description="用控件调出常见视觉效果，实时预览并复制 CSS。"
+        title={tr("CSS 可视化生成器")}
+        description={tr("用控件调出常见视觉效果，实时预览并复制 CSS。")}
         actions={
           <Button size="sm" variant="secondary" onClick={() => copy(css)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-            复制 CSS
-          </Button>
+            {tr("复制 CSS")}</Button>
         }
       />
       <Tabs>
         {([
-          ['shadow', '阴影'],
-          ['gradient', '渐变'],
-          ['radius', '圆角'],
-          ['glass', '毛玻璃'],
+          ['shadow', tr('阴影')],
+          ['gradient', tr('渐变')],
+          ['radius', tr('圆角')],
+          ['glass', tr('毛玻璃')],
         ] as const).map(([key, label]) => (
-          <TabButton key={key} active={mode === key} onClick={() => setMode(key)}>{label}</TabButton>
+          <TabButton key={key} active={mode === key} onClick={() => setMode(key)}>{tr(label)}</TabButton>
         ))}
       </Tabs>
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="space-y-4">
           {mode === 'shadow' && (
             <>
-              <RangeField label="X 偏移" value={shadow.x} min={-80} max={80} onChange={x => setShadow({ ...shadow, x })} />
-              <RangeField label="Y 偏移" value={shadow.y} min={-80} max={80} onChange={y => setShadow({ ...shadow, y })} />
-              <RangeField label="模糊" value={shadow.blur} min={0} max={120} onChange={blur => setShadow({ ...shadow, blur })} />
-              <RangeField label="扩展" value={shadow.spread} min={-60} max={60} onChange={spread => setShadow({ ...shadow, spread })} />
-              <RangeField label="透明度" value={shadow.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setShadow({ ...shadow, opacity })} />
+              <RangeField label={tr("X 偏移")} value={shadow.x} min={-80} max={80} onChange={x => setShadow({ ...shadow, x })} />
+              <RangeField label={tr("Y 偏移")} value={shadow.y} min={-80} max={80} onChange={y => setShadow({ ...shadow, y })} />
+              <RangeField label={tr("模糊")} value={shadow.blur} min={0} max={120} onChange={blur => setShadow({ ...shadow, blur })} />
+              <RangeField label={tr("扩展")} value={shadow.spread} min={-60} max={60} onChange={spread => setShadow({ ...shadow, spread })} />
+              <RangeField label={tr("透明度")} value={shadow.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setShadow({ ...shadow, opacity })} />
             </>
           )}
           {mode === 'gradient' && (
             <>
-              <RangeField label="角度" value={gradient.angle} min={0} max={360} unit="deg" onChange={angle => setGradient({ ...gradient, angle })} />
-              <div><FieldLabel>起始颜色</FieldLabel><Input type="color" value={gradient.from} onChange={event => setGradient({ ...gradient, from: event.target.value })} /></div>
-              <div><FieldLabel>结束颜色</FieldLabel><Input type="color" value={gradient.to} onChange={event => setGradient({ ...gradient, to: event.target.value })} /></div>
+              <RangeField label={tr("角度")} value={gradient.angle} min={0} max={360} unit="deg" onChange={angle => setGradient({ ...gradient, angle })} />
+              <div><FieldLabel>{tr("起始颜色")}</FieldLabel><Input type="color" value={gradient.from} onChange={event => setGradient({ ...gradient, from: event.target.value })} /></div>
+              <div><FieldLabel>{tr("结束颜色")}</FieldLabel><Input type="color" value={gradient.to} onChange={event => setGradient({ ...gradient, to: event.target.value })} /></div>
             </>
           )}
           {mode === 'radius' && (
             <>
-              <RangeField label="左上" value={radius.tl} min={0} max={120} onChange={tl => setRadius({ ...radius, tl })} />
-              <RangeField label="右上" value={radius.tr} min={0} max={120} onChange={tr => setRadius({ ...radius, tr })} />
-              <RangeField label="右下" value={radius.br} min={0} max={120} onChange={br => setRadius({ ...radius, br })} />
-              <RangeField label="左下" value={radius.bl} min={0} max={120} onChange={bl => setRadius({ ...radius, bl })} />
+              <RangeField label={tr("左上")} value={radius.tl} min={0} max={120} onChange={tl => setRadius({ ...radius, tl })} />
+              <RangeField label={tr("右上")} value={radius.tr} min={0} max={120} onChange={tr => setRadius({ ...radius, tr })} />
+              <RangeField label={tr("右下")} value={radius.br} min={0} max={120} onChange={br => setRadius({ ...radius, br })} />
+              <RangeField label={tr("左下")} value={radius.bl} min={0} max={120} onChange={bl => setRadius({ ...radius, bl })} />
             </>
           )}
           {mode === 'glass' && (
             <>
-              <RangeField label="模糊" value={glass.blur} min={0} max={48} onChange={blur => setGlass({ ...glass, blur })} />
-              <RangeField label="背景透明度" value={glass.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setGlass({ ...glass, opacity })} />
-              <RangeField label="边框透明度" value={glass.border} min={0} max={100} unit="%" onChange={border => setGlass({ ...glass, border })} />
+              <RangeField label={tr("模糊")} value={glass.blur} min={0} max={48} onChange={blur => setGlass({ ...glass, blur })} />
+              <RangeField label={tr("背景透明度")} value={glass.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setGlass({ ...glass, opacity })} />
+              <RangeField label={tr("边框透明度")} value={glass.border} min={0} max={100} unit="%" onChange={border => setGlass({ ...glass, border })} />
             </>
           )}
         </div>
@@ -367,6 +371,7 @@ function computeDomDiff(before: string, after: string): DiffAudit[] {
 }
 
 export const SvgOptimizerTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState(sampleSvg);
   const [multipass, setMultipass] = useState(true);
   const [previewTab, setPreviewTab] = useState<'render' | 'diff' | 'audit'>('render');
@@ -405,27 +410,25 @@ export const SvgOptimizerTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="SVG 智能压缩与细节差分比对"
-        description="本地清理 SVG 注释与冗余属性，内置 Split-Slider 像素级划水差分镜及冗余 DOM 节点精简审计树。"
+        title={tr("SVG 智能压缩与细节差分比对")}
+        description={tr("本地清理 SVG 注释与冗余属性，内置 Split-Slider 像素级划水差分镜及冗余 DOM 节点精简审计树。")}
         actions={
           <div className="flex items-center gap-4 text-xs">
             <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
               <input type="checkbox" checked={multipass} onChange={event => setMultipass(event.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>多轮压缩 (multipass)</span>
+              <span>{tr("多轮压缩 (multipass)")}</span>
             </label>
             <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => copy(result.data)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-              复制优化代码
-            </Button>
+              {tr("复制优化代码")}</Button>
             <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => downloadText(result.data, 'optimized.svg')} icon={<Download className="h-4 w-4" />}>
-              下载 SVG
-            </Button>
+              {tr("下载 SVG")}</Button>
           </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-2">
         {/* Left Side: Original XML Input (Flexible and tall) */}
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel hint={`${before} bytes`}>原始 SVG XML 源代码</FieldLabel>
+          <FieldLabel hint={tr(`${before} bytes`)}>{tr("原始 SVG XML 源代码")}</FieldLabel>
           <Textarea className="min-h-0 flex-1 font-mono text-xs leading-relaxed" value={svg} onChange={event => setSvg(event.target.value)} />
         </div>
 
@@ -443,7 +446,7 @@ export const SvgOptimizerTool: React.FC = () => {
             </div>
             <div className="tool-panel p-3.5 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-950/40 border border-emerald-200 dark:border-emerald-900/30 rounded-xl text-emerald-800 dark:text-emerald-400">
               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider">Saved</div>
-              <strong className="text-base font-mono font-extrabold">{saved}% 体积</strong>
+              <strong className="text-base font-mono font-extrabold">{saved}{tr("% 体积")}</strong>
             </div>
           </div>
 
@@ -456,16 +459,16 @@ export const SvgOptimizerTool: React.FC = () => {
           {/* Interactive tabs */}
           <div className="flex border-b border-slate-200 dark:border-slate-800">
             {([
-              ['render', '优化预览'],
-              ['diff', '2D 划水差分拉条'],
-              ['audit', 'DOM 冗余精简树'],
+              ['render', tr('优化预览')],
+              ['diff', tr('2D 划水差分拉条')],
+              ['audit', tr('DOM 冗余精简树')],
             ] as const).map(([tabKey, label]) => (
               <button
                 key={tabKey}
                 onClick={() => setPreviewTab(tabKey)}
                 className={`py-2 px-4 text-xs font-semibold border-b-2 transition-all ${previewTab === tabKey ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
               >
-                {label}
+                {tr(label)}
               </button>
             ))}
           </div>
@@ -475,7 +478,7 @@ export const SvgOptimizerTool: React.FC = () => {
             {previewTab === 'render' && (
               <div className="flex-1 flex flex-col min-h-0">
                 <CodePanel className="flex-1 overflow-auto whitespace-pre-wrap text-[10px] font-mono p-4 border-b border-slate-200 dark:border-slate-800 leading-relaxed bg-slate-950 text-emerald-400">
-                  {result.data || '优化结果将在这里显示'}
+                  {result.data || tr('优化结果将在这里显示')}
                 </CodePanel>
                 <div className="bg-white dark:bg-slate-950 p-4 h-32 flex items-center justify-center overflow-auto flex-none" dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }} />
               </div>
@@ -513,7 +516,7 @@ export const SvgOptimizerTool: React.FC = () => {
 
                 {/* Slider inputs control board */}
                 <div className="mt-3 flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl flex-none">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">差分拉条</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">{tr("差分拉条")}</span>
                   <input 
                     type="range" min="0" max="100" 
                     value={sliderValue} 
@@ -529,7 +532,7 @@ export const SvgOptimizerTool: React.FC = () => {
               <div className="flex-1 overflow-auto p-4 space-y-2.5 max-h-[380px]">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 border-b pb-2 dark:border-slate-800">
                   <Info className="w-3.5 h-3.5 text-primary-500" />
-                  <span>下面列出了 SVGO 引擎在此次压缩中，成功为您剥离的冗余元素及压缩属性：</span>
+                  <span>{tr("下面列出了 SVGO 引擎在此次压缩中，成功为您剥离的冗余元素及压缩属性：")}</span>
                 </div>
 
                 <div className="space-y-2">
@@ -556,7 +559,8 @@ export const SvgOptimizerTool: React.FC = () => {
 
 // ================= HTML to JSX Tool =================
 export const HtmlToJsxTool: React.FC = () => {
-  const [html, setHtml] = useState(
+  useLocaleRender();
+  const [html, setHtml] = useDraftState("components/tools/frontend/index.tsx:HtmlToJsxTool:html",
     `<div class="card" style="margin-top: 10px; background: #fff">\n  <label for="username">Username</label>\n  <input type="text" id="username" class="input-field" disabled>\n  <hr>\n</div>`
   );
   const [wrapFragment, setWrapFragment] = useState(false);
@@ -677,8 +681,8 @@ export const HtmlToJsxTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="HTML 转 JSX 智能编译器"
-        description="将原生 HTML 极速、精确地转换为 React JSX 格式，自动转换 class, style, label-for 等属性。"
+        title={tr("HTML 转 JSX 智能编译器")}
+        description={tr("将原生 HTML 极速、精确地转换为 React JSX 格式，自动转换 class, style, label-for 等属性。")}
         actions={
           <div className="flex items-center gap-4 text-xs">
             <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
@@ -688,18 +692,18 @@ export const HtmlToJsxTool: React.FC = () => {
                 onChange={event => setWrapFragment(event.target.checked)}
                 className="rounded text-primary-600 focus:ring-primary-400"
               />
-              <span>强制 Fragment 包裹</span>
+              <span>{tr("强制 Fragment 包裹")}</span>
             </label>
             <Button size="sm" variant="secondary" disabled={!jsxResult} onClick={() => copy(jsxResult)}>
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              <span className="ml-1">复制 JSX</span>
+              <span className="ml-1">{tr("复制 JSX")}</span>
             </Button>
           </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>HTML 源代码</FieldLabel>
+          <FieldLabel>{tr("HTML 源代码")}</FieldLabel>
           <Textarea
             className="min-h-0 flex-1 font-mono text-xs leading-relaxed"
             value={html}
@@ -707,9 +711,9 @@ export const HtmlToJsxTool: React.FC = () => {
           />
         </div>
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>React JSX 输出</FieldLabel>
+          <FieldLabel>{tr("React JSX 输出")}</FieldLabel>
           <CodePanel className="min-h-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
-            {jsxResult || '// 转换结果将在这里实时显示'}
+            {jsxResult || tr('// 转换结果将在这里实时显示')}
           </CodePanel>
         </div>
       </CardContent>
@@ -719,6 +723,7 @@ export const HtmlToJsxTool: React.FC = () => {
 
 // ================= SVG to React Tool =================
 export const SvgToReactTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState(
     `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">\n  <circle cx="12" cy="12" r="10" />\n  <path d="M12 8v4l3 3" />\n</svg>`
   );
@@ -904,19 +909,19 @@ export const SvgToReactTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="SVG 转 React JSX/TSX 组件"
-        description="一键将 SVG 转换为生产级的 React / TSX 矢量图标组件，支持 TypeScript、forwardRef 引用、自动 currentColor 及弹性尺寸。"
+        title={tr("SVG 转 React JSX/TSX 组件")}
+        description={tr("一键将 SVG 转换为生产级的 React / TSX 矢量图标组件，支持 TypeScript、forwardRef 引用、自动 currentColor 及弹性尺寸。")}
         actions={
           <Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => copy(reactComponentCode)}>
             {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            <span className="ml-1">复制 React 组件</span>
+            <span className="ml-1">{tr("复制 React 组件")}</span>
           </Button>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="space-y-4">
           <div>
-            <FieldLabel>组件命名</FieldLabel>
+            <FieldLabel>{tr("组件命名")}</FieldLabel>
             <Input value={componentName} onChange={e => setComponentName(e.target.value)} placeholder="e.g. MyIcon" />
           </div>
           
@@ -934,20 +939,20 @@ export const SvgToReactTool: React.FC = () => {
           <div className="space-y-2">
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={removeDimensions} onChange={e => setRemoveDimensions(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>清理硬编码宽高 (width/height)</span>
+              <span>{tr("清理硬编码宽高 (width/height)")}</span>
             </label>
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={useCurrentColor} onChange={e => setUseCurrentColor(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>自动替换颜色为 currentColor</span>
+              <span>{tr("自动替换颜色为 currentColor")}</span>
             </label>
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={customSize} onChange={e => setCustomSize(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>注入弹性 size 属性 (默认为 24)</span>
+              <span>{tr("注入弹性 size 属性 (默认为 24)")}</span>
             </label>
           </div>
           
           <div className="flex flex-col gap-2">
-            <FieldLabel>原始 SVG 源码</FieldLabel>
+            <FieldLabel>{tr("原始 SVG 源码")}</FieldLabel>
             <Textarea
               className="h-44 font-mono text-[10px] leading-normal"
               value={svg}
@@ -957,9 +962,9 @@ export const SvgToReactTool: React.FC = () => {
         </div>
 
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>React 组件代码</FieldLabel>
+          <FieldLabel>{tr("React 组件代码")}</FieldLabel>
           <CodePanel className="min-h-[26rem] flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
-            {reactComponentCode || '// 组件输出将在这里实时渲染'}
+            {reactComponentCode || tr('// 组件输出将在这里实时渲染')}
           </CodePanel>
         </div>
       </CardContent>

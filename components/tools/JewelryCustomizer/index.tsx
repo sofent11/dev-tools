@@ -1,3 +1,5 @@
+import { useDraftState } from '../shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect } from 'react';
 import { CanvasStage } from './CanvasStage';
 import { ThreeStage } from './ThreeStage';
@@ -133,9 +135,10 @@ const AVAILABLE_FONTS = [
 ];
 
 export const JewelryCustomizer: React.FC = () => {
+  useLocaleRender();
   // State
   const [selectedFont, setSelectedFont] = useState(AVAILABLE_FONTS[0]);
-  const [text, setText] = useState('Fantistic');
+  const [text, setText] = useDraftState("components/tools/JewelryCustomizer/index.tsx:JewelryCustomizer:text", 'Fantistic');
   const [fontSize, setFontSize] = useState(100);
   const [offsetMm, setOffsetMm] = useState(0.2);
   const [letterSpacingMm, setLetterSpacingMm] = useState(0);
@@ -431,9 +434,9 @@ export const JewelryCustomizer: React.FC = () => {
               </div>
             ) : fontError ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500 px-6 text-center">
-                <div className="font-medium text-slate-700">字体加载失败</div>
-                <div className="text-xs">{fontError}</div>
-                <div className="text-xs text-slate-400">生产预览需要可解析的 TTF/OTF 字体文件。</div>
+                <div className="font-medium text-slate-700">{tr("字体加载失败")}</div>
+                <div className="text-xs">{tr(fontError)}</div>
+                <div className="text-xs text-slate-400">{tr("生产预览需要可解析的 TTF/OTF 字体文件。")}</div>
               </div>
             ) : previewMode === 'split' ? (
               <div className="flex flex-col xl:flex-row gap-4 items-center justify-center w-full h-full min-h-0">
@@ -490,10 +493,10 @@ export const JewelryCustomizer: React.FC = () => {
           </div>
           <div className="mt-2 text-xs text-slate-400 text-center">
             {previewMode === 'split' 
-              ? '联动分屏模式 • 左侧 2D 矢量平面 (可拖拽旋转) • 右侧 3D 金属模型 (拖拽旋转)' 
+              ? tr('联动分屏模式 • 左侧 2D 矢量平面 (可拖拽旋转) • 右侧 3D 金属模型 (拖拽旋转)')
               : previewMode === '3d' 
-                ? '3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放' 
-                : '2D 矢量平面预览 • 可拖拽 • 滚轮缩放'}
+                ? tr('3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放')
+                : tr('2D 矢量平面预览 • 可拖拽 • 滚轮缩放')}
           </div>
         </div>
       </div>

@@ -1,14 +1,17 @@
+import { ScratchpadStorageHealth, ScratchpadItemCard, normalizeScratchpadFileName, getScratchpadFallbackExt } from './components/tools/shared/ScratchpadCards';
+import { readPreference, writePreference } from './components/tools/shared/browserStorage';
+import { ToolErrorBoundary } from './components/tools/shared/ToolErrorBoundary';
+import toolCatalog from './src/tool-catalog.json';
+import { translateUi as tr, useLocaleRender } from './src/i18n/render';
 import React, { Suspense, useEffect, useState, useMemo } from 'react';
 import {
-  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, Download, Copy, Check, FolderArchive, Languages
+  LayoutGrid, Search, Menu, X, ChevronDown, ChevronRight, Sun, Moon, ClipboardList, Trash2, FolderArchive, Languages
 } from 'lucide-react';
-import JSZip from 'jszip';
-import { useScratchpadStore, getScratchpadItemContent, type ScratchpadItem } from './components/tools/shared/scratchpadStore';
-import { sanitizeSvgMarkup } from './components/tools/shared/sanitizeMarkup';
+import { uniqueArchiveName } from './components/tools/shared/archive';
+import { useScratchpadStore, getScratchpadItemContent } from './components/tools/shared/scratchpadStore';
 import { Category, ToolDef } from './types';
 import { TOOLS, TOOL_IDS } from './components/tools/registry';
 import { useI18n } from './src/i18n';
-import { formatBytes } from './components/tools/shared/fileUtils';
 import { notifyToast, type ToastTone } from './components/tools/shared/notifyToast';
 
 const DEFAULT_TOOL_ID = TOOLS[0].id;
@@ -34,43 +37,13 @@ const getAppPathname = () => {
 };
 
 const getToolIdFromLocation = () => {
-  const segments = getAppPathname().split('/').filter(Boolean).map(decodeURIComponent);
+  const segments = getAppPathname().split('/').filter(Boolean).map(segment => { try { return decodeURIComponent(segment); } catch { return ''; } });
   const candidate = segments[0] === TOOL_ROUTE_PREFIX ? segments[1] : segments[0];
 
   return candidate && TOOL_IDS.has(candidate) ? candidate : DEFAULT_TOOL_ID;
 };
 
-const getToolPath = (toolId: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}`;
-
-const normalizeScratchpadFileName = (name: string, fallbackExt: string) => {
-  const fallbackName = `scratchpad-item${fallbackExt}`;
-  const baseName = name
-    .split(/[\\/]/)
-    .pop()
-    ?.replace(/[<>:"|?*]/g, '_')
-    .trim();
-
-  const withoutControlChars = baseName
-    ? Array.from(baseName).map(char => (char.charCodeAt(0) < 32 ? '_' : char)).join('')
-    : '';
-
-  return withoutControlChars || fallbackName;
-};
-
-const getScratchpadFallbackExt = (item: ScratchpadItem) => {
-  if (item.type === 'svg' || item.name.endsWith('.svg')) return '';
-  if (item.type === 'json' || item.name.endsWith('.json')) return '';
-  if (item.type === 'jsx' || item.name.endsWith('.jsx')) return '';
-  if (item.type === 'tsx' || item.name.endsWith('.tsx')) return '';
-  return '.txt';
-};
-
-const getScratchpadMimeType = (item: ScratchpadItem) => {
-  if (item.mime) return item.mime;
-  if (item.type === 'svg' || item.name.endsWith('.svg')) return 'image/svg+xml;charset=utf-8';
-  if (item.type === 'json' || item.name.endsWith('.json')) return 'application/json;charset=utf-8';
-  return 'text/plain;charset=utf-8';
-};
+const getToolPath = (toolId: string, tabId?: string) => `${getBasePath()}/${TOOL_ROUTE_PREFIX}/${encodeURIComponent(toolId)}${tabId ? `#${encodeURIComponent(tabId)}` : ''}`;
 
 interface ToastMessage {
   id: string;
@@ -92,13 +65,14 @@ const translateTextForSearch = (
 };
 
 export default function App() {
+  useLocaleRender();
   const { locale, toggleLocale, t } = useI18n();
   const [activeToolId, setActiveToolId] = useState<string>(() => getToolIdFromLocation());
   const [search, setSearch] = useState('');
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
 
-  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [isDarkMode, setIsDarkMode] = useState(() => readPreference('theme') === 'dark');
 
   // Zustand Global Scratchpad Store State
   const [isScratchpadOpen, setIsScratchpadOpen] = useState(false);
@@ -121,12 +95,14 @@ export default function App() {
   const handleExportZip = async (itemsToExport: typeof scratchpadItems) => {
     if (itemsToExport.length === 0) return;
     try {
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
+      const usedNames = new Set<string>();
       for (const item of itemsToExport) {
         const ext = getScratchpadFallbackExt(item);
         const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
         const fileContent = await getScratchpadItemContent(item);
-        zip.file(fileName, fileContent);
+        zip.file(uniqueArchiveName(fileName, usedNames), fileContent);
       }
       const blobContent = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
@@ -148,10 +124,10 @@ export default function App() {
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
+      writePreference('theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+      writePreference('theme', 'light');
     }
   }, [isDarkMode]);
 
@@ -207,13 +183,14 @@ export default function App() {
     document.title = `${t(activeTool.name)} - ${t('程序员百宝箱')}`;
   }, [activeTool.name, t]);
 
-  const activateTool = (toolId: string) => {
+  const activateTool = (toolId: string, tabId?: string) => {
     setActiveToolId(toolId);
 
-    const nextPath = getToolPath(toolId);
+    const nextPath = getToolPath(toolId, tabId);
     const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (currentPath !== nextPath) {
       window.history.pushState(null, '', nextPath);
+      if (toolId === activeToolId) window.dispatchEvent(new PopStateEvent('popstate'));
     }
 
     if (window.innerWidth < 768) setIsSidebarOpen(false);
@@ -227,7 +204,10 @@ export default function App() {
   };
 
   // Group tools by category
-  const filteredTools = TOOLS.filter(tool =>
+  const searchEntries: Array<ToolDef & { tabId?: string }> = search.trim() ? toolCatalog.map(entry => ({
+    ...TOOLS.find(tool => tool.id === entry.studioId)!, name: entry.name, description: entry.description, tabId: entry.id,
+  })) : TOOLS;
+  const filteredTools = searchEntries.filter(tool =>
     tool.name.toLowerCase().includes(search.toLowerCase()) ||
     tool.description.toLowerCase().includes(search.toLowerCase()) ||
     translateTextForSearch(tool.name, search, t) ||
@@ -241,7 +221,7 @@ export default function App() {
     const tools = filteredTools.filter(t => t.category === cat);
     if (tools.length > 0) acc[cat] = tools;
     return acc;
-  }, {} as Record<string, ToolDef[]>);
+  }, {} as Record<string, Array<ToolDef & { tabId?: string }>>);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--surface-canvas)] font-sans text-slate-950">
@@ -251,7 +231,7 @@ export default function App() {
         <button
           className="fixed left-4 top-4 z-50 inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
           onClick={() => setIsSidebarOpen(true)}
-          aria-label={t('打开工具目录')}
+          aria-label={t(tr('打开工具目录'))}
         >
           <Menu className="w-5 h-5 text-slate-600" />
         </button>
@@ -261,7 +241,7 @@ export default function App() {
         <button
           className="fixed inset-0 z-30 bg-slate-950/20 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
-          aria-label={t('关闭工具目录遮罩')}
+          aria-label={t(tr('关闭工具目录遮罩'))}
         />
       )}
 
@@ -275,13 +255,13 @@ export default function App() {
             <LayoutGrid className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-base font-semibold tracking-normal text-slate-950">程序员百宝箱</div>
-            <div className="text-xs font-medium text-slate-500">{TOOLS.length} {t('个开发效率工具')}</div>
+            <div className="truncate text-base font-semibold tracking-normal text-slate-950">{tr("程序员百宝箱")}</div>
+            <div className="text-xs font-medium text-slate-500">{TOOLS.length} {t(tr('个开发效率工具'))}</div>
           </div>
           <button
             className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 md:hidden"
             onClick={() => setIsSidebarOpen(false)}
-            aria-label={t('关闭工具目录')}
+            aria-label={t(tr('关闭工具目录'))}
           >
             <X className="w-5 h-5" />
           </button>
@@ -292,7 +272,7 @@ export default function App() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder={t('搜索工具...')}
+              placeholder={t(tr('搜索工具...'))}
               className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-primary-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary-500/15"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -326,18 +306,18 @@ export default function App() {
                 <div id={`tool-group-${category}`} className="mt-1 space-y-1">
                   {tools.map(tool => (
                     <a
-                      key={tool.id}
-                      href={getToolPath(tool.id)}
+                      key={`${tool.id}#${tool.tabId || ''}`}
+                      href={getToolPath(tool.id, tool.tabId)}
                       onClick={(event) => {
                         event.preventDefault();
-                        activateTool(tool.id);
+                        activateTool(tool.id, tool.tabId);
                       }}
                       className={`group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
                         ${activeToolId === tool.id
                           ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100'
                           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'}
                       `}
-                      title={`${t(tool.name)} - ${t(tool.description)}`}
+                      title={tr(`${t(tool.name)} - ${t(tool.description)}`)}
                     >
                       <div className={`flex h-8 w-8 flex-none items-center justify-center rounded-lg border
                         ${activeToolId === tool.id ? 'border-primary-100 bg-white text-primary-700' : 'border-slate-100 bg-white text-slate-400 group-hover:text-slate-700'}
@@ -357,7 +337,7 @@ export default function App() {
 
           {Object.keys(groupedTools).length === 0 && (
             <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 py-8 text-center text-sm text-slate-400">
-              {t('未找到相关工具')}
+              {t(tr('未找到相关工具'))}
             </div>
           )}
         </div>
@@ -370,7 +350,7 @@ export default function App() {
             <button
               className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm md:hidden"
               onClick={() => setIsSidebarOpen(true)}
-              aria-label={t('打开工具目录')}
+              aria-label={t(tr('打开工具目录'))}
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -391,8 +371,8 @@ export default function App() {
             <button
               onClick={() => setIsScratchpadOpen(true)}
               className="relative p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
-              title={t('打开全局数据暂存箱')}
-              aria-label={t('打开全局数据暂存箱')}
+              title={t(tr('打开全局数据暂存箱'))}
+              aria-label={t(tr('打开全局数据暂存箱'))}
             >
               <ClipboardList className="w-4 h-4 text-slate-500 dark:text-slate-400" />
               {scratchpadItems.length > 0 && (
@@ -404,8 +384,8 @@ export default function App() {
             <button
               onClick={toggleLocale}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-bold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800 dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
-              title={locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
-              aria-label={locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese'}
+              title={tr(locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese')}
+              aria-label={tr(locale === 'zh-CN' ? 'Switch to English' : 'Switch to Chinese')}
             >
               <Languages className="h-4 w-4" />
               <span>{locale === 'zh-CN' ? 'EN' : 'ZH'}</span>
@@ -413,7 +393,7 @@ export default function App() {
             <button
               onClick={() => setIsDarkMode(!isDarkMode)}
               className="p-2 rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors dark:border-gray-800 dark:bg-gray-900 dark:hover:bg-gray-800"
-              title={isDarkMode ? t('切换到浅色模式') : t('切换到深色模式')}
+              title={tr(isDarkMode ? t('切换到浅色模式') : t('切换到深色模式'))}
             >
               {isDarkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-400" />}
             </button>
@@ -430,16 +410,16 @@ export default function App() {
             <Suspense
               fallback={
                 <div className="flex h-full min-h-[20rem] items-center justify-center rounded-lg border border-slate-200 bg-white text-sm font-medium text-slate-500">
-                  {t('正在加载')} {t(activeTool.name)}...
+                  {t(tr('正在加载'))} {t(activeTool.name)}...
                 </div>
               }
             >
-              <ActiveToolComponent />
+              <ToolErrorBoundary key={activeToolId}><ActiveToolComponent /></ToolErrorBoundary>
             </Suspense>
           </div>
 
           <div className="mt-3 flex-none text-center text-xs text-slate-400">
-            {t('程序员百宝箱')} &copy; {new Date().getFullYear()} • {t('专为开发者打造的效率工具箱')}
+            {t(tr('程序员百宝箱'))} &copy; {new Date().getFullYear()} • {t(tr('专为开发者打造的效率工具箱'))}
           </div>
         </div>
       </main>
@@ -458,14 +438,14 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <ClipboardList className="w-5 h-5 text-primary-500 animate-pulse" />
                 <div>
-                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{t('全局数据暂存箱')}</h3>
-                  <p className="text-[10px] text-slate-400">{t('临时保存文本/代码，打通所有 Studio')}</p>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm">{t(tr('全局数据暂存箱'))}</h3>
+                  <p className="text-[10px] text-slate-400">{t(tr('临时保存文本/代码，打通所有 Studio'))}</p>
                 </div>
               </div>
               <button 
                 onClick={() => setIsScratchpadOpen(false)}
                 className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all"
-                aria-label={t('关闭全局数据暂存箱')}
+                aria-label={t(tr('关闭全局数据暂存箱'))}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -488,7 +468,7 @@ export default function App() {
                   }}
                   className="px-2.5 py-1.5 rounded-lg text-primary-600 font-bold hover:bg-slate-150 dark:hover:bg-slate-850 transition-colors"
                 >
-                  {isMultiSelectMode ? t('常规模式') : t('开启打包多选')}
+                  {isMultiSelectMode ? t(tr('常规模式')) : t(tr('开启打包多选'))}
                 </button>
 
                 {isMultiSelectMode && (
@@ -503,7 +483,7 @@ export default function App() {
                       }}
                       className="px-2 py-1 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-250 transition-colors"
                     >
-                      {validSelectedIds.length === scratchpadItems.length ? t('取消') : t('全选')}
+                      {validSelectedIds.length === scratchpadItems.length ? t(tr('取消')) : t(tr('全选'))}
                     </button>
                     <button
                       onClick={() => {
@@ -525,9 +505,9 @@ export default function App() {
               {scratchpadItems.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-3">
                   <ClipboardList className="w-12 h-12 text-slate-300 dark:text-slate-800 stroke-1" />
-                  <span className="font-bold">{t('暂存箱暂无内容')}</span>
+                  <span className="font-bold">{t(tr('暂存箱暂无内容'))}</span>
                   <p className="text-[10px] text-slate-500 text-center max-w-[220px] leading-relaxed">
-                    {t('您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。')}
+                    {t(tr('您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。'))}
                   </p>
                 </div>
               ) : (
@@ -558,7 +538,7 @@ export default function App() {
                   className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-600 dark:text-slate-300 font-bold text-xs select-none transition-all active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
-                  <span>{t('清空暂存箱')}</span>
+                  <span>{t(tr('清空暂存箱'))}</span>
                 </button>
               </div>
             )}
@@ -595,300 +575,3 @@ export default function App() {
     </div>
   );
 }
-
-const ScratchpadStorageHealth: React.FC<{
-  status: 'ok' | 'degraded' | 'error';
-  lastError?: string;
-  quota: StorageEstimate | null;
-  onRefresh: () => void;
-}> = ({ status, lastError, quota, onRefresh }) => {
-  const { t } = useI18n();
-  const usage = quota?.usage ?? 0;
-  const total = quota?.quota ?? 0;
-  const percent = total > 0 ? Math.min(100, Math.round((usage / total) * 100)) : null;
-  const tone = status === 'ok' ? 'emerald' : status === 'degraded' ? 'amber' : 'red';
-  const label = status === 'ok' ? '存储健康' : status === 'degraded' ? '降级存储' : '存储异常';
-  const description = status === 'ok'
-    ? 'IndexedDB 可用，大文件会保存到浏览器本地。'
-    : status === 'degraded'
-      ? 'IndexedDB 不稳定，小文本仍会保存在元数据中。'
-      : '大文件或二进制暂存可能失败，请下载本地文件或清理空间。';
-
-  return (
-    <div className={`mt-3 rounded-xl border p-3 text-xs ${
-      tone === 'emerald'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-        : tone === 'amber'
-          ? 'border-amber-200 bg-amber-50 text-amber-900'
-          : 'border-red-200 bg-red-50 text-red-900'
-    }`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="font-bold">{t(label)}</div>
-          <p className="mt-1 leading-5">{t(description)}</p>
-          {percent !== null && (
-            <div className="mt-2">
-              <div className="flex justify-between text-[10px] font-semibold opacity-80">
-                <span>{formatBytes(usage)} / {formatBytes(total)}</span>
-                <span>{percent}%</span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/70">
-                <div
-                  className={`h-full ${tone === 'red' ? 'bg-red-500' : tone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {lastError && <p className="mt-2 break-words text-[10px] opacity-80">{lastError}</p>}
-        </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="rounded-lg border border-current/20 bg-white/70 px-2 py-1 text-[10px] font-bold hover:bg-white"
-        >
-          {t('重新检测')}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const ScratchpadItemCard: React.FC<{
-  item: ScratchpadItem;
-  onRemove: (id: string) => void;
-  onUpdate: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'sourceTool'>>) => void;
-  isMultiSelectMode: boolean;
-  isSelected: boolean;
-  onToggleSelect: () => void;
-}> = ({ item, onRemove, onUpdate, isMultiSelectMode, isSelected, onToggleSelect }) => {
-  const { t } = useI18n();
-  const [copied, setCopied] = useState(false);
-  const [isEditingName, setIsEditingName] = useState(false);
-  const [draftName, setDraftName] = useState(item.name);
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const handleCopy = async () => {
-    try {
-      const content = await getScratchpadItemContent(item);
-      let textToCopy = '';
-      if (content instanceof Blob) {
-        textToCopy = await content.text();
-      } else if (content instanceof ArrayBuffer) {
-        textToCopy = new TextDecoder().decode(content);
-      } else {
-        textToCopy = content;
-      }
-      await navigator.clipboard.writeText(textToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (err) {
-      notifyToast({ title: '复制失败', description: (err as Error).message, tone: 'error' });
-    }
-  };
-
-  const handleDownload = async () => {
-    try {
-      const ext = getScratchpadFallbackExt(item);
-      const fileName = normalizeScratchpadFileName(item.name.includes('.') ? item.name : `${item.name}${ext}`, ext);
-      const content = await getScratchpadItemContent(item);
-      const blob = content instanceof Blob ? content : new Blob([content], { type: getScratchpadMimeType(item) });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = fileName;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-    } catch (err) {
-      notifyToast({ title: '下载失败', description: (err as Error).message, tone: 'error' });
-    }
-  };
-
-  const isSvg = item.type === 'svg' || (item.content && item.content.trim().startsWith('<svg') && item.content.includes('</svg>'));
-  const isJson = item.type === 'json' || (() => {
-    if (!item.content) return false;
-    try {
-      const trimmed = item.content.trim();
-      return (trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'));
-    } catch {
-      return false;
-    }
-  })();
-
-  const jsonBadge = useMemo(() => {
-    if (!isJson || !item.content) return '';
-    try {
-      const parsed = JSON.parse(item.content);
-      if (Array.isArray(parsed)) return `Array (${parsed.length})`;
-      if (typeof parsed === 'object' && parsed !== null) return `Object (${Object.keys(parsed).length} keys)`;
-    } catch { /* ignore */ }
-    return 'JSON';
-  }, [item.content, isJson]);
-
-  const sanitizedSvg = useMemo(
-    () => (isSvg && item.content ? sanitizeSvgMarkup(item.content) : ''),
-    [isSvg, item.content],
-  );
-
-  return (
-    <div 
-      onClick={() => isMultiSelectMode && onToggleSelect()}
-      className={`p-3 bg-slate-50 dark:bg-slate-950 border rounded-xl space-y-2 text-xs relative group transition-all hover:shadow-sm flex gap-2.5 ${
-        isMultiSelectMode ? 'cursor-pointer' : ''
-      } ${
-        isSelected ? 'border-primary-400 bg-primary-500/5 dark:bg-primary-550/10' : 'border-slate-200 dark:border-slate-800'
-      }`}
-    >
-      {isMultiSelectMode && (
-        <div className="flex items-center shrink-0" onClick={e => e.stopPropagation()}>
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={onToggleSelect}
-            className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500 cursor-pointer"
-          />
-        </div>
-      )}
-      <div className="flex-1 min-w-0 space-y-2">
-        <div className="flex justify-between items-start">
-          <div className="min-w-0 flex-1 pr-2">
-            {isEditingName ? (
-              <input
-                className="w-full rounded border border-primary-200 bg-white px-1 py-0.5 font-mono text-[11px] font-bold text-slate-800 outline-none focus:ring-2 focus:ring-primary-500/20 dark:bg-slate-900 dark:text-slate-100"
-                value={draftName}
-                autoFocus
-                onClick={event => event.stopPropagation()}
-                onChange={event => setDraftName(event.target.value)}
-                onBlur={() => {
-                  const nextName = draftName.trim() || item.name;
-                  setDraftName(nextName);
-                  onUpdate(item.id, { name: nextName });
-                  setIsEditingName(false);
-                }}
-                onKeyDown={event => {
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                  if (event.key === 'Escape') {
-                    setDraftName(item.name);
-                    setIsEditingName(false);
-                  }
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={event => {
-                  event.stopPropagation();
-                  setIsEditingName(true);
-                }}
-                className="block max-w-full truncate text-left font-mono text-[11px] font-bold text-slate-800 hover:text-primary-700 dark:text-slate-200"
-                title={`${item.name} - 点击重命名`}
-              >
-                {item.name}
-              </button>
-            )}
-            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-              <span className="text-[9px] text-slate-400 font-mono">
-                {new Date(item.timestamp).toLocaleTimeString()} • {formatFileSize(item.size || item.content?.length || 0)}
-              </span>
-              {item.sourceTool && (
-                <span className="border border-slate-200 bg-white px-1 py-0.2 text-[8px] font-bold text-slate-500 dark:border-slate-800 dark:bg-slate-900">
-                  {item.sourceTool}
-                </span>
-              )}
-              {isJson && (
-                <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
-                  {jsonBadge}
-                </span>
-              )}
-              {isSvg && (
-                <span className="bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/35 px-1 py-0.2 rounded text-[8px] font-bold">
-                  {t('SVG 矢量图')}
-                </span>
-              )}
-              {item.isBinary && (
-                <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/35 px-1 py-0.2 rounded text-[8px] font-bold uppercase">
-                  {item.type}
-                </span>
-              )}
-            </div>
-          </div>
-          {!isMultiSelectMode && (
-            <div className="flex gap-1 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-              <button 
-                onClick={handleCopy}
-                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                title={t('复制')}
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-              </button>
-              <button 
-                onClick={handleDownload}
-                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                title={t('下载')}
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <button 
-                onClick={() => onRemove(item.id)}
-                className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500 transition-colors"
-                title={t('删除')}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Preview dynamic cards */}
-        {item.thumbnail ? (
-          <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-850 bg-checkerboard p-1 overflow-hidden hover:scale-[1.01] transition-transform duration-200">
-            <img src={item.thumbnail} alt={item.name} className="h-full w-auto max-w-full object-contain select-none rounded shadow-xs" />
-          </div>
-        ) : item.isBinary ? (
-          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-lg flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 dark:bg-primary-950/40 text-primary-600 dark:text-primary-400 border border-primary-100 dark:border-primary-900/35">
-              <FolderArchive className="h-4.5 w-4.5" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold text-slate-700 dark:text-slate-350 truncate text-[10px] font-mono leading-tight">{item.name}</p>
-              <p className="text-[8px] text-slate-400 mt-0.5 font-bold uppercase">{item.mimeType || item.type || 'BINARY'}</p>
-            </div>
-          </div>
-        ) : isSvg && sanitizedSvg ? (
-          <div className="h-16 w-full flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-800 bg-checkerboard p-1 overflow-hidden hover:scale-[1.02] transition-transform duration-200">
-            <div className="h-full w-auto max-w-full flex items-center justify-center select-none" dangerouslySetInnerHTML={{ __html: sanitizedSvg }} />
-          </div>
-        ) : isJson && item.content ? (
-          <div className="p-2 bg-slate-900 dark:bg-slate-950 border border-slate-850 rounded-lg font-mono text-[9px] text-emerald-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none leading-normal">
-            {(() => {
-              try {
-                return JSON.stringify(JSON.parse(item.content), null, 2).slice(0, 180) + (item.content.length > 180 ? '...' : '');
-              } catch {
-                return item.content.slice(0, 150) + '...';
-              }
-            })()}
-          </div>
-        ) : item.isLarge ? (
-          <div className="p-2 bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-lg font-mono text-[9px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto select-all whitespace-pre-wrap break-all scrollbar-none">
-            <p className="text-slate-400 italic">[{t('大容量文本内容已存入本地 IndexedDB')}]</p>
-            <p className="text-slate-500 font-bold mt-1">{t('大小')}: {formatFileSize(item.size)}</p>
-          </div>
-        ) : item.content ? (
-          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg font-mono text-[9px] text-slate-500 dark:text-slate-400 max-h-16 overflow-y-auto leading-relaxed select-all whitespace-pre-wrap break-all scrollbar-none">
-            {item.content.slice(0, 180)}{item.content.length > 180 ? '...' : ''}
-          </div>
-        ) : (
-          <div className="p-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 rounded-lg font-mono text-[9px] text-slate-450 italic">
-            {t('无内容预览')}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};

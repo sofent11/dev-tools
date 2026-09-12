@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Code, Eye, FileArchive, Link, Type } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -16,11 +17,11 @@ const subTools: SubTool[] = [
   { id: 'escape', name: 'HTML/Uni 转义', description: 'HTML / Unicode', icon: Code, component: StringEscaper },
 ];
 
-export const EncodingBinaryStudio: React.FC = () => (
+export const EncodingBinaryStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="编码、转义与二进制工作室"
-    description="集中处理编码、Data URL、URL 转义、字符实体与二进制查看等跨文本和文件的低层表示转换"
+    title={tr("编码、转义与二进制工作室")}
+    description={tr("集中处理编码、Data URL、URL 转义、字符实体与二进制查看等跨文本和文件的低层表示转换")}
     tools={subTools}
     defaultTab="base64"
   />
-);
+); };

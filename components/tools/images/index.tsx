@@ -1,3 +1,5 @@
+import { useDraftState } from '../shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, ImagePlus, Palette, Upload, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
@@ -320,6 +322,7 @@ const drawBeadChart = (canvas: HTMLCanvasElement, result: BeadPatternResult) => 
 };
 
 export const ImageColorExtractTool: React.FC = () => {
+  useLocaleRender();
   const [imageUrl, setImageUrl] = useState('');
   const [colors, setColors] = useState<Swatch[]>([]);
   const { copied, copy } = useCopyToClipboard();
@@ -335,13 +338,13 @@ export const ImageColorExtractTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="图片颜色提取" description="Canvas 本地采样主色与调色板。" />
+      <CardHeader title={tr("图片颜色提取")} description={tr("Canvas 本地采样主色与调色板。")} />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <div className="flex min-h-0 flex-col gap-4">
           <UploadPanel>
             <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
               <Upload className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择图片</span>
+              <span className="text-sm font-medium text-slate-700">{tr("选择图片")}</span>
               <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
             </label>
           </UploadPanel>
@@ -357,8 +360,7 @@ export const ImageColorExtractTool: React.FC = () => {
             ))}
           </div>
           <Button variant="secondary" icon={copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} onClick={() => copy(colorText)} disabled={!colors.length}>
-            复制色板
-          </Button>
+            {tr("复制色板")}</Button>
         </div>
       </CardContent>
     </Card>
@@ -366,6 +368,7 @@ export const ImageColorExtractTool: React.FC = () => {
 };
 
 export const ImageToBase64Tool: React.FC = () => {
+  useLocaleRender();
   const [dataUrl, setDataUrl] = useState('');
   const [fileName, setFileName] = useState('');
   const [stashed, setStashed] = useState(false);
@@ -377,10 +380,11 @@ export const ImageToBase64Tool: React.FC = () => {
     setDataUrl(await readFileAsDataUrl(file));
   };
 
-  const stash = () => {
+  const stash = async () => {
+    try {
     if (!dataUrl) return;
     const name = fileName ? `${fileName.split('.').shift()}_base64.txt` : 'image_base64.txt';
-    useScratchpadStore.getState().addItem({
+    await useScratchpadStore.getState().addItemAsync({
       name,
       content: dataUrl,
       type: 'text',
@@ -391,22 +395,23 @@ export const ImageToBase64Tool: React.FC = () => {
     notifyToast({ title: 'Base64 图片文本已送入暂存箱', tone: 'success' });
     setStashed(true);
     setTimeout(() => setStashed(false), 2000);
+    } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
   };
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="图片转 Base64" description="把图片转换为可嵌入 HTML/CSS 的 Data URL。" />
+      <CardHeader title={tr("图片转 Base64")} description={tr("把图片转换为可嵌入 HTML/CSS 的 Data URL。")} />
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
         <UploadPanel>
           <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
             <ImagePlus className="h-8 w-8 text-primary-600" />
-            <span className="text-sm font-medium text-slate-700">选择图片</span>
+            <span className="text-sm font-medium text-slate-700">{tr("选择图片")}</span>
             <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
           </label>
         </UploadPanel>
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[18rem_1fr]">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            {dataUrl ? <img src={dataUrl} alt="预览" className="h-full max-h-80 w-full object-contain" /> : <div className="flex h-48 items-center justify-center text-sm text-slate-400">预览</div>}
+            {dataUrl ? <img src={dataUrl} alt="预览" className="h-full max-h-80 w-full object-contain" /> : <div className="flex h-48 items-center justify-center text-sm text-slate-400">{tr("预览")}</div>}
           </div>
           <div className="flex min-h-0 flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -429,9 +434,10 @@ export const ImageToBase64Tool: React.FC = () => {
 };
 
 export const ImageWatermarkTool: React.FC = () => {
+  useLocaleRender();
   const [imageUrl, setImageUrl] = useState('');
   const [sourceName, setSourceName] = useState('');
-  const [text, setText] = useState('程序员百宝箱');
+  const [text, setText] = useDraftState("components/tools/images/index.tsx:ImageWatermarkTool:text", '程序员百宝箱');
   const [stashed, setStashed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -464,10 +470,11 @@ export const ImageWatermarkTool: React.FC = () => {
   };
 
   const stash = () => {
-    canvasRef.current?.toBlob(blob => {
+    canvasRef.current?.toBlob(async blob => {
+      try {
       if (blob) {
         const name = sourceName ? `${sourceName.split('.').shift()}_watermarked.png` : 'watermarked.png';
-        useScratchpadStore.getState().addItem({
+        await useScratchpadStore.getState().addItemAsync({
           name,
           content: blob,
           type: 'image',
@@ -479,26 +486,29 @@ export const ImageWatermarkTool: React.FC = () => {
         setStashed(true);
         setTimeout(() => setStashed(false), 2000);
       }
+      } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
     }, 'image/png');
   };
 
   const download = () => {
-    canvasRef.current?.toBlob(blob => {
+    canvasRef.current?.toBlob(async blob => {
+      try {
       if (blob) downloadBlob(blob, 'watermarked.png');
+      } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
     }, 'image/png');
   };
 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader 
-        title="图片水印" 
-        description="使用 Canvas 在本地添加文字水印。" 
+        title={tr("图片水印")}
+        description={tr("使用 Canvas 在本地添加文字水印。")}
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" icon={stashed ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardList className="h-4 w-4" />} onClick={stash} disabled={!imageUrl}>
               {stashed ? 'Stashed!' : 'Stash'}
             </Button>
-            <Button size="sm" icon={<Download className="h-4 w-4" />} onClick={download} disabled={!imageUrl}>下载</Button>
+            <Button size="sm" icon={<Download className="h-4 w-4" />} onClick={download} disabled={!imageUrl}>{tr("下载")}</Button>
           </div>
         } 
       />
@@ -507,18 +517,18 @@ export const ImageWatermarkTool: React.FC = () => {
           <UploadPanel>
             <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
               <Upload className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择图片</span>
+              <span className="text-sm font-medium text-slate-700">{tr("选择图片")}</span>
               <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
             </label>
           </UploadPanel>
           <div>
-            <FieldLabel>水印文字</FieldLabel>
+            <FieldLabel>{tr("水印文字")}</FieldLabel>
             <Input value={text} onChange={event => { setText(event.target.value); draw(imageUrl, event.target.value); }} />
           </div>
         </div>
         <div className="overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
           <canvas ref={canvasRef} className="max-h-[70vh] max-w-full" />
-          {!imageUrl && <div className="flex h-64 items-center justify-center gap-2 text-slate-400"><Palette className="h-5 w-5" />等待图片</div>}
+          {!imageUrl && <div className="flex h-64 items-center justify-center gap-2 text-slate-400"><Palette className="h-5 w-5" />{tr("等待图片")}</div>}
         </div>
       </CardContent>
     </Card>
@@ -526,6 +536,7 @@ export const ImageWatermarkTool: React.FC = () => {
 };
 
 export const PerlerBeadTool: React.FC = () => {
+  useLocaleRender();
   const [imageUrl, setImageUrl] = useState('');
   const [sourceName, setSourceName] = useState('');
   const [pixelSize, setPixelSize] = useState(45);
@@ -647,8 +658,8 @@ export const PerlerBeadTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="拼豆图纸生成"
-        description="上传图片，本地生成方形拼豆网格、色板图例与可下载图纸。"
+        title={tr("拼豆图纸生成")}
+        description={tr("上传图片，本地生成方形拼豆网格、色板图例与可下载图纸。")}
         actions={
           <Button
             size="sm"
@@ -656,8 +667,7 @@ export const PerlerBeadTool: React.FC = () => {
             onClick={download}
             disabled={!result || isProcessing}
           >
-            下载图纸
-          </Button>
+            {tr("下载图纸")}</Button>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto xl:grid-cols-[20rem_minmax(0,1fr)]">
@@ -665,15 +675,15 @@ export const PerlerBeadTool: React.FC = () => {
           <UploadPanel className="min-h-[9rem]">
             <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
               <ImagePlus className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择拼豆参考图</span>
-              <span className="text-xs text-slate-400">JPG / PNG / WebP，本地处理不上传</span>
+              <span className="text-sm font-medium text-slate-700">{tr("选择拼豆参考图")}</span>
+              <span className="text-xs text-slate-400">{tr("JPG / PNG / WebP，本地处理不上传")}</span>
               <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
             </label>
           </UploadPanel>
 
           <div className="tool-section space-y-4 p-4">
             <div>
-              <FieldLabel hint={`${pixelSize} x ${pixelSize}`}>像素数</FieldLabel>
+              <FieldLabel hint={tr(`${pixelSize} x ${pixelSize}`)}>{tr("像素数")}</FieldLabel>
               <div className="grid grid-cols-[1fr_5.5rem] items-center gap-3">
                 <input
                   type="range"
@@ -695,7 +705,7 @@ export const PerlerBeadTool: React.FC = () => {
             </div>
 
             <div>
-              <FieldLabel hint={`最多 ${maxColors} 色`}>最大颜色数</FieldLabel>
+              <FieldLabel hint={tr(`最多 ${maxColors} 色`)}>{tr("最大颜色数")}</FieldLabel>
               <div className="grid grid-cols-[1fr_5.5rem] items-center gap-3">
                 <input
                   type="range"
@@ -719,31 +729,31 @@ export const PerlerBeadTool: React.FC = () => {
 
           <div className="tool-panel overflow-hidden">
             <div className="border-b border-slate-200 px-4 py-3">
-              <div className="truncate text-sm font-semibold text-slate-800">{sourceName || '源图预览'}</div>
-              <div className="mt-1 text-xs text-slate-500">按中心方形裁切生成图案</div>
+              <div className="truncate text-sm font-semibold text-slate-800">{sourceName || tr('源图预览')}</div>
+              <div className="mt-1 text-xs text-slate-500">{tr("按中心方形裁切生成图案")}</div>
             </div>
             <div className="flex min-h-48 items-center justify-center bg-white p-3">
               {imageUrl ? (
                 <img src={imageUrl} alt="拼豆源图" className="max-h-64 w-full rounded-lg object-contain" />
               ) : (
-                <div className="flex h-48 items-center justify-center text-sm text-slate-400">等待上传图片</div>
+                <div className="flex h-48 items-center justify-center text-sm text-slate-400">{tr("等待上传图片")}</div>
               )}
             </div>
           </div>
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
-          {error && <div className="status-error px-4 py-3 text-sm">{error}</div>}
+          {error && <div className="status-error px-4 py-3 text-sm">{tr(error)}</div>}
 
           <div className="tool-section flex flex-none flex-col overflow-hidden">
             <div className="flex flex-none flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
-                <div className="text-sm font-semibold text-slate-800">图纸预览</div>
+                <div className="text-sm font-semibold text-slate-800">{tr("图纸预览")}</div>
                 <div className="mt-1 text-xs text-slate-500">
-                  {result ? `${result.size * result.size} 颗 · ${result.palette.length} 色` : '生成后可下载完整 PNG'}
+                  {result ? tr(`${result.size * result.size} 颗 · ${result.palette.length} 色`) : tr('生成后可下载完整 PNG')}
                 </div>
               </div>
-              {isProcessing && <div className="text-xs font-medium text-primary-700">正在生成...</div>}
+              {isProcessing && <div className="text-xs font-medium text-primary-700">{tr("正在生成...")}</div>}
             </div>
             <div className="flex min-h-[24rem] items-center justify-center overflow-hidden bg-slate-50 p-4" style={{ height: 'min(68vh, 48rem)' }}>
               <canvas
@@ -752,8 +762,7 @@ export const PerlerBeadTool: React.FC = () => {
               />
               {!result && (
                 <div className="flex h-full w-full items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white text-sm text-slate-400">
-                  上传图片后生成拼豆图纸
-                </div>
+                  {tr("上传图片后生成拼豆图纸")}</div>
               )}
             </div>
           </div>
@@ -761,8 +770,8 @@ export const PerlerBeadTool: React.FC = () => {
           {result && (
             <div className="tool-panel flex-none overflow-hidden">
               <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-3 py-2">
-                <div className="text-xs font-semibold text-slate-700">颜色清单</div>
-                <div className="text-xs text-slate-500">{result.palette.length} 色</div>
+                <div className="text-xs font-semibold text-slate-700">{tr("颜色清单")}</div>
+                <div className="text-xs text-slate-500">{result.palette.length} {tr("色")}</div>
               </div>
               <div className="app-scrollbar grid max-h-24 gap-2 overflow-auto p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {result.palette.map((entry, index) => (
@@ -772,7 +781,7 @@ export const PerlerBeadTool: React.FC = () => {
                       <div className="truncate text-xs font-semibold text-slate-800">
                         #{String(index + 1).padStart(2, '0')} <span className="font-mono font-medium text-slate-500">{entry.hex.toUpperCase()}</span>
                       </div>
-                      <div className="text-[11px] leading-4 text-slate-500">{entry.count} 颗</div>
+                      <div className="text-[11px] leading-4 text-slate-500">{entry.count} {tr("颗")}</div>
                     </div>
                   </div>
                 ))}

@@ -1,3 +1,5 @@
+import { notifyToast } from '../shared/notifyToast';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect } from 'react';
 import { Shield, ArrowRightLeft, FileCode, Check, Copy, Download, AlertTriangle, CheckCircle2, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
@@ -131,6 +133,7 @@ interface AuditReport {
 }
 
 export const AsymmetricKeyTool: React.FC = () => {
+  useLocaleRender();
   const [inputKey, setInputKey] = useState<string>('');
   const [outputFormat, setOutputFormat] = useState<'pem' | 'jwk' | 'der'>('jwk');
   
@@ -141,14 +144,15 @@ export const AsymmetricKeyTool: React.FC = () => {
 
   // Audit State
   const [stashed, setStashed] = useState(false);
-  const stashConvertedKey = () => {
+  const stashConvertedKey = async () => {
     if (!convertedResult) return;
     const isJwk = outputFormat === 'jwk';
     const ext = isJwk ? 'json' : outputFormat === 'pem' ? 'pem' : 'hex';
     const type = isJwk ? 'json' : 'text';
     const mime = isJwk ? 'application/json' : 'text/plain';
     
-    useScratchpadStore.getState().addItem({
+    try {
+    await useScratchpadStore.getState().addItemAsync({
       name: `exported_key.${ext}`,
       content: convertedResult,
       type,
@@ -159,6 +163,7 @@ export const AsymmetricKeyTool: React.FC = () => {
     });
     setStashed(true);
     setTimeout(() => setStashed(false), 2000);
+    } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
   };
 
   const [auditReport, setAuditReport] = useState<AuditReport>({
@@ -427,16 +432,15 @@ export const AsymmetricKeyTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="非对称密钥本地格式转换与体检中心"
-        description="支持 PEM、JWK、DER Hex 三向无损互转，内置 RSA/EC 私钥合规性安全审计。100% 浏览器本地化，杜绝泄漏风险。"
+        title={tr("非对称密钥本地格式转换与体检中心")}
+        description={tr("支持 PEM、JWK、DER Hex 三向无损互转，内置 RSA/EC 私钥合规性安全审计。100% 浏览器本地化，杜绝泄漏风险。")}
         actions={
           <div className="flex gap-2 text-xs">
             <button
               onClick={() => handleLoadSample('rsa-private')}
               className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 transition-all font-semibold"
             >
-              载入测试密钥 (JWK)
-            </button>
+              {tr("载入测试密钥 (JWK)")}</button>
           </div>
         }
       />
@@ -446,11 +450,10 @@ export const AsymmetricKeyTool: React.FC = () => {
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0">
           <div className="flex-1 flex flex-col gap-2 min-h-[220px]">
             <div className="flex justify-between items-center w-full">
-              <FieldLabel hint="支持 RSA (PKCS#1 / PKCS#8), EC 私钥, 公钥或标准 JWK JSON">
-                输入密钥文本
-              </FieldLabel>
+              <FieldLabel hint={tr("支持 RSA (PKCS#1 / PKCS#8), EC 私钥, 公钥或标准 JWK JSON")}>
+                {tr("输入密钥文本")}</FieldLabel>
               <ScratchpadPicker
-                placeholder="📂 从暂存箱调入..."
+                placeholder={tr("📂 从暂存箱调入...")}
                 filter={isScratchpadKeyLike}
                 onLoad={content => {
                   if (typeof content === 'string') setInputKey(content);
@@ -467,7 +470,7 @@ export const AsymmetricKeyTool: React.FC = () => {
 
           <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
             <div>
-              <FieldLabel>期望导出格式</FieldLabel>
+              <FieldLabel>{tr("期望导出格式")}</FieldLabel>
               <div className="grid grid-cols-3 gap-2 mt-1">
                 {(['jwk', 'pem', 'der'] as const).map(fmt => (
                   <button
@@ -486,8 +489,7 @@ export const AsymmetricKeyTool: React.FC = () => {
               onClick={handleConvert}
               icon={<ArrowRightLeft className="w-4 h-4" />}
             >
-              一键安全转换与体检
-            </Button>
+              {tr("一键安全转换与体检")}</Button>
           </div>
         </div>
 
@@ -498,7 +500,7 @@ export const AsymmetricKeyTool: React.FC = () => {
           <div className="p-5 border border-slate-200 dark:border-slate-800 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 space-y-4">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary-500" />
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">密钥合规安全评估报告</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{tr("密钥合规安全评估报告")}</h3>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -510,8 +512,8 @@ export const AsymmetricKeyTool: React.FC = () => {
                 'bg-slate-100/50 border-slate-200 dark:bg-slate-800/10 dark:border-slate-800 text-slate-500'
               }`}>
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70">安全评级 (Strength)</span>
-                  <p className="text-xs font-semibold mt-1 leading-relaxed">{auditReport.strengthText}</p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70">{tr("安全评级 (Strength)")}</span>
+                  <p className="text-xs font-semibold mt-1 leading-relaxed">{tr(auditReport.strengthText)}</p>
                 </div>
                 <div className="flex items-center gap-1.5 mt-3 pt-2 border-t border-current/10">
                   {auditReport.isCompliant ? (
@@ -520,29 +522,29 @@ export const AsymmetricKeyTool: React.FC = () => {
                     <AlertTriangle className="w-4 h-4 text-rose-500 dark:text-rose-400" />
                   )}
                   <span className="text-[11px] font-medium">
-                    {auditReport.isCompliant ? '符合 2026+ 工业安全规范' : '不推荐用于生产或传输'}
+                    {auditReport.isCompliant ? tr('符合 2026+ 工业安全规范') : tr('不推荐用于生产或传输')}
                   </span>
                 </div>
               </div>
 
               {/* Algorithm Details */}
               <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-2">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">密钥元属性</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{tr("密钥元属性")}</span>
                 <div className="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-400">密钥类别:</span>
+                    <span className="text-slate-400">{tr("密钥类别:")}</span>
                     <span className="font-mono font-semibold">{auditReport.type}</span>
                   </div>
                   {auditReport.keySize > 0 && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">密钥位数:</span>
+                      <span className="text-slate-400">{tr("密钥位数:")}</span>
                       <span className="font-mono font-semibold">{auditReport.keySize} bits</span>
                     </div>
                   )}
                   {Object.entries(auditReport.extraInfo).map(([k, v]) => (
                     <div key={k} className="flex justify-between">
                       <span className="text-slate-400">{k}:</span>
-                      <span className="font-mono font-semibold truncate max-w-[140px]" title={v}>{v}</span>
+                      <span className="font-mono font-semibold truncate max-w-[140px]" title={tr(v)}>{v}</span>
                     </div>
                   ))}
                 </div>
@@ -556,7 +558,7 @@ export const AsymmetricKeyTool: React.FC = () => {
               <div className="flex items-center gap-1.5">
                 <FileCode className="w-4 h-4 text-slate-500" />
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
-                  转换输出 ({outputFormat})
+                  {tr("转换输出 (")}{outputFormat})
                 </span>
               </div>
               <div className="flex gap-2">
@@ -567,8 +569,7 @@ export const AsymmetricKeyTool: React.FC = () => {
                   onClick={stashConvertedKey}
                   icon={stashed ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ClipboardList className="w-3.5 h-3.5" />}
                 >
-                  暂存
-                </Button>
+                  {tr("暂存")}</Button>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -576,8 +577,7 @@ export const AsymmetricKeyTool: React.FC = () => {
                   onClick={() => copy(convertedResult)}
                   icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 >
-                  复制
-                </Button>
+                  {tr("复制")}</Button>
                 <Button
                   size="sm"
                   variant="secondary"
@@ -585,8 +585,7 @@ export const AsymmetricKeyTool: React.FC = () => {
                   onClick={downloadResultFile}
                   icon={<Download className="w-3.5 h-3.5" />}
                 >
-                  下载
-                </Button>
+                  {tr("下载")}</Button>
               </div>
             </div>
 
@@ -603,7 +602,7 @@ export const AsymmetricKeyTool: React.FC = () => {
                   readOnly
                   className="w-full h-full font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
                   value={convertedResult || '转换结果与导出的 Key 将在这里呈现...'}
-                  placeholder="转换结果将在此呈现"
+                  placeholder={tr("转换结果将在此呈现")}
                 />
               )}
             </div>

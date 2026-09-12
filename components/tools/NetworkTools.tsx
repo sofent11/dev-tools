@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -296,15 +298,16 @@ export const parseCurlCommand = (curlCmd: string) => {
 };
 
 export const HttpBuilderTool: React.FC = () => {
-    const [method, setMethod] = useState('GET');
-    const [url, setUrl] = useState('');
-    const [headers, setHeaders] = useState('{\n  "Content-Type": "application/json"\n}');
-    const [body, setBody] = useState('');
+  useLocaleRender();
+    const [method, setMethod] = useDraftState("components/tools/NetworkTools.tsx:HttpBuilderTool:method", 'GET');
+    const [url, setUrl] = useDraftState("components/tools/NetworkTools.tsx:HttpBuilderTool:url", '');
+    const [headers, setHeaders] = useDraftState("components/tools/NetworkTools.tsx:HttpBuilderTool:headers", '{\n  "Content-Type": "application/json"\n}');
+    const [body, setBody] = useDraftState("components/tools/NetworkTools.tsx:HttpBuilderTool:body", '');
     const [bodyMode, setBodyMode] = useState<RequestBodyMode>('raw');
     const [response, setResponse] = useState('');
     const [loading, setLoading] = useState(false);
     const [showCurlModal, setShowCurlModal] = useState(false);
-    const [curlInput, setCurlInput] = useState('');
+    const [curlInput, setCurlInput] = useDraftState("components/tools/NetworkTools.tsx:HttpBuilderTool:curlInput", '');
 
     // Code snippet exporter states
     const [resTab, setResTab] = useState<'response' | 'export'>('response');
@@ -582,7 +585,7 @@ export const HttpBuilderTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="HTTP 智能调试与 Mock 沙箱" description="调试本地/公网 API 请求，支持一键 CORS 跨域代理与零后端 Mock 拦截沙箱。" />
+            <CardHeader title={tr("HTTP 智能调试与 Mock 沙箱")} description={tr("调试本地/公网 API 请求，支持一键 CORS 跨域代理与零后端 Mock 拦截沙箱。")} />
             <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
                 
                 {/* Left Side: Request Builder & Configurations (7 cols equivalent) */}
@@ -605,31 +608,28 @@ export const HttpBuilderTool: React.FC = () => {
                             onChange={e => setUrl(e.target.value)}
                         />
                         <Button onClick={() => setShowCurlModal(true)} variant="secondary">
-                            导入 cURL
-                        </Button>
+                            {tr("导入 cURL")}</Button>
                         <Button onClick={sendRequest} disabled={loading} icon={<Send className="w-4 h-4"/>}>
-                            发送请求
-                        </Button>
+                            {tr("发送请求")}</Button>
                     </div>
 
                     {showCurlModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
                             <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-                                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">导入 cURL 命令行请求</span>
+                                    <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{tr("导入 cURL 命令行请求")}</span>
                                     <button onClick={() => setShowCurlModal(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                                        关闭
-                                    </button>
+                                        {tr("关闭")}</button>
                                 </div>
                                 <textarea
                                     className="w-full h-36 p-3 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
-                                    placeholder="例如：curl -X POST 'https://api.example.com/data' -H 'Content-Type: application/json' -d '{&quot;id&quot;: 42}'"
+                                    placeholder={tr("例如：curl -X POST 'https://api.example.com/data' -H 'Content-Type: application/json' -d '{&quot;id&quot;: 42}'")}
                                     value={curlInput}
                                     onChange={e => setCurlInput(e.target.value)}
                                 />
                                 <div className="flex gap-2 justify-end">
-                                    <Button variant="secondary" onClick={() => setShowCurlModal(false)}>取消</Button>
-                                    <Button onClick={handleImportCurl} disabled={!curlInput.trim()}>解析并填充</Button>
+                                    <Button variant="secondary" onClick={() => setShowCurlModal(false)}>{tr("取消")}</Button>
+                                    <Button onClick={handleImportCurl} disabled={!curlInput.trim()}>{tr("解析并填充")}</Button>
                                 </div>
                             </div>
                         </div>
@@ -646,18 +646,18 @@ export const HttpBuilderTool: React.FC = () => {
                                 }}
                                 className="rounded text-primary-600 focus:ring-primary-400" 
                             />
-                            <span>启用 CORS 跨域安全中继代理 (Bypass CORS)</span>
+                            <span>{tr("启用 CORS 跨域安全中继代理 (Bypass CORS)")}</span>
                         </label>
                         {useProxy && (
                             <div className="flex items-center gap-1.5 w-full md:w-auto">
-                                <span className="text-slate-400">代理服务器:</span>
+                                <span className="text-slate-400">{tr("代理服务器:")}</span>
                                 <select 
                                     value={proxyUrl} 
                                     onChange={e => setProxyUrl(e.target.value)}
                                     className="p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-md font-mono text-[10px]"
                                 >
-                                    <option value="https://api.allorigins.win/raw?url=">AllOrigins (免配置)</option>
-                                    <option value="https://cors-anywhere.herokuapp.com/">Cors-Anywhere (需激活)</option>
+                                    <option value="https://api.allorigins.win/raw?url=">{tr("AllOrigins (免配置)")}</option>
+                                    <option value="https://cors-anywhere.herokuapp.com/">{tr("Cors-Anywhere (需激活)")}</option>
                                 </select>
                             </div>
                         )}
@@ -668,11 +668,10 @@ export const HttpBuilderTool: React.FC = () => {
                         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
                             <div className="flex items-start gap-2 font-semibold">
                                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
-                                <span>请求失败！此错误通常是由于浏览器的同源策略 (CORS) 拦截了跨域请求。</span>
+                                <span>{tr("请求失败！此错误通常是由于浏览器的同源策略 (CORS) 拦截了跨域请求。")}</span>
                             </div>
                             <p className="text-rose-600 pl-6 leading-relaxed">
-                                由于本百宝箱运行在您的浏览器本地，向没有明确放开 CORS 头的外部 API 发起网络请求会直接被浏览器强行阻断。
-                            </p>
+                                {tr("由于本百宝箱运行在您的浏览器本地，向没有明确放开 CORS 头的外部 API 发起网络请求会直接被浏览器强行阻断。")}</p>
                             <div className="pl-6 flex gap-2">
                                 <button 
                                     onClick={() => {
@@ -682,14 +681,12 @@ export const HttpBuilderTool: React.FC = () => {
                                     }}
                                     className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-lg transition-all"
                                 >
-                                    一键启用跨域中转代理并重发
-                                </button>
+                                    {tr("一键启用跨域中转代理并重发")}</button>
                                 <button 
                                     onClick={() => setShowCorsAlert(false)}
                                     className="border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg transition-all"
                                 >
-                                    忽略
-                                </button>
+                                    {tr("忽略")}</button>
                             </div>
                         </div>
                     )}
@@ -719,12 +716,12 @@ export const HttpBuilderTool: React.FC = () => {
                             <textarea
                                 className="flex-1 w-full p-2.5 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
                                 value={body}
-                                placeholder={bodyMode === 'form-data' ? 'layout=earring_text\nartifact=dxf\ntext=Mimi' : 'Raw request payload'}
+                                placeholder={tr(bodyMode === 'form-data' ? 'layout=earring_text\nartifact=dxf\ntext=Mimi' : 'Raw request payload')}
                                 onChange={e => setBody(e.target.value)}
                             />
                             {bodyMode === 'form-data' && (
                                 <p className="text-[11px] text-slate-500 leading-relaxed">
-                                    每行使用 <code>key=value</code>，发送时会自动转换成 <code>multipart/form-data</code>。
+                                    {tr("每行使用")}<code>key=value</code>{tr("，发送时会自动转换成")}<code>multipart/form-data</code>。
                                 </p>
                             )}
                         </div>
@@ -739,7 +736,7 @@ export const HttpBuilderTool: React.FC = () => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5">
                                 <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">本地 Mock 拦截沙箱</h3>
+                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">{tr("本地 Mock 拦截沙箱")}</h3>
                             </div>
                             <label className="relative inline-flex items-center cursor-pointer select-none text-[10px]">
                                 <input 
@@ -748,7 +745,7 @@ export const HttpBuilderTool: React.FC = () => {
                                     className="sr-only peer" 
                                 />
                                 <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
-                                <span className="ml-1.5 font-bold text-slate-600 dark:text-slate-400">{mockEnabled ? '启用' : '未开启'}</span>
+                                <span className="ml-1.5 font-bold text-slate-600 dark:text-slate-400">{mockEnabled ? tr('启用') : tr('未开启')}</span>
                             </label>
                         </div>
 
@@ -761,7 +758,7 @@ export const HttpBuilderTool: React.FC = () => {
                                                 className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono focus:outline-none focus:border-primary-500 font-bold"
                                                 value={rule.path}
                                                 onChange={e => updateMockRule(rule.id, { path: e.target.value })}
-                                                placeholder="拦截路径: /api/v1/..."
+                                                placeholder={tr("拦截路径: /api/v1/...")}
                                             />
                                             <button 
                                                 onClick={() => deleteMockRule(rule.id)}
@@ -772,7 +769,7 @@ export const HttpBuilderTool: React.FC = () => {
                                         </div>
                                         <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold">
                                             <div className="flex items-center gap-1">
-                                                <span>延迟:</span>
+                                                <span>{tr("延迟:")}</span>
                                                 <input 
                                                     type="number" className="w-10 border rounded px-1 text-center font-mono"
                                                     value={rule.delay}
@@ -781,7 +778,7 @@ export const HttpBuilderTool: React.FC = () => {
                                                 <span>ms</span>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                <span>状态:</span>
+                                                <span>{tr("状态:")}</span>
                                                 <input 
                                                     type="number" className="w-10 border rounded px-1 text-center font-mono"
                                                     value={rule.status}
@@ -804,7 +801,7 @@ export const HttpBuilderTool: React.FC = () => {
                                     className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all"
                                 >
                                     <Plus className="w-3.5 h-3.5" />
-                                    <span>添加拦截路由</span>
+                                    <span>{tr("添加拦截路由")}</span>
                                 </button>
                             </div>
                         )}
@@ -818,14 +815,12 @@ export const HttpBuilderTool: React.FC = () => {
                                     className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'response' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                                     onClick={() => setResTab('response')}
                                 >
-                                    响应结果
-                                </button>
+                                    {tr("响应结果")}</button>
                                 <button 
                                     className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'export' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                                     onClick={() => setResTab('export')}
                                 >
-                                    导出请求代码
-                                </button>
+                                    {tr("导出请求代码")}</button>
                             </div>
                         </div>
 
@@ -878,11 +873,12 @@ export const HttpBuilderTool: React.FC = () => {
 
 // --- User Agent Parser ---
 export const UserAgentTool: React.FC = () => {
+  useLocaleRender();
     const [ua, setUa] = useState(navigator.userAgent);
 
     return (
         <Card className="h-full flex flex-col">
-             <CardHeader title="User Agent 解析" description="查看当前浏览器 UA 或解析自定义 UA" />
+             <CardHeader title={tr("User Agent 解析")} description={tr("查看当前浏览器 UA 或解析自定义 UA")} />
              <CardContent className="space-y-4">
                 <textarea
                     className="w-full h-24 p-2 border rounded font-mono text-sm"
@@ -925,6 +921,7 @@ interface IpInfoData {
 
 // --- IP Info (Dynamic Client-Side Utility) ---
 export const IpInfoTool: React.FC = () => {
+  useLocaleRender();
     const [data, setData] = useState<IpInfoData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -966,12 +963,12 @@ export const IpInfoTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-             <CardHeader title="IP 地址及网络信息" description="纯本地浏览器获取并解析本机公网 IP 及归属地信息" />
+             <CardHeader title={tr("IP 地址及网络信息")} description={tr("纯本地浏览器获取并解析本机公网 IP 及归属地信息")} />
              <CardContent className="flex-1 overflow-auto p-6 space-y-6">
                 {loading && (
                     <div className="h-48 flex flex-col items-center justify-center space-y-3">
                         <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
-                        <p className="text-sm text-slate-500 animate-pulse">正在获取本机公网网络信息...</p>
+                        <p className="text-sm text-slate-500 animate-pulse">{tr("正在获取本机公网网络信息...")}</p>
                     </div>
                 )}
 
@@ -979,15 +976,14 @@ export const IpInfoTool: React.FC = () => {
                     <div className="space-y-4">
                         <div className="p-4 bg-red-50 text-red-800 rounded-lg text-sm border border-red-200">
                             <Info className="w-4 h-4 inline mr-2 shrink-0" />
-                            无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：{error}
+                            {tr("无法自动获取您的公网 IP（可能是被广告拦截插件或局域网防火墙阻断）：")}{tr(error)}
                         </div>
                         <Button
                             className="w-full"
                             onClick={() => window.open('https://ipapi.co/json/', '_blank')}
                             icon={<Globe className="w-4 h-4"/>}
                         >
-                            在新标签页手动打开查询链接
-                        </Button>
+                            {tr("在新标签页手动打开查询链接")}</Button>
                     </div>
                 )}
 
@@ -996,13 +992,13 @@ export const IpInfoTool: React.FC = () => {
                         {/* Main IP display */}
                         <div className="bg-gradient-to-br from-primary-50 to-primary-100/50 p-6 rounded-xl border border-primary-100 flex flex-col md:flex-row justify-between items-center gap-4">
                             <div>
-                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">您的公网 IP</span>
+                                <span className="text-xs font-semibold text-primary-600 uppercase tracking-wider">{tr("您的公网 IP")}</span>
                                 <h3 className="text-3xl font-mono font-bold text-slate-800 tracking-tight mt-1">{data.ip}</h3>
                                 {data.note && <p className="text-xs text-amber-600 mt-1">{data.note}</p>}
                             </div>
                             <div className="flex gap-2">
-                                <Button size="sm" onClick={handleCopy}>复制 IP</Button>
-                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>刷新</Button>
+                                <Button size="sm" onClick={handleCopy}>{tr("复制 IP")}</Button>
+                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{tr("刷新")}</Button>
                             </div>
                         </div>
 
@@ -1010,28 +1006,28 @@ export const IpInfoTool: React.FC = () => {
                         {!data.note && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">国家 / 地区</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || '未知'} ({data.country_code || 'N/A'})</p>
+                                    <span className="text-xs text-slate-400 font-medium">{tr("国家 / 地区")}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.country_name || tr('未知')} ({data.country_code || 'N/A'})</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">城市 / 省份</span>
-                                    <p className="text-sm font-semibold text-slate-700">{data.city || '未知'} • {data.region || '未知'}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{tr("城市 / 省份")}</span>
+                                    <p className="text-sm font-semibold text-slate-700">{data.city || tr('未知')} • {data.region || tr('未知')}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">网络服务商 (ISP)</span>
-                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || '未知'} {data.asn ? `(${data.asn})` : ''}</p>
+                                    <span className="text-xs text-slate-400 font-medium">{tr("网络服务商 (ISP)")}</span>
+                                    <p className="text-sm font-semibold text-slate-700 truncate">{data.org || tr('未知')} {data.asn ? `(${data.asn})` : ''}</p>
                                 </div>
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                                    <span className="text-xs text-slate-400 font-medium">经纬度 / 时区</span>
+                                    <span className="text-xs text-slate-400 font-medium">{tr("经纬度 / 时区")}</span>
                                     <p className="text-sm font-semibold text-slate-700">
-                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : '未知'} • {data.timezone || '未知'}
+                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : tr('未知')} • {data.timezone || tr('未知')}
                                     </p>
                                 </div>
                             </div>
                         )}
                         
                         <div className="text-center">
-                            <span className="text-xs text-slate-400">信息由免费公共服务提供 • 仅在浏览器本地获取展示</span>
+                            <span className="text-xs text-slate-400">{tr("信息由免费公共服务提供 • 仅在浏览器本地获取展示")}</span>
                         </div>
                     </div>
                 )}
@@ -1047,6 +1043,7 @@ interface PingRecord {
 }
 
 export const PingAnalyzerTool: React.FC = () => {
+  useLocaleRender();
     const [target, setTarget] = useState('https://www.cloudflare.com/cdn-cgi/trace');
     const [customUrl, setCustomUrl] = useState('');
     const [intervalMs, setIntervalMs] = useState(1000);
@@ -1166,7 +1163,7 @@ export const PingAnalyzerTool: React.FC = () => {
                             className="transition-all hover:scale-150"
                         />
                         <title>
-                            {`时间: ${new Date(p.record.time).toLocaleTimeString()}\n延时: ${p.record.status === 'success' ? p.record.latency + 'ms' : '丢包/超时'}`}
+                            {tr(`时间: ${new Date(p.record.time).toLocaleTimeString()}\n延时: ${p.record.status === 'success' ? p.record.latency + 'ms' : '丢包/超时'}`)}
                         </title>
                     </g>
                 ))}
@@ -1176,27 +1173,27 @@ export const PingAnalyzerTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="本地网络延迟与抖动 Ping 仪表盘" description="在本地浏览器内通过多节点 HTTP 并发轻量嗅探计算网络时延、波动抖动及丢包比率。" />
+            <CardHeader title={tr("本地网络延迟与抖动 Ping 仪表盘")} description={tr("在本地浏览器内通过多节点 HTTP 并发轻量嗅探计算网络时延、波动抖动及丢包比率。")} />
             <CardContent className="flex-1 overflow-auto p-6 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end text-xs">
                     <div className="md:col-span-4 space-y-1.5">
-                        <FieldLabel>嗅探节点服务器</FieldLabel>
+                        <FieldLabel>{tr("嗅探节点服务器")}</FieldLabel>
                         <select
                             value={target}
                             onChange={e => setTarget(e.target.value)}
                             className="w-full p-2 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-semibold"
                         >
                             <option value="https://www.cloudflare.com/cdn-cgi/trace">Cloudflare Global Edge</option>
-                            <option value="https://www.baidu.com/favicon.ico">Baidu (中国大陆推荐)</option>
+                            <option value="https://www.baidu.com/favicon.ico">{tr("Baidu (中国大陆推荐)")}</option>
                             <option value="https://github.com/favicon.ico">GitHub Server</option>
                             <option value="https://www.taobao.com/favicon.ico">Taobao Edge</option>
-                            <option value="custom">自定义主机 URL</option>
+                            <option value="custom">{tr("自定义主机 URL")}</option>
                         </select>
                     </div>
 
                     {target === 'custom' && (
                         <div className="md:col-span-4 space-y-1.5">
-                            <FieldLabel>自定义请求 URL (需支持 HEAD/GET)</FieldLabel>
+                            <FieldLabel>{tr("自定义请求 URL (需支持 HEAD/GET)")}</FieldLabel>
                             <input
                                 value={customUrl}
                                 onChange={e => setCustomUrl(e.target.value)}
@@ -1207,16 +1204,16 @@ export const PingAnalyzerTool: React.FC = () => {
                     )}
 
                     <div className="md:col-span-2 space-y-1.5">
-                        <FieldLabel>探测采样间隔</FieldLabel>
+                        <FieldLabel>{tr("探测采样间隔")}</FieldLabel>
                         <select
                             value={intervalMs}
                             onChange={e => setIntervalMs(Number(e.target.value))}
                             className="w-full p-2 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-mono"
                         >
                             <option value={500}>500 ms</option>
-                            <option value={1000}>1.0 秒</option>
-                            <option value={2000}>2.0 秒</option>
-                            <option value={5000}>5.0 秒</option>
+                            <option value={1000}>{tr("1.0 秒")}</option>
+                            <option value={2000}>{tr("2.0 秒")}</option>
+                            <option value={5000}>{tr("5.0 秒")}</option>
                         </select>
                     </div>
 
@@ -1230,20 +1227,19 @@ export const PingAnalyzerTool: React.FC = () => {
                             }`}
                         >
                             {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                            <span>{isRunning ? '暂停探测' : '开启探测'}</span>
+                            <span>{isRunning ? tr('暂停探测') : tr('开启探测')}</span>
                         </button>
                         <button
                             onClick={() => setHistory([])}
                             className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-500 dark:text-slate-400 font-bold transition-all"
                         >
-                            重置
-                        </button>
+                            {tr("重置")}</button>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">实时延迟</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{tr("实时延迟")}</span>
                         <p className="text-2xl font-mono font-bold text-slate-800 dark:text-slate-100">
                             {history.length > 0 && history[history.length - 1].status === 'success' 
                                 ? `${history[history.length - 1].latency} ms` 
@@ -1252,21 +1248,21 @@ export const PingAnalyzerTool: React.FC = () => {
                         </p>
                     </div>
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">平均延时</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{tr("平均延时")}</span>
                         <p className="text-2xl font-mono font-bold text-primary-500">{avg ? `${avg} ms` : '--'}</p>
                     </div>
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">网络抖动 (Jitter)</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{tr("网络抖动 (Jitter)")}</span>
                         <p className="text-2xl font-mono font-bold text-amber-500">{jitter ? `${jitter} ms` : '--'}</p>
                     </div>
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">丢包率</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{tr("丢包率")}</span>
                         <p className={`text-2xl font-mono font-bold ${lossRate > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
                             {lossRate}%
                         </p>
                     </div>
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1 col-span-2 sm:col-span-1">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">极值 (Min/Max)</span>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{tr("极值 (Min/Max)")}</span>
                         <p className="text-sm font-mono font-bold text-slate-600 dark:text-slate-400 mt-1">
                             {min || max ? `${min} / ${max} ms` : '--'}
                         </p>
@@ -1277,9 +1273,9 @@ export const PingAnalyzerTool: React.FC = () => {
                     <div className="flex justify-between items-center text-xs mb-3">
                         <div className="flex items-center gap-2 font-bold text-slate-300">
                             <Activity className="w-4 h-4 text-primary-500 animate-pulse" />
-                            <span>延迟波动实时波形图</span>
+                            <span>{tr("延迟波动实时波形图")}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 font-mono">采集上限: 最近 30 次</span>
+                        <span className="text-[10px] text-slate-500 font-mono">{tr("采集上限: 最近 30 次")}</span>
                     </div>
 
                     <div className="flex-1 flex items-center justify-center min-h-[150px]">
@@ -1288,7 +1284,7 @@ export const PingAnalyzerTool: React.FC = () => {
                         ) : (
                             <div className="text-slate-500 text-xs text-center space-y-2 select-none">
                                 <Wifi className="w-10 h-10 text-slate-700 mx-auto stroke-1" />
-                                <p>开启网络探测以载入实时延迟波形图表</p>
+                                <p>{tr("开启网络探测以载入实时延迟波形图表")}</p>
                             </div>
                         )}
                     </div>
@@ -1309,6 +1305,7 @@ interface LogItem {
 }
 
 export const WebSocketSseSandboxTool: React.FC = () => {
+  useLocaleRender();
     const [mode, setMode] = useState<'ws' | 'sse'>('ws');
     const [wsUrl, setWsUrl] = useState('wss://echo.websocket.org');
     const [sseUrl, setSseUrl] = useState('https://html5demos.com/sse-demo.php');
@@ -1554,8 +1551,8 @@ export const WebSocketSseSandboxTool: React.FC = () => {
     return (
         <Card className="h-full flex flex-col">
             <CardHeader 
-                title="WebSocket & SSE 实时双向通信沙箱" 
-                description="100% 浏览器离线连接调试，支持 WebSocket 双向数据收发、自定义 Subprotocols、心跳包配置以及 Server-Sent Events (SSE) 流式推送监听。" 
+                title={tr("WebSocket & SSE 实时双向通信沙箱")}
+                description={tr("100% 浏览器离线连接调试，支持 WebSocket 双向数据收发、自定义 Subprotocols、心跳包配置以及 Server-Sent Events (SSE) 流式推送监听。")}
             />
             <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
                 {/* Left Side: Connection & Configuration Panel */}
@@ -1576,7 +1573,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     }}
                                     className="text-primary-600 focus:ring-primary-400" 
                                 />
-                                <span>WebSocket 客户端</span>
+                                <span>{tr("WebSocket 客户端")}</span>
                             </label>
                             <label className="flex items-center gap-1.5 font-bold cursor-pointer">
                                 <input 
@@ -1608,7 +1605,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                 }}
                                 className="rounded text-emerald-600 focus:ring-emerald-400" 
                             />
-                            <span>启用本地 Mock 仿真服务器模式</span>
+                            <span>{tr("启用本地 Mock 仿真服务器模式")}</span>
                         </label>
                     </div>
 
@@ -1626,32 +1623,31 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     onClick={handleConnectWs} 
                                     className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                                 >
-                                    {isConnected ? '断开连接' : '建立连接'}
+                                    {isConnected ? tr('断开连接') : tr('建立连接')}
                                 </Button>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1.5">
-                                    <FieldLabel>子协议 (Subprotocols, 逗号分隔)</FieldLabel>
+                                    <FieldLabel>{tr("子协议 (Subprotocols, 逗号分隔)")}</FieldLabel>
                                     <input
                                         className="p-2 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
-                                        placeholder="mqtt, soap (可选)"
+                                        placeholder={tr("mqtt, soap (可选)")}
                                         value={protocols}
                                         onChange={e => setProtocols(e.target.value)}
                                         disabled={isConnected}
                                     />
                                 </div>
                                 <div className="flex flex-col gap-1.5">
-                                    <FieldLabel>请求头 (Headers) 提示</FieldLabel>
+                                    <FieldLabel>{tr("请求头 (Headers) 提示")}</FieldLabel>
                                     <div className="p-2 border rounded-xl text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                                        💡 浏览器标准 WebSocket API 处于安全沙箱限制，不支持在握手阶段配置自定义 Headers。如需验证鉴权，请将其置于 URL Query 参数中。
-                                    </div>
+                                        {tr("💡 浏览器标准 WebSocket API 处于安全沙箱限制，不支持在握手阶段配置自定义 Headers。如需验证鉴权，请将其置于 URL Query 参数中。")}</div>
                                 </div>
                             </div>
 
                             {/* Send Message Area */}
                             <div className="flex flex-col gap-1.5">
-                                <FieldLabel>发送消息负荷 (Message Body)</FieldLabel>
+                                <FieldLabel>{tr("发送消息负荷 (Message Body)")}</FieldLabel>
                                 <textarea
                                     className="w-full h-36 p-2.5 border rounded-xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
                                     value={message}
@@ -1659,8 +1655,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                 />
                                 <div className="flex justify-end">
                                     <Button onClick={handleSendMsg} disabled={!isConnected} icon={<Send className="w-3.5 h-3.5" />}>
-                                        发送数据帧
-                                    </Button>
+                                        {tr("发送数据帧")}</Button>
                                 </div>
                             </div>
 
@@ -1673,13 +1668,13 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                             onChange={e => setEnableHeartbeat(e.target.checked)}
                                             className="rounded text-primary-600 focus:ring-primary-400" 
                                         />
-                                        <span>开启本地定时心跳保活帧 (Ping Heartbeat)</span>
+                                        <span>{tr("开启本地定时心跳保活帧 (Ping Heartbeat)")}</span>
                                     </label>
                                 </div>
                                 {enableHeartbeat && (
                                     <div className="grid grid-cols-2 gap-3 text-xs animate-in fade-in duration-200">
                                         <div className="space-y-1">
-                                            <span className="text-slate-400">发送间隔 (秒):</span>
+                                            <span className="text-slate-400">{tr("发送间隔 (秒):")}</span>
                                             <input 
                                                 type="number" className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
                                                 value={heartbeatInterval}
@@ -1687,7 +1682,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                             />
                                         </div>
                                         <div className="space-y-1">
-                                            <span className="text-slate-400">心跳帧载荷 (文本):</span>
+                                            <span className="text-slate-400">{tr("心跳帧载荷 (文本):")}</span>
                                             <input 
                                                 className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
                                                 value={heartbeatText}
@@ -1712,14 +1707,13 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     onClick={handleToggleSse} 
                                     className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                                 >
-                                    {isConnected ? '停止监听' : '开启监听'}
+                                    {isConnected ? tr('停止监听') : tr('开启监听')}
                                 </Button>
                             </div>
                             <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs space-y-1">
-                                <span className="font-bold">📢 SSE 长连接协议特性:</span>
+                                <span className="font-bold">{tr("📢 SSE 长连接协议特性:")}</span>
                                 <p className="text-amber-700 leading-relaxed text-[11px]">
-                                    Server-Sent Events 属于单向推送网络协议，浏览器通过 `EventSource` 请求建立并持续监听数据流响应。百宝箱已内置了针对 `onmessage` 默认推送事件以及自定义 `ping` 事件的异步捕获机制。
-                                </p>
+                                    {tr("Server-Sent Events 属于单向推送网络协议，浏览器通过 `EventSource` 请求建立并持续监听数据流响应。百宝箱已内置了针对 `onmessage` 默认推送事件以及自定义 `ping` 事件的异步捕获机制。")}</p>
                             </div>
                         </div>
                     )}
@@ -1730,21 +1724,20 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                     <div className="px-4 py-2.5 border-b border-slate-850 flex justify-between items-center flex-none">
                         <div className="flex items-center gap-2">
                             <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
-                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">长连接事件诊断控制台</span>
+                            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">{tr("长连接事件诊断控制台")}</span>
                         </div>
                         <button 
                             onClick={clearLogs}
                             className="text-[10px] px-2 py-0.5 border border-slate-800 hover:border-slate-700 rounded text-slate-500 hover:text-slate-300 font-bold transition-all"
                         >
-                            清屏
-                        </button>
+                            {tr("清屏")}</button>
                     </div>
 
                     <div className="flex-1 p-3 font-mono text-[10px] leading-relaxed overflow-y-auto space-y-2 select-text scrollbar-thin">
                         {logs.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 select-none">
                                 <Activity className="w-8 h-8 stroke-1 animate-pulse" />
-                                <p>等待网络连接建立以捕获长数据交互帧...</p>
+                                <p>{tr("等待网络连接建立以捕获长数据交互帧...")}</p>
                             </div>
                         ) : (
                             logs.map(log => (

@@ -1,15 +1,18 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState, useEffect, useCallback } from 'react';
 import { Clock, Calendar, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
 export const TimeTool: React.FC = () => {
+  useLocaleRender();
   const [now, setNow] = useState(new Date());
 
   const getInitialTs = () => Math.floor(Date.now() / 1000).toString();
   const getInitialDate = () => new Date().toISOString().slice(0, 16);
 
   const [timestampInput, setTimestampInput] = useState(getInitialTs);
-  const [dateInput, setDateInput] = useState(getInitialDate);
+  const [dateInput, setDateInput] = useDraftState("components/tools/TimeTool.tsx:TimeTool:dateInput", getInitialDate);
 
   // Derived initial outputs (lazy)
   const [humanOutput, setHumanOutput] = useState(() => {
@@ -93,8 +96,8 @@ export const TimeTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader 
-        title="时间/日期工具"
-        description="时间戳转换、日期计算等。"
+        title={tr("时间/日期工具")}
+        description={tr("时间戳转换、日期计算等。")}
         actions={
             <div className="text-xs font-mono bg-slate-100 px-3 py-1 rounded-full border border-slate-200">
                 Current: {Math.floor(now.getTime() / 1000)}
@@ -158,8 +161,7 @@ export const TimeTool: React.FC = () => {
         {/* Date Diff */}
         <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-primary-600"/> 日期差值计算
-            </h3>
+                <Calendar className="w-4 h-4 text-primary-600"/> {tr("日期差值计算")}</h3>
              <div className="flex flex-col md:flex-row items-center gap-4">
                 <div className="flex-1 w-full">
                     <label className="block text-xs uppercase text-slate-500 font-bold mb-1">Start Date</label>

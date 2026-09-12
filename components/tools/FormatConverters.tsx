@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState } from 'react';
 import { Copy, Check, ArrowRightLeft, FileJson, Link, Binary } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -19,7 +21,8 @@ const useCopyToClipboard = () => {
 
 // --- JSON Tool ---
 export const JsonTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/FormatConverters.tsx:JsonTool:input", '');
   const [error, setError] = useState<string | null>(null);
   const { copied, copy } = useCopyToClipboard();
 
@@ -70,14 +73,13 @@ export const JsonTool: React.FC = () => {
         <ScratchpadActionBar className="mb-3">
           <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
             <ScratchpadPicker
-              label="载入 JSON / 文本"
-              placeholder="从暂存箱载入 JSON..."
+              label={tr("载入 JSON / 文本")}
+              placeholder={tr("从暂存箱载入 JSON...")}
               filter={isScratchpadTextLike}
               onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
             />
             <Button size="sm" variant="secondary" onClick={stashJson} disabled={!input}>
-              送入暂存箱
-            </Button>
+              {tr("送入暂存箱")}</Button>
           </div>
         </ScratchpadActionBar>
         <div className="relative flex-1">
@@ -98,7 +100,7 @@ export const JsonTool: React.FC = () => {
         </div>
         {error && (
           <div className="status-error mt-4 flex items-start gap-2 p-3 text-sm">
-             <span className="font-bold">Error:</span> {error}
+             <span className="font-bold">Error:</span> {tr(error)}
           </div>
         )}
       </CardContent>
@@ -108,7 +110,8 @@ export const JsonTool: React.FC = () => {
 
 // --- Base64 Tool ---
 export const Base64Tool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/FormatConverters.tsx:Base64Tool:input", '');
   const [output, setOutput] = useState('');
   const { copied, copy } = useCopyToClipboard();
 
@@ -171,7 +174,8 @@ export const Base64Tool: React.FC = () => {
 
 // --- URL Tool ---
 export const UrlTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/FormatConverters.tsx:UrlTool:input", '');
   const [output, setOutput] = useState('');
   const { copied, copy } = useCopyToClipboard();
 

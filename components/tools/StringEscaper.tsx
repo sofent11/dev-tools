@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState, useRef } from 'react';
 import { Copy, Check, ShieldAlert, ArrowLeftRight, Sparkles, RefreshCw, FileUp, Binary, ChevronLeft, ChevronRight, FileCode } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -125,8 +127,9 @@ const detectMagicMime = (bytes: Uint8Array): { mime: string; label: string } => 
 const DEFAULT_INPUT = '测试客户姓名: 张三丰, 电话: 13812345678, 邮箱: example123@gmail.com, 身份证: 110101199003072345';
 
 export const StringEscaper: React.FC = () => {
+  useLocaleRender();
   const [activeTab, setActiveTab] = useState<'cascade' | 'decoder' | 'hexViewer'>('cascade');
-  const [input, setInput] = useState(DEFAULT_INPUT);
+  const [input, setInput] = useDraftState("components/tools/StringEscaper.tsx:StringEscaper:input", DEFAULT_INPUT);
   const { copiedId, copy } = useCopyToClipboard();
   
   // Local values initialized dynamically to match default input
@@ -202,8 +205,8 @@ export const StringEscaper: React.FC = () => {
   };
 
   // Manual Decoder States
-  const [decodeInput, setDecodeInput] = useState('');
-  const [decodeMode, setDecodeMode] = useState<DecodeMode>('base64');
+  const [decodeInput, setDecodeInput] = useDraftState("components/tools/StringEscaper.tsx:StringEscaper:decodeInput", '');
+  const [decodeMode, setDecodeMode] = useDraftState<DecodeMode>("components/tools/StringEscaper.tsx:StringEscaper:decodeMode", 'base64');
   const [decodeOutput, setDecodeOutput] = useState('');
 
   const handleDecode = () => {
@@ -400,8 +403,8 @@ export const StringEscaper: React.FC = () => {
   return (
     <Card className="h-full flex flex-col min-h-0 bg-slate-900 border-slate-800 text-slate-100">
       <CardHeader
-        title="五向级联转义与二进制极客中心"
-        description="支持 5 编码双向级联转解、本地敏感数据一键离线脱敏掩码，以及高级本地二进制 Hex 查看器。"
+        title={tr("五向级联转义与二进制极客中心")}
+        description={tr("支持 5 编码双向级联转解、本地敏感数据一键离线脱敏掩码，以及高级本地二进制 Hex 查看器。")}
         actions={
           <div className="flex gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
             <button
@@ -409,21 +412,21 @@ export const StringEscaper: React.FC = () => {
               onClick={() => setActiveTab('cascade')}
             >
               <ArrowLeftRight className="w-3.5 h-3.5" />
-              <span>实时双向级联</span>
+              <span>{tr("实时双向级联")}</span>
             </button>
             <button
               className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 ${activeTab === 'decoder' ? 'bg-primary-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
               onClick={() => setActiveTab('decoder')}
             >
               <FileCode className="w-3.5 h-3.5" />
-              <span>单向反转义解码</span>
+              <span>{tr("单向反转义解码")}</span>
             </button>
             <button
               className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 ${activeTab === 'hexViewer' ? 'bg-primary-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
               onClick={() => setActiveTab('hexViewer')}
             >
               <Binary className="w-3.5 h-3.5" />
-              <span>极客 Hex 查看器</span>
+              <span>{tr("极客 Hex 查看器")}</span>
             </button>
           </div>
         }
@@ -437,23 +440,23 @@ export const StringEscaper: React.FC = () => {
             {/* Left Column: Input and Data Masking Controls (5 cols equivalent) */}
             <div className="lg:col-span-5 flex flex-col gap-4 pr-0 lg:pr-3 lg:border-r lg:border-slate-800 min-h-[220px]">
               <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-400 uppercase tracking-wider">输入原始字符串 (同步编辑)</span>
+                <span className="font-bold text-slate-400 uppercase tracking-wider">{tr("输入原始字符串 (同步编辑)")}</span>
                 <div className="flex items-center gap-2">
                   <ScratchpadPicker
-                    placeholder="从暂存箱载入..."
+                    placeholder={tr("从暂存箱载入...")}
                     filter={isScratchpadTextLike}
                     onLoad={content => {
                       if (typeof content === 'string') updateInputAndSync(content);
                     }}
                   />
-                  <span className="text-slate-500 font-mono">{input.length} 字符</span>
+                  <span className="text-slate-500 font-mono">{input.length} {tr("字符")}</span>
                 </div>
               </div>
               <textarea
                 className="flex-1 w-full p-4 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all min-h-[150px]"
                 value={input}
                 onChange={e => updateInputAndSync(e.target.value)}
-                placeholder="输入文本，例如包含姓名、手机、银行卡、身份证等信息..."
+                placeholder={tr("输入文本，例如包含姓名、手机、银行卡、身份证等信息...")}
               />
               <div className="grid grid-cols-2 gap-2.5 flex-none">
                 <button
@@ -461,26 +464,25 @@ export const StringEscaper: React.FC = () => {
                   className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-rose-500"
                 >
                   <ShieldAlert className="w-4 h-4" />
-                  <span>隐私脱敏掩码</span>
+                  <span>{tr("隐私脱敏掩码")}</span>
                 </button>
                 <button
                   onClick={() => updateInputAndSync('')}
                   className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-slate-700"
                 >
                   <RefreshCw className="w-4 h-4" />
-                  <span>清空</span>
+                  <span>{tr("清空")}</span>
                 </button>
               </div>
               
               <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5 text-[10px] text-slate-400 flex-none leading-normal">
                 <p className="font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  双向实时级联功能
-                </p>
+                  {tr("双向实时级联功能")}</p>
                 <ul className="list-disc pl-4 space-y-1">
-                  <li><strong>右侧任意卡片可直接修改</strong>，反解成功的字符串将实时回流至其它所有卡片。</li>
-                  <li><strong>脱敏规则</strong>: 支持手机号、身份证、银行卡、电子邮箱及百家姓人名的本地精准脱敏。</li>
-                  <li className="text-amber-500/90 font-semibold">100% 纯本地离线处理，保障数据与网络绝对安全隐私。</li>
+                  <li><strong>{tr("右侧任意卡片可直接修改")}</strong>{tr("，反解成功的字符串将实时回流至其它所有卡片。")}</li>
+                  <li><strong>{tr("脱敏规则")}</strong>{tr(": 支持手机号、身份证、银行卡、电子邮箱及百家姓人名的本地精准脱敏。")}</li>
+                  <li className="text-amber-500/90 font-semibold">{tr("100% 纯本地离线处理，保障数据与网络绝对安全隐私。")}</li>
                 </ul>
               </div>
             </div>
@@ -488,15 +490,14 @@ export const StringEscaper: React.FC = () => {
             {/* Right Column: 5-way synchronized encodings (7 cols equivalent) */}
             <div className="lg:col-span-7 flex flex-col gap-4 overflow-y-auto pr-1">
               <span className="font-bold text-slate-400 uppercase tracking-wider text-xs block mb-1">
-                五向实时可编辑转义卡片 (编辑卡片自动双向同步)
-              </span>
+                {tr("五向实时可编辑转义卡片 (编辑卡片自动双向同步)")}</span>
               
               {[
-                { label: 'Base64 编码 (Base64)', value: b64Val, id: 'b64' as const },
-                { label: 'URL 编码 (Percent-Encoding)', value: urlVal, id: 'url' as const },
-                { label: 'HTML 实体转义 (HTML Entities)', value: htmlVal, id: 'html' as const },
-                { label: 'Unicode 转义 (Unicode \\u)', value: unicodeVal, id: 'unicode' as const },
-                { label: 'Hex 字符转义 (Hex \\x)', value: hexVal, id: 'hex' as const }
+                { label: tr('Base64 编码 (Base64)'), value: b64Val, id: 'b64' as const },
+                { label: tr('URL 编码 (Percent-Encoding)'), value: urlVal, id: 'url' as const },
+                { label: tr('HTML 实体转义 (HTML Entities)'), value: htmlVal, id: 'html' as const },
+                { label: tr('Unicode 转义 (Unicode \\u)'), value: unicodeVal, id: 'unicode' as const },
+                { label: tr('Hex 字符转义 (Hex \\x)'), value: hexVal, id: 'hex' as const }
               ].map(enc => {
                 const isError = !!errors[enc.id];
                 return (
@@ -511,8 +512,7 @@ export const StringEscaper: React.FC = () => {
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{enc.label}</span>
                         {isError && (
                           <span className="text-[9px] bg-rose-950 border border-rose-800 text-rose-400 px-1.5 py-0.5 rounded font-bold">
-                            格式错误/解码失败
-                          </span>
+                            {tr("格式错误/解码失败")}</span>
                         )}
                       </div>
                       <button
@@ -528,7 +528,7 @@ export const StringEscaper: React.FC = () => {
                       className="w-full font-mono text-xs text-emerald-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-900 focus:outline-none focus:border-primary-500 resize-none leading-relaxed"
                       value={enc.value}
                       onChange={e => handleFieldEdit(enc.id, e.target.value)}
-                      placeholder="等待主输入框输入，或直接在此编辑修改..."
+                      placeholder={tr("等待主输入框输入，或直接在此编辑修改...")}
                     />
                   </div>
                 );
@@ -541,31 +541,31 @@ export const StringEscaper: React.FC = () => {
           <div className="flex-1 flex flex-col gap-4 min-h-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-1/2 min-h-[160px]">
               <div className="flex flex-col min-h-0">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">待解码的字符串</span>
+                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">{tr("待解码的字符串")}</span>
                 <textarea
                   className="flex-1 w-full p-4 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
                   value={decodeInput}
                   onChange={e => setDecodeInput(e.target.value)}
-                  placeholder="请输入需要解码反转义的文本段落..."
+                  placeholder={tr("请输入需要解码反转义的文本段落...")}
                 />
               </div>
               <div className="flex flex-col min-h-0">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">选择解码解析算法</span>
+                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">{tr("选择解码解析算法")}</span>
                 <div className="p-4 border border-slate-800 rounded-xl bg-slate-950 flex flex-col justify-between flex-1">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                     {([
-                      { value: 'base64', label: 'Base64 解码' },
-                      { value: 'url', label: 'URL 解码' },
-                      { value: 'html', label: 'HTML 实体还原' },
-                      { value: 'unicode', label: 'Unicode 还原' },
-                      { value: 'hex', label: 'Hex 还原' }
+                      { value: 'base64', label: tr('Base64 解码') },
+                      { value: 'url', label: tr('URL 解码') },
+                      { value: 'html', label: tr('HTML 实体还原') },
+                      { value: 'unicode', label: tr('Unicode 还原') },
+                      { value: 'hex', label: tr('Hex 还原') }
                     ] satisfies { value: DecodeMode; label: string }[]).map(opt => (
                       <button
                         key={opt.value}
                         onClick={() => setDecodeMode(opt.value)}
                         className={`py-2 px-3 rounded-lg border text-xs font-semibold text-center transition-all ${decodeMode === opt.value ? 'bg-primary-600 border-primary-600 text-white shadow-md' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
                       >
-                        {opt.label}
+                        {tr(opt.label)}
                       </button>
                     ))}
                   </div>
@@ -577,7 +577,7 @@ export const StringEscaper: React.FC = () => {
                       className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-primary-500 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <ArrowLeftRight className="w-4 h-4" />
-                      <span>执行反转义解码</span>
+                      <span>{tr("执行反转义解码")}</span>
                     </button>
                     <button
                       onClick={() => {
@@ -587,7 +587,7 @@ export const StringEscaper: React.FC = () => {
                       className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-slate-700"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      <span>清空输入</span>
+                      <span>{tr("清空输入")}</span>
                     </button>
                   </div>
                 </div>
@@ -595,9 +595,9 @@ export const StringEscaper: React.FC = () => {
             </div>
 
             <div className="flex-1 flex flex-col min-h-[140px] relative">
-              <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">反转义解码结果 (Decoded Output)</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">{tr("反转义解码结果 (Decoded Output)")}</span>
               <div className="flex-1 w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400/90 overflow-auto whitespace-pre-wrap break-all leading-relaxed shadow-inner">
-                {decodeOutput || <span className="text-slate-600 italic">等待执行解码结果...</span>}
+                {decodeOutput || <span className="text-slate-600 italic">{tr("等待执行解码结果...")}</span>}
               </div>
               {decodeOutput && (
                 <button
@@ -627,10 +627,9 @@ export const StringEscaper: React.FC = () => {
                   onChange={handleFileChange}
                 />
                 <FileUp className="w-12 h-12 text-slate-500 group-hover:text-primary-400 group-hover:scale-110 transition-all mb-4" />
-                <h3 className="text-sm font-bold text-slate-300 group-hover:text-white">拖放任意文件至此，或点击本地上传</h3>
+                <h3 className="text-sm font-bold text-slate-300 group-hover:text-white">{tr("拖放任意文件至此，或点击本地上传")}</h3>
                 <p className="text-xs text-slate-500 mt-2 max-w-sm">
-                  支持图片、文档、压缩包、可执行文件等。100% 纯浏览器本地离线解析，无任何网络上传，安全快捷。
-                </p>
+                  {tr("支持图片、文档、压缩包、可执行文件等。100% 纯浏览器本地离线解析，无任何网络上传，安全快捷。")}</p>
               </div>
             ) : (
               // Main Hex Viewer UI
@@ -644,8 +643,7 @@ export const StringEscaper: React.FC = () => {
                     <div>
                       <h4 className="font-bold text-slate-200 truncate max-w-xs md:max-w-md">{hexFile?.name}</h4>
                       <p className="text-[10px] text-slate-500 mt-0.5">
-                        大小: <span className="font-mono text-slate-400 font-bold">{(hexFile?.size || 0).toLocaleString()} 字节</span> • 
-                        魔数检测类型: <span className="text-emerald-400 font-bold">{detectedMeta.label} ({detectedMeta.mime})</span>
+                        {tr("大小:")}<span className="font-mono text-slate-400 font-bold">{(hexFile?.size || 0).toLocaleString()} {tr("字节")}</span> {tr("• 魔数检测类型:")}<span className="text-emerald-400 font-bold">{detectedMeta.label} ({detectedMeta.mime})</span>
                       </p>
                     </div>
                   </div>
@@ -655,14 +653,12 @@ export const StringEscaper: React.FC = () => {
                       onClick={sendHexToScratchpad}
                       className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] shadow transition-all active:scale-95"
                     >
-                      送入暂存箱
-                    </button>
+                      {tr("送入暂存箱")}</button>
                     <button
                       onClick={clearHexFile}
                       className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] transition-all border border-slate-700"
                     >
-                      重新上传
-                    </button>
+                      {tr("重新上传")}</button>
                   </div>
                 </div>
 
@@ -670,13 +666,13 @@ export const StringEscaper: React.FC = () => {
                 <div className="flex-1 bg-slate-950/90 border border-slate-800 rounded-xl overflow-auto p-4 min-h-0 flex flex-col">
                   {/* Grid Header */}
                   <div className="flex items-center pb-2 border-b border-slate-800 font-mono text-[10px] font-bold text-slate-500 tracking-wider uppercase shrink-0">
-                    <div className="w-20 shrink-0">偏移量</div>
+                    <div className="w-20 shrink-0">{tr("偏移量")}</div>
                     <div className="flex gap-1.5 px-3 border-r border-slate-800 shrink-0">
                       {Array.from({ length: 16 }).map((_, i) => (
                         <span key={i} className="w-6 text-center select-none">{i.toString(16).toUpperCase().padStart(2, '0')}</span>
                       ))}
                     </div>
-                    <div className="px-3 grow select-none">ASCII 明文解码</div>
+                    <div className="px-3 grow select-none">{tr("ASCII 明文解码")}</div>
                   </div>
 
                   {/* Hex Matrix Lines */}
@@ -689,9 +685,8 @@ export const StringEscaper: React.FC = () => {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs flex-none">
                     <span className="text-slate-400 font-medium">
-                      第 <span className="font-mono text-white font-bold">{hexPage + 1}</span> / <span className="font-mono text-slate-400">{totalPages}</span> 页 
-                      <span className="text-slate-600 ml-2 hidden sm:inline">
-                        (范围: 0x{(hexPage * bytesPerPage).toString(16).toUpperCase()} - 0x{Math.min((hexPage + 1) * bytesPerPage - 1, (hexBytes?.length || 0) - 1).toString(16).toUpperCase()})
+                      {tr("第")}<span className="font-mono text-white font-bold">{hexPage + 1}</span> / <span className="font-mono text-slate-400">{totalPages}</span> {tr("页")}<span className="text-slate-600 ml-2 hidden sm:inline">
+                        {tr("(范围: 0x")}{(hexPage * bytesPerPage).toString(16).toUpperCase()} - 0x{Math.min((hexPage + 1) * bytesPerPage - 1, (hexBytes?.length || 0) - 1).toString(16).toUpperCase()})
                       </span>
                     </span>
 
@@ -714,7 +709,7 @@ export const StringEscaper: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 text-[10px]">跳转:</span>
+                        <span className="text-slate-500 text-[10px]">{tr("跳转:")}</span>
                         <input
                           type="range"
                           min="0"

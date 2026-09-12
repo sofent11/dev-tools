@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Files, FileSearch, FileText } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -15,10 +16,11 @@ const subTools: SubTool[] = [
 ];
 
 export const FileDocumentStudio: React.FC = () => {
+  useLocaleRender();
   return (
     <TabbedToolbox
-      title="文件、PDF 与 MIME 工作室"
-      description="集中处理本地 PDF 合并转换、文件属性与哈希检测、文件名路径提取和 MIME 类型查询"
+      title={tr("文件、PDF 与 MIME 工作室")}
+      description={tr("集中处理本地 PDF 合并转换、文件属性与哈希检测、文件名路径提取和 MIME 类型查询")}
       tools={subTools}
       defaultTab="pdf"
     />

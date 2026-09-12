@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState } from 'react';
 import { Copy, Check, ArrowRight } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -15,7 +17,8 @@ const useCopyToClipboard = () => {
 };
 
 export const JsonToTsTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/JsonToTsTool.tsx:JsonToTsTool:input", '');
   const [output, setOutput] = useState('');
   const [language, setLanguage] = useState('typescript');
   const [typeName, setTypeName] = useState('Root');
@@ -349,7 +352,7 @@ export const JsonToTsTool: React.FC = () => {
 
         {error && (
           <div className="status-error flex items-start gap-2 p-3 text-sm">
-             <span className="font-bold">Error:</span> {error}
+             <span className="font-bold">Error:</span> {tr(error)}
           </div>
         )}
       </CardContent>

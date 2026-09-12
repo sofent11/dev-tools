@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState } from 'react';
 import { Check, Copy, RefreshCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
@@ -15,6 +16,7 @@ const randomInt = (min: number, max: number) => {
 };
 
 export const RandomNumberTool: React.FC = () => {
+  useLocaleRender();
   const [min, setMin] = useState(1);
   const [max, setMax] = useState(100);
   const [count, setCount] = useState(12);
@@ -27,19 +29,19 @@ export const RandomNumberTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="随机数生成器" description="使用 Web Crypto 生成指定范围内的随机整数。" actions={<Button size="sm" icon={<RefreshCcw className="h-4 w-4" />} onClick={generate}>生成</Button>} />
+      <CardHeader title={tr("随机数生成器")} description={tr("使用 Web Crypto 生成指定范围内的随机整数。")} actions={<Button size="sm" icon={<RefreshCcw className="h-4 w-4" />} onClick={generate}>{tr("生成")}</Button>} />
       <CardContent className="flex flex-1 flex-col gap-5 overflow-auto">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <FieldLabel>最小值</FieldLabel>
+            <FieldLabel>{tr("最小值")}</FieldLabel>
             <Input type="number" value={min} onChange={event => setMin(Number(event.target.value))} />
           </div>
           <div>
-            <FieldLabel>最大值</FieldLabel>
+            <FieldLabel>{tr("最大值")}</FieldLabel>
             <Input type="number" value={max} onChange={event => setMax(Number(event.target.value))} />
           </div>
           <div>
-            <FieldLabel>数量</FieldLabel>
+            <FieldLabel>{tr("数量")}</FieldLabel>
             <Input type="number" min={1} max={500} value={count} onChange={event => setCount(Number(event.target.value))} />
           </div>
         </div>
@@ -109,6 +111,7 @@ const generateChineseName = () => {
 };
 
 export const LoremIpsumTool: React.FC = () => {
+  useLocaleRender();
   const [fields, setFields] = useState<SchemaField[]>([
     { id: 'f-1', name: 'id', type: 'id' },
     { id: 'f-2', name: 'name', type: 'name' },
@@ -322,19 +325,16 @@ module.exports = router;`);
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="可视化 Schema 数据 Mock 发生器"
-        description="支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV、SQL 压测脚本，及 MSW 拦截拦截器、Node Express 路由代码。"
+        title={tr("可视化 Schema 数据 Mock 发生器")}
+        description={tr("支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV、SQL 压测脚本，及 MSW 拦截拦截器、Node Express 路由代码。")}
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" disabled={!output} onClick={handleCopy} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-              一键复制
-            </Button>
+              {tr("一键复制")}</Button>
             <Button size="sm" variant="secondary" disabled={!output} onClick={handleDownload} icon={<Download className="h-4 w-4" />}>
-              导出文件
-            </Button>
+              {tr("导出文件")}</Button>
             <Button size="sm" onClick={handleGenerate} icon={<RefreshCcw className="h-4 w-4" />}>
-              生成数据
-            </Button>
+              {tr("生成数据")}</Button>
           </div>
         }
       />
@@ -343,13 +343,13 @@ module.exports = router;`);
         {/* Left Side: Schema Builder (5 cols equivalent) */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0 border-r border-slate-100 dark:border-slate-800 pr-3">
           <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
-            <span className="text-xs font-bold text-slate-500 uppercase">Schema 字段配置</span>
+            <span className="text-xs font-bold text-slate-500 uppercase">{tr("Schema 字段配置")}</span>
             <button 
               onClick={addField}
               className="flex items-center gap-1 py-1 px-2.5 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 text-[10px] font-bold transition-all dark:bg-primary-950/20"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>添加字段</span>
+              <span>{tr("添加字段")}</span>
             </button>
           </div>
 
@@ -365,7 +365,7 @@ module.exports = router;`);
                     className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
                     value={field.name}
                     onChange={e => updateField(field.id, { name: e.target.value })}
-                    placeholder="字段名 (key)"
+                    placeholder={tr("字段名 (key)")}
                   />
                   <button 
                     onClick={() => deleteField(field.id)}
@@ -377,20 +377,20 @@ module.exports = router;`);
 
                 <div className="grid grid-cols-2 gap-2 text-[10px]">
                   <div>
-                    <span className="text-slate-400 block mb-0.5">类型</span>
+                    <span className="text-slate-400 block mb-0.5">{tr("类型")}</span>
                     <select
                       value={field.type}
                       onChange={e => updateField(field.id, { type: e.target.value as SchemaFieldType })}
                       className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-semibold"
                     >
-                      <option value="id">自增 ID</option>
-                      <option value="uuid">随机 UUID</option>
-                      <option value="name">逼真中文姓名</option>
-                      <option value="phone">中国手机号</option>
-                      <option value="email">电子邮箱</option>
-                      <option value="number">数值区间</option>
-                      <option value="enum">固定枚举</option>
-                      <option value="text">随机段落文本</option>
+                      <option value="id">{tr("自增 ID")}</option>
+                      <option value="uuid">{tr("随机 UUID")}</option>
+                      <option value="name">{tr("逼真中文姓名")}</option>
+                      <option value="phone">{tr("中国手机号")}</option>
+                      <option value="email">{tr("电子邮箱")}</option>
+                      <option value="number">{tr("数值区间")}</option>
+                      <option value="enum">{tr("固定枚举")}</option>
+                      <option value="text">{tr("随机段落文本")}</option>
                     </select>
                   </div>
 
@@ -412,7 +412,7 @@ module.exports = router;`);
 
                   {field.type === 'enum' && (
                     <div className="col-span-2">
-                      <span className="text-slate-400 block mb-0.5">枚举选项 (逗号隔开)</span>
+                      <span className="text-slate-400 block mb-0.5">{tr("枚举选项 (逗号隔开)")}</span>
                       <input 
                         className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-mono text-[9px]"
                         value={field.options || ''}
@@ -429,7 +429,7 @@ module.exports = router;`);
           {/* Export config bar */}
           <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3.5 flex-none text-xs">
             <div>
-              <FieldLabel>输出目标格式</FieldLabel>
+              <FieldLabel>{tr("输出目标格式")}</FieldLabel>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-1">
                 {(['json', 'csv', 'sql', 'msw', 'express'] as const).map(fmt => (
                   <button
@@ -444,7 +444,7 @@ module.exports = router;`);
             </div>
 
             <div>
-              <FieldLabel>API / 数据库表名</FieldLabel>
+              <FieldLabel>{tr("API / 数据库表名")}</FieldLabel>
               <Input 
                 className="font-mono text-xs font-bold mt-1"
                 value={sqlTableName}
@@ -454,7 +454,7 @@ module.exports = router;`);
             </div>
 
             <div>
-              <FieldLabel>生成记录条数</FieldLabel>
+              <FieldLabel>{tr("生成记录条数")}</FieldLabel>
               <Input 
                 type="number" min={1} max={500}
                 className="mt-1"
@@ -476,7 +476,7 @@ module.exports = router;`);
             readOnly
             className="flex-1 w-full h-full p-4 font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
             value={output || '在左侧配置 Schema 字段，点击上方“生成数据”按钮查看结果...'}
-            placeholder="生成的假数据在此处呈现"
+            placeholder={tr("生成的假数据在此处呈现")}
           />
         </div>
 

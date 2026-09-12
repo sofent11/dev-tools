@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
@@ -545,9 +546,9 @@ const buildComponentGroups = (components: ConnectedComponent[], width: number, h
     const componentCenterX = getBoundCenterX(component);
     const componentCenterY = getBoundCenterY(component);
 
-    groups.forEach((group) => {
+    for (const group of groups) {
       if (!isPointInBounds(componentCenterX, componentCenterY, group.ownershipBounds)) {
-        return;
+        continue;
       }
 
       const relation = getBoundingRelationship(component, group.primary);
@@ -557,7 +558,7 @@ const buildComponentGroups = (components: ConnectedComponent[], width: number, h
         bestHorizontalGap = relation.horizontalGap;
         bestVerticalGap = relation.verticalGap;
       }
-    });
+    }
 
     if (
       bestGroup &&
@@ -726,6 +727,7 @@ const createSplitResults = async (
 };
 
 const ImageCompressorPanel: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [compressedFile, setCompressedFile] = useState<Blob | null>(null);
   const [compressedPreviewUrl, setCompressedPreviewUrl] = useState<string | null>(null);
@@ -967,6 +969,7 @@ const ImageCompressorPanel: React.FC = () => {
 };
 
 const StickerSplitterPanel: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [splitResults, setSplitResults] = useState<SplitResult[]>([]);
@@ -1294,8 +1297,8 @@ const StickerSplitterPanel: React.FC = () => {
           <Scissors className="w-8 h-8 text-primary-500" />
         </div>
         <div>
-          <p className="font-medium text-slate-700">上传整张表情包图片</p>
-          <p className="text-sm text-slate-500">适合纯色背景、单个表情之间有明显留白的贴纸图</p>
+          <p className="font-medium text-slate-700">{tr("上传整张表情包图片")}</p>
+          <p className="text-sm text-slate-500">{tr("适合纯色背景、单个表情之间有明显留白的贴纸图")}</p>
         </div>
         <input
           type="file"
@@ -1309,12 +1312,11 @@ const StickerSplitterPanel: React.FC = () => {
         <div className="flex flex-col xl:flex-row gap-6 min-h-0">
           <div className="tool-section h-fit w-full flex-none space-y-5 p-4 xl:w-[22rem]">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Settings className="w-4 h-4" /> 拆分参数
-            </h3>
+              <Settings className="w-4 h-4" /> {tr("拆分参数")}</h3>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">背景容差</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("背景容差")}</label>
                 <input
                   type="range"
                   min="8"
@@ -1329,12 +1331,11 @@ const StickerSplitterPanel: React.FC = () => {
                   className="w-full"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  当前 {options.backgroundTolerance}，背景不是纯白时可适当调高
-                </p>
+                  {tr("当前")}{options.backgroundTolerance}{tr("，背景不是纯白时可适当调高")}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">最小留白</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("最小留白")}</label>
                 <input
                   type="number"
                   min="8"
@@ -1348,11 +1349,11 @@ const StickerSplitterPanel: React.FC = () => {
                   }
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
-                <p className="text-xs text-slate-500 mt-1">用于连接同一表情附近的小装饰，避免被误拆成多行多列</p>
+                <p className="text-xs text-slate-500 mt-1">{tr("用于连接同一表情附近的小装饰，避免被误拆成多行多列")}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">裁切留边 (px)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("裁切留边 (px)")}</label>
                 <input
                   type="number"
                   min="0"
@@ -1369,7 +1370,7 @@ const StickerSplitterPanel: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">导出格式</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("导出格式")}</label>
                 <select
                   value={options.outputFormat}
                   onChange={(e) =>
@@ -1388,7 +1389,7 @@ const StickerSplitterPanel: React.FC = () => {
 
               {options.outputFormat !== 'image/png' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">导出质量</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{tr("导出质量")}</label>
                   <input
                     type="range"
                     min="0.5"
@@ -1403,7 +1404,7 @@ const StickerSplitterPanel: React.FC = () => {
                     }
                     className="w-full"
                   />
-                  <p className="text-xs text-slate-500 mt-1">当前 {Math.round(options.quality * 100)}%</p>
+                  <p className="text-xs text-slate-500 mt-1">{tr("当前")}{Math.round(options.quality * 100)}%</p>
                 </div>
               )}
             </div>
@@ -1414,26 +1415,24 @@ const StickerSplitterPanel: React.FC = () => {
               className="w-full"
               icon={isSplitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
             >
-              {isSplitting ? '正在拆分...' : '自动拆分表情包'}
+              {isSplitting ? tr('正在拆分...') : tr('自动拆分表情包')}
             </Button>
 
             <div className="tool-panel space-y-2 p-3 text-sm text-slate-600">
               <div className="flex items-center gap-2 text-slate-700 font-medium">
                 <Sparkles className="w-4 h-4 text-amber-500" />
-                使用建议
-              </div>
-              <p>背景越纯、表情之间的空白越明显，切出来会越准。</p>
-              <p>如果装饰小图标被拆散了，优先把“最小留白”调大一点再重试。</p>
-              <p>拆分后可直接拖动边框或拖四边控制点，手工修正每张的裁切范围。</p>
+                {tr("使用建议")}</div>
+              <p>{tr("背景越纯、表情之间的空白越明显，切出来会越准。")}</p>
+              <p>{tr("如果装饰小图标被拆散了，优先把“最小留白”调大一点再重试。")}</p>
+              <p>{tr("拆分后可直接拖动边框或拖四边控制点，手工修正每张的裁切范围。")}</p>
             </div>
 
             {selectedResult && sourceInfo && (
               <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-primary-900">手工调整当前边框</p>
+                  <p className="text-sm font-semibold text-primary-900">{tr("手工调整当前边框")}</p>
                   <p className="text-xs text-primary-700 mt-1">
-                    已选中 {selectedResult.name}，可拖动预览框，或在这里精确调整四边坐标。
-                  </p>
+                    {tr("已选中")}{selectedResult.name}{tr("，可拖动预览框，或在这里精确调整四边坐标。")}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1498,16 +1497,14 @@ const StickerSplitterPanel: React.FC = () => {
                       void adjustSelectedBounds(4);
                     }}
                   >
-                    四边外扩 4px
-                  </Button>
+                    {tr("四边外扩 4px")}</Button>
                   <Button
                     variant="secondary"
                     onClick={() => {
                       void adjustSelectedBounds(-4);
                     }}
                   >
-                    四边收紧 4px
-                  </Button>
+                    {tr("四边收紧 4px")}</Button>
                 </div>
 
                 <Button
@@ -1517,11 +1514,10 @@ const StickerSplitterPanel: React.FC = () => {
                     void resetSelectedBounds();
                   }}
                 >
-                  恢复自动识别边框
-                </Button>
+                  {tr("恢复自动识别边框")}</Button>
 
                 <p className="text-xs text-slate-500">
-                  当前尺寸 {selectedResult.width} × {selectedResult.height} px
+                  {tr("当前尺寸")}{selectedResult.width} × {selectedResult.height} px
                 </p>
               </div>
             )}
@@ -1540,14 +1536,13 @@ const StickerSplitterPanel: React.FC = () => {
               </div>
               {splitResults.length > 0 && (
                 <Button onClick={downloadZip} icon={<Archive className="w-4 h-4" />}>
-                  下载 ZIP
-                </Button>
+                  {tr("下载 ZIP")}</Button>
               )}
             </div>
 
             {error && (
               <div className="status-error px-4 py-3 text-sm">
-                {error}
+                {tr(error)}
               </div>
             )}
 
@@ -1555,16 +1550,16 @@ const StickerSplitterPanel: React.FC = () => {
               <div className="tool-section overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                   <div>
-                    <p className="font-medium text-slate-800">原图预览</p>
+                    <p className="font-medium text-slate-800">{tr("原图预览")}</p>
                     <p className="text-sm text-slate-500">
                       {splitResults.length > 0
-                        ? `已识别 ${splitResults.length} 个表情`
-                        : '拆分后会在原图上标出裁切范围'}
+                        ? tr(`已识别 ${splitResults.length} 个表情`)
+                        : tr('拆分后会在原图上标出裁切范围')}
                     </p>
                   </div>
                   {backgroundColor && (
                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span>背景色</span>
+                      <span>{tr("背景色")}</span>
                       <span
                         className="w-4 h-4 rounded border border-slate-200"
                         style={{
@@ -1628,15 +1623,13 @@ const StickerSplitterPanel: React.FC = () => {
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Grid3X3 className="w-4 h-4" />
-                      已切出数量
-                    </div>
+                      {tr("已切出数量")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{splitResults.length}</p>
                   </div>
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <FileImage className="w-4 h-4" />
-                      单张默认格式
-                    </div>
+                      {tr("单张默认格式")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">
                       {getExtensionForMimeType(options.outputFormat).toUpperCase()}
                     </p>
@@ -1644,8 +1637,7 @@ const StickerSplitterPanel: React.FC = () => {
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Archive className="w-4 h-4" />
-                      打包下载
-                    </div>
+                      {tr("打包下载")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">ZIP</p>
                   </div>
                 </div>
@@ -1678,8 +1670,7 @@ const StickerSplitterPanel: React.FC = () => {
                         onClick={() => downloadSingle(result)}
                         icon={<Download className="w-4 h-4" />}
                       >
-                        下载单张
-                      </Button>
+                        {tr("下载单张")}</Button>
                     </div>
                   ))}
                 </div>
@@ -1694,6 +1685,7 @@ const StickerSplitterPanel: React.FC = () => {
 
 // --- Image Vectorizer Panel (Grayscale Marching Edges) ---
 const ImageVectorizerPanel: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(128);
@@ -1824,8 +1816,8 @@ const ImageVectorizerPanel: React.FC = () => {
               accept="image/*" onChange={handleFileChange}
             />
             <Upload className="w-10 h-10 text-slate-400 mb-3" />
-            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">选择本地位图进行矢量化</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">支持 PNG, JPG, WEBP • 纯本地离线计算</p>
+            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">{tr("选择本地位图进行矢量化")}</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{tr("支持 PNG, JPG, WEBP • 纯本地离线计算")}</p>
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -1833,7 +1825,7 @@ const ImageVectorizerPanel: React.FC = () => {
               <ImageIcon className="w-8 h-8 text-primary-500 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{file?.name}</p>
-                <p className="text-[10px] text-slate-500">尺寸: {svgWidth} x {svgHeight} px</p>
+                <p className="text-[10px] text-slate-500">{tr("尺寸:")}{svgWidth} x {svgHeight} px</p>
               </div>
               <button
                 onClick={() => {
@@ -1843,13 +1835,12 @@ const ImageVectorizerPanel: React.FC = () => {
                 }}
                 className="text-[10px] text-rose-500 font-bold hover:underline"
               >
-                移除
-              </button>
+                {tr("移除")}</button>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
-                <span>二值化阈值 (Threshold)</span>
+                <span>{tr("二值化阈值 (Threshold)")}</span>
                 <span className="font-mono text-primary-500">{threshold}</span>
               </div>
               <input 
@@ -1857,12 +1848,12 @@ const ImageVectorizerPanel: React.FC = () => {
                 onChange={e => setThreshold(Number(e.target.value))}
                 className="w-full accent-primary-500"
               />
-              <p className="text-[9px] text-slate-500">数值越低提取线条越细，数值越高填充面积越大。</p>
+              <p className="text-[9px] text-slate-500">{tr("数值越低提取线条越细，数值越高填充面积越大。")}</p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
-                <span>平滑化程度 (Simplify)</span>
+                <span>{tr("平滑化程度 (Simplify)")}</span>
                 <span className="font-mono text-primary-500">{simplifyTolerance}px</span>
               </div>
               <input 
@@ -1870,7 +1861,7 @@ const ImageVectorizerPanel: React.FC = () => {
                 onChange={e => setSimplifyTolerance(Number(e.target.value))}
                 className="w-full accent-primary-500"
               />
-              <p className="text-[9px] text-slate-500">过滤锯齿边缘波动，数值越高线条越平滑。</p>
+              <p className="text-[9px] text-slate-500">{tr("过滤锯齿边缘波动，数值越高线条越平滑。")}</p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 text-xs">
@@ -1879,12 +1870,12 @@ const ImageVectorizerPanel: React.FC = () => {
                   type="checkbox" checked={invert} onChange={e => setInvert(e.target.checked)}
                   className="rounded text-primary-500 focus:ring-primary-400"
                 />
-                <span>反转颜色区域 (Inverting)</span>
+                <span>{tr("反转颜色区域 (Inverting)")}</span>
               </label>
 
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div className="space-y-1">
-                  <span className="text-slate-500 block">前景填充颜色</span>
+                  <span className="text-slate-500 block">{tr("前景填充颜色")}</span>
                   <div className="flex items-center gap-1.5">
                     <input 
                       type="color" value={fillColor.startsWith('#') ? fillColor : '#000000'} 
@@ -1899,15 +1890,15 @@ const ImageVectorizerPanel: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-slate-500 block">背景背景颜色</span>
+                  <span className="text-slate-500 block">{tr("背景背景颜色")}</span>
                   <select 
                     value={bgColor} onChange={e => setBgColor(e.target.value)}
                     className="w-full border rounded px-1 py-0.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-[10px]"
                   >
-                    <option value="transparent">透明背景</option>
-                    <option value="#ffffff">白色白色</option>
-                    <option value="#f8fafc">浅灰背景</option>
-                    <option value="#0f172a">深蓝背景</option>
+                    <option value="transparent">{tr("透明背景")}</option>
+                    <option value="#ffffff">{tr("白色白色")}</option>
+                    <option value="#f8fafc">{tr("浅灰背景")}</option>
+                    <option value="#0f172a">{tr("深蓝背景")}</option>
                   </select>
                 </div>
               </div>
@@ -1915,11 +1906,9 @@ const ImageVectorizerPanel: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={handleDownloadSvg} icon={<Download className="w-4 h-4"/>}>
-                下载 SVG
-              </Button>
+                {tr("下载 SVG")}</Button>
               <Button variant="secondary" onClick={sendSvgToScratchpad}>
-                送入暂存箱
-              </Button>
+                {tr("送入暂存箱")}</Button>
             </div>
           </div>
         )}
@@ -1929,16 +1918,16 @@ const ImageVectorizerPanel: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              {showCode ? 'SVG 矢量源码' : '无损 SVG 预览'}
+              {showCode ? tr('SVG 矢量源码') : tr('无损 SVG 预览')}
             </span>
-            {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">矢量化计算中...</span>}
+            {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">{tr("矢量化计算中...")}</span>}
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowCode(!showCode)}
               className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
             >
-              {showCode ? '图形预览' : '查看源码'}
+              {showCode ? tr('图形预览') : tr('查看源码')}
             </button>
             {svgPath && (
               <button
@@ -1946,7 +1935,7 @@ const ImageVectorizerPanel: React.FC = () => {
                 className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 flex items-center gap-1"
               >
                 {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                <span>复制代码</span>
+                <span>{tr("复制代码")}</span>
               </button>
             )}
           </div>
@@ -1956,7 +1945,7 @@ const ImageVectorizerPanel: React.FC = () => {
           {!previewUrl ? (
             <div className="text-slate-400 text-center text-xs">
               <ImageIcon className="w-12 h-12 text-slate-300 dark:text-slate-800 mx-auto mb-3" />
-              <span>上传位图图像，在此实时生成并预览高阶矢量化路径。</span>
+              <span>{tr("上传位图图像，在此实时生成并预览高阶矢量化路径。")}</span>
             </div>
           ) : showCode ? (
             <pre className="w-full h-full p-4 rounded-xl border border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-950 font-mono text-[10px] text-slate-700 dark:text-slate-300 overflow-auto whitespace-pre leading-relaxed">
@@ -1974,7 +1963,7 @@ const ImageVectorizerPanel: React.FC = () => {
             />
           ) : (
             <div className="text-slate-400 text-center text-xs animate-pulse">
-              <span>正在追踪位图边缘...</span>
+              <span>{tr("正在追踪位图边缘...")}</span>
             </div>
           )}
         </div>
@@ -2091,6 +2080,7 @@ const simplifyCollinearPath = (points: [number, number][], tol: number): [number
 };
 
 export const ImageTools: React.FC = () => {
+  useLocaleRender();
   const [activeTab, setActiveTab] = useState<'compress' | 'split' | 'vectorizer'>('compress');
 
   return (
@@ -2101,14 +2091,11 @@ export const ImageTools: React.FC = () => {
       />
       <Tabs>
         <TabButton active={activeTab === 'compress'} onClick={() => setActiveTab('compress')}>
-          图片压缩/转换
-        </TabButton>
+          {tr("图片压缩/转换")}</TabButton>
         <TabButton active={activeTab === 'split'} onClick={() => setActiveTab('split')}>
-          表情包拆分
-        </TabButton>
+          {tr("表情包拆分")}</TabButton>
         <TabButton active={activeTab === 'vectorizer'} onClick={() => setActiveTab('vectorizer')}>
-          图片矢量化 (Vectorizer)
-        </TabButton>
+          {tr("图片矢量化 (Vectorizer)")}</TabButton>
       </Tabs>
 
       {activeTab === 'compress' ? (

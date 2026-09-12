@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { saveEntity, deleteEntity, getEntity, clearEntities } from './scratchpadDb';
 import { notifyToast } from './notifyToast';
 
@@ -42,7 +42,7 @@ interface ScratchpadState {
   addItem: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => void;
   addItemAsync: (nameOrPayload: string | ScratchpadPayload, content?: string | Blob | ArrayBuffer, type?: string, mimeType?: string) => Promise<string>;
   estimateQuota: () => Promise<StorageEstimate | null>;
-  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool' | 'sensitive' | 'originAction'>>) => void;
+  updateItem: (id: string, updates: Partial<Pick<ScratchpadItem, 'name' | 'type' | 'mime' | 'mimeType' | 'sourceTool' | 'originAction'>>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 }
@@ -52,6 +52,8 @@ declare global {
     __devToolboxScratchpadBridge?: EventListener;
   }
 }
+
+const sessionContent = new Map<string, string | Blob | ArrayBuffer>();
 
 const createScratchpadItemId = () => {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -149,15 +151,12 @@ const generateImageThumbnail = (content: string | Blob): Promise<string | undefi
 };
 
 export const getScratchpadItemContent = async (item: ScratchpadItem): Promise<string | Blob | ArrayBuffer> => {
-  if (!item.isLarge && !item.isBinary && item.content) {
-    return item.content;
+  if (item.sensitive) {
+    if (!sessionContent.has(item.id)) throw new Error('Sensitive session content is no longer available');
+    return sessionContent.get(item.id)!;
   }
-  try {
-    return await getEntity(item.id);
-  } catch (err) {
-    console.error(`Failed to load content for scratchpad item: ${item.id}`, err);
-    return item.content || '';
-  }
+  if (!item.isLarge && !item.isBinary) return item.content;
+  return getEntity(item.id);
 };
 
 export const useScratchpadStore = create<ScratchpadState>()(
@@ -207,7 +206,8 @@ export const useScratchpadStore = create<ScratchpadState>()(
         }
 
         try {
-          await saveEntity(id, payload.content);
+          if (payload.sensitive) sessionContent.set(id, payload.content);
+          else await saveEntity(id, payload.content);
           set({ storageStatus: 'ok', lastStorageError: undefined });
         } catch (err) {
           const message = err instanceof Error ? err.message : '暂存箱 IndexedDB 写入失败';
@@ -223,7 +223,7 @@ export const useScratchpadStore = create<ScratchpadState>()(
           const newItem: ScratchpadItem = {
             id,
             name: resolvedName,
-            content: contentForZustand,
+            content: payload.sensitive ? '' : contentForZustand,
             type: itemType,
             timestamp,
             size,
@@ -257,27 +257,45 @@ export const useScratchpadStore = create<ScratchpadState>()(
         items: state.items.map((item) => (item.id === id ? { ...item, ...updates } : item)),
       })),
 
-      removeItem: (id) => {
-        deleteEntity(id).catch((err) => {
-          console.error(`Failed to delete scratchpad IndexedDB entity for ID: ${id}`, err);
-        });
-        set((state) => ({
-          items: state.items.filter((item) => item.id !== id),
-        }));
+      removeItem: async (id) => {
+        try {
+          if (!get().items.find(item => item.id === id)?.sensitive) await deleteEntity(id);
+          set(state => ({ items: state.items.filter(item => item.id !== id) }));
+          sessionContent.delete(id);
+        } catch (error) {
+          notifyToast({ title: '暂存箱删除失败', description: (error as Error).message, tone: 'error' });
+        }
       },
-
-      clearAll: () => {
-        clearEntities().catch((err) => {
-          console.error('Failed to clear scratchpad IndexedDB entries', err);
-          set({ storageStatus: 'degraded', lastStorageError: err instanceof Error ? err.message : '清空 IndexedDB 失败' });
-        });
-        set({ items: [] });
+      clearAll: async () => {
+        try {
+          await clearEntities();
+          set({ items: [] });
+          sessionContent.clear();
+        } catch (error) {
+          notifyToast({ title: '暂存箱清空失败', description: (error as Error).message, tone: 'error' });
+        }
       },
     }),
     {
       name: 'devtoolbox-scratchpad-storage',
+      // Do not let Zustand silently disable persistence when localStorage access throws.
+      // Reads can degrade at startup; writes must fail so callers do not report a durable save.
+      storage: createJSONStorage(() => ({
+        getItem: name => { try { return localStorage.getItem(name); } catch { return null; } },
+        setItem: (name, value) => localStorage.setItem(name, value),
+        removeItem: name => localStorage.removeItem(name),
+      })),
+      version: 1,
+      migrate: (persisted: unknown) => {
+        const state = persisted as Partial<ScratchpadState>;
+        const items = state.items || [];
+        for (const item of items.filter(item => item.sensitive)) {
+          void deleteEntity(item.id).catch(() => notifyToast({ title: '旧版敏感记录清理失败，请清除站点存储。', tone: 'error' }));
+        }
+        return { ...state, items: items.filter(item => !item.sensitive) };
+      },
       partialize: (state) => ({
-        items: state.items,
+        items: state.items.filter(item => !item.sensitive),
         storageStatus: state.storageStatus,
         lastStorageError: state.lastStorageError,
       }),

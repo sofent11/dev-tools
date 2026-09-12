@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState } from 'react';
 import {
   FileCode, Database, ArrowRightLeft,
@@ -27,7 +29,8 @@ const useCopyToClipboard = () => {
 
 // --- XML Tool ---
 export const XmlTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/FormatTools.tsx:XmlTool:input", '');
   const [output, setOutput] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { copied, copy } = useCopyToClipboard();
@@ -70,8 +73,8 @@ export const XmlTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="XML 工具"
-        description="XML 美化、压缩与 JSON 转换"
+        title={tr("XML 工具")}
+        description={tr("XML 美化、压缩与 JSON 转换")}
         actions={
           <>
              <Button size="sm" variant="secondary" onClick={handleToJson} icon={<FileCode className="w-4 h-4"/>}>To JSON</Button>
@@ -107,14 +110,15 @@ export const XmlTool: React.FC = () => {
               </Button>
         </div>
       </div>
-      {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
+      {error && <div className="status-error m-4 p-3 text-sm">{tr(error)}</div>}
     </Card>
   );
 };
 
 // --- YAML <-> JSON Tool ---
 export const YamlTool: React.FC = () => {
-    const [input, setInput] = useState('');
+  useLocaleRender();
+    const [input, setInput] = useDraftState("components/tools/FormatTools.tsx:YamlTool:input", '');
     const [output, setOutput] = useState('');
     const [error, setError] = useState<string | null>(null);
     const { copied, copy } = useCopyToClipboard();
@@ -143,7 +147,7 @@ export const YamlTool: React.FC = () => {
         <Card className="h-full flex flex-col">
             <CardHeader
                 title="YAML ↔ JSON"
-                description="YAML 与 JSON 互转"
+                description={tr("YAML 与 JSON 互转")}
                 actions={
                     <>
                         <Button size="sm" variant="secondary" onClick={jsonToYaml} icon={<Database className="w-4 h-4"/>}>JSON → YAML</Button>
@@ -178,14 +182,15 @@ export const YamlTool: React.FC = () => {
                     </Button>
                 </div>
             </div>
-             {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
+             {error && <div className="status-error m-4 p-3 text-sm">{tr(error)}</div>}
         </Card>
     );
 };
 
 // --- CSV <-> JSON Tool ---
 export const CsvTool: React.FC = () => {
-    const [input, setInput] = useState('');
+  useLocaleRender();
+    const [input, setInput] = useDraftState("components/tools/FormatTools.tsx:CsvTool:input", '');
     const [output, setOutput] = useState('');
     const [error, setError] = useState<string | null>(null);
     const { copied, copy } = useCopyToClipboard();
@@ -228,7 +233,7 @@ export const CsvTool: React.FC = () => {
         <Card className="h-full flex flex-col">
             <CardHeader
                 title="CSV ↔ JSON"
-                description="CSV 与 JSON 互转"
+                description={tr("CSV 与 JSON 互转")}
                 actions={
                     <>
                         <Button size="sm" variant="secondary" onClick={jsonToCsv} icon={<FileSpreadsheet className="w-4 h-4"/>}>JSON → CSV</Button>
@@ -240,8 +245,8 @@ export const CsvTool: React.FC = () => {
                 <div className="flex-1 p-4 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-100">
                     <ScratchpadActionBar className="mb-3">
                         <ScratchpadPicker
-                            label="载入 CSV / JSON"
-                            placeholder="从暂存箱载入..."
+                            label={tr("载入 CSV / JSON")}
+                            placeholder={tr("从暂存箱载入...")}
                             filter={isScratchpadTextLike}
                             onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
                         />
@@ -276,19 +281,19 @@ export const CsvTool: React.FC = () => {
                         onClick={stashOutput}
                         disabled={!output}
                     >
-                        暂存
-                    </Button>
+                        {tr("暂存")}</Button>
                 </div>
             </div>
-             {error && <div className="status-error m-4 p-3 text-sm">{error}</div>}
+             {error && <div className="status-error m-4 p-3 text-sm">{tr(error)}</div>}
         </Card>
     );
 };
 
 
 export const MarkdownTool: React.FC = () => {
-    const [input, setInput] = useState('# Hello World\n\n- Item 1\n- Item 2');
-    const [html, setHtml] = useState('');
+  useLocaleRender();
+    const [input, setInput] = useDraftState("components/tools/FormatTools.tsx:MarkdownTool:input", '# Hello World\n\n- Item 1\n- Item 2');
+    const [html, setHtml] = useDraftState("components/tools/FormatTools.tsx:MarkdownTool:html", '');
     const { copied, copy } = useCopyToClipboard();
 
     React.useEffect(() => {
@@ -298,7 +303,7 @@ export const MarkdownTool: React.FC = () => {
             setHtml(sanitizeHtmlMarkup(res));
         }
         parse();
-    }, [input]);
+    }, [input, setHtml]);
 
     const stashHtml = async () => {
         await useScratchpadStore.getState().addItemAsync({
@@ -314,15 +319,15 @@ export const MarkdownTool: React.FC = () => {
     return (
         <Card className="h-full flex flex-col">
             <CardHeader
-                title="Markdown 预览"
-                description="Markdown 转 HTML 实时预览"
+                title={tr("Markdown 预览")}
+                description={tr("Markdown 转 HTML 实时预览")}
             />
             <div className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
                 <div className="flex-1 p-4 flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-slate-100">
                     <ScratchpadActionBar className="mb-3">
                         <ScratchpadPicker
-                            label="载入 Markdown"
-                            placeholder="从暂存箱载入 Markdown..."
+                            label={tr("载入 Markdown")}
+                            placeholder={tr("从暂存箱载入 Markdown...")}
                             filter={isScratchpadTextLike}
                             onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
                         />
@@ -351,8 +356,7 @@ export const MarkdownTool: React.FC = () => {
                         onClick={stashHtml}
                         disabled={!html}
                     >
-                        暂存 HTML
-                    </Button>
+                        {tr("暂存 HTML")}</Button>
                 </div>
             </div>
         </Card>

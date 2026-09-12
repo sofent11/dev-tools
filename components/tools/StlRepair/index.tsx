@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -75,7 +76,7 @@ const CheckboxRow: React.FC<{
   label: string;
   hint: string;
   onChange: (checked: boolean) => void;
-}> = ({ checked, label, hint, onChange }) => (
+}> = ({ checked, label, hint, onChange }) => { useLocaleRender(); return (
   <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm transition hover:bg-slate-50">
     <input
       type="checkbox"
@@ -84,17 +85,18 @@ const CheckboxRow: React.FC<{
       onChange={event => onChange(event.target.checked)}
     />
     <span className="min-w-0">
-      <span className="block font-medium text-slate-800">{label}</span>
-      <span className="mt-0.5 block text-xs leading-5 text-slate-500">{hint}</span>
+      <span className="block font-medium text-slate-800">{tr(label)}</span>
+      <span className="mt-0.5 block text-xs leading-5 text-slate-500">{tr(hint)}</span>
     </span>
   </label>
-);
+); };
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default' | 'good' | 'warn' }> = ({
   label,
   value,
   tone = 'default',
 }) => {
+  useLocaleRender();
   const toneClass = {
     default: 'text-slate-950',
     good: 'text-emerald-700',
@@ -103,7 +105,7 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default'
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="text-xs font-medium text-slate-500">{tr(label)}</div>
       <div className={`mt-1 truncate text-base font-semibold ${toneClass}`}>{value}</div>
     </div>
   );
@@ -126,16 +128,16 @@ const environmentPresets: Record<EnvironmentPreset, {
   contrast: { background: 0x111827, ambient: [0xffffff, 0.28], key: [0xffffff, 1.9], fill: [0x38bdf8, 0.9] },
 };
 
-const BoundsLine: React.FC<{ bounds: MeshBounds }> = ({ bounds }) => (
+const BoundsLine: React.FC<{ bounds: MeshBounds }> = ({ bounds }) => { useLocaleRender(); return (
   <span>
     {formatSize(bounds.size[0])} x {formatSize(bounds.size[1])} x {formatSize(bounds.size[2])}
   </span>
-);
+); };
 
-const StatsGrid: React.FC<{ title: string; stats: MeshStats }> = ({ title, stats }) => (
+const StatsGrid: React.FC<{ title: string; stats: MeshStats }> = ({ title, stats }) => { useLocaleRender(); return (
   <div className="tool-panel p-4">
     <div className="mb-3 flex items-center justify-between gap-3">
-      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+      <h3 className="text-sm font-semibold text-slate-900">{tr(title)}</h3>
       <span
         className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
           stats.watertight
@@ -143,27 +145,27 @@ const StatsGrid: React.FC<{ title: string; stats: MeshStats }> = ({ title, stats
             : 'border-amber-200 bg-amber-50 text-amber-700'
         }`}
       >
-        {stats.watertight ? '水密' : '有边界/非流形'}
+        {stats.watertight ? tr('水密') : tr('有边界/非流形')}
       </span>
     </div>
     <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-      <Metric label="顶点" value={formatNumber(stats.vertices)} />
-      <Metric label="三角面" value={formatNumber(stats.faces)} />
-      <Metric label="连通块" value={formatNumber(stats.components)} />
+      <Metric label={tr("顶点")} value={formatNumber(stats.vertices)} />
+      <Metric label={tr("三角面")} value={formatNumber(stats.faces)} />
+      <Metric label={tr("连通块")} value={formatNumber(stats.components)} />
       <Metric
-        label="边界边"
+        label={tr("边界边")}
         value={formatNumber(stats.boundaryEdges)}
         tone={stats.boundaryEdges ? 'warn' : 'good'}
       />
       <Metric
-        label="非流形边"
+        label={tr("非流形边")}
         value={formatNumber(stats.nonManifoldEdges)}
         tone={stats.nonManifoldEdges ? 'warn' : 'good'}
       />
-      <Metric label="包围盒" value={<BoundsLine bounds={stats.bounds} />} />
+      <Metric label={tr("包围盒")} value={<BoundsLine bounds={stats.bounds} />} />
     </div>
   </div>
-);
+); };
 
 const MeshPreview: React.FC<{
   mesh: MeshPreviewData | null;
@@ -184,6 +186,7 @@ const MeshPreview: React.FC<{
   environmentPreset,
   softShadows,
 }) => {
+  useLocaleRender();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
@@ -476,34 +479,33 @@ const MeshPreview: React.FC<{
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-center text-slate-500">
           <Box className="h-10 w-10 text-slate-300" />
           <div>
-            <div className="text-sm font-semibold text-slate-700">等待 STL 模型</div>
-            <div className="mt-1 text-xs">上传并处理后会显示可旋转预览</div>
+            <div className="text-sm font-semibold text-slate-700">{tr("等待 STL 模型")}</div>
+            <div className="mt-1 text-xs">{tr("上传并处理后会显示可旋转预览")}</div>
           </div>
         </div>
       )}
       {isProcessing && (
         <div className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-lg border border-cyan-100 bg-white/90 px-3 py-2 text-xs font-medium text-cyan-800 shadow-sm backdrop-blur">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          处理中
-        </div>
+          {tr("处理中")}</div>
       )}
       {wallThicknessEnabled && mesh && (
         <div className="absolute left-3 top-3 z-20 rounded-lg border border-white/60 bg-white/90 px-3 py-2 text-[11px] font-semibold text-slate-700 shadow-sm backdrop-blur">
-          壁厚热力图：红色高风险 · 橙色临界 · 绿色安全
-        </div>
+          {tr("壁厚热力图：红色高风险 · 橙色临界 · 绿色安全")}</div>
       )}
     </div>
   );
 };
 
 const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number }> = ({ report, outputSize }) => {
+  useLocaleRender();
   if (!report) {
     return (
       <div className="tool-panel flex min-h-[14rem] flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
         <FileText className="h-9 w-9 text-slate-300" />
         <div>
-          <div className="text-sm font-semibold text-slate-700">暂无处理报告</div>
-          <div className="mt-1 text-xs">完成处理后会列出清理、降面与水密性诊断。</div>
+          <div className="text-sm font-semibold text-slate-700">{tr("暂无处理报告")}</div>
+          <div className="mt-1 text-xs">{tr("完成处理后会列出清理、降面与水密性诊断。")}</div>
         </div>
       </div>
     );
@@ -522,38 +524,38 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
           )}
           <div>
             <div className="font-semibold">
-              {report.final.watertight ? '当前拓扑检测为水密' : '仍检测到边界边或非流形边'}
+              {report.final.watertight ? tr('当前拓扑检测为水密') : tr('仍检测到边界边或非流形边')}
             </div>
             <div className="mt-1 text-xs leading-5">
               {report.final.watertight
-                ? '已按 Python 脚本语义完成清理、降面、法线修正和小孔补面；打印前仍建议在切片软件中复检尺寸与朝向。'
-                : '已按 Python 脚本语义处理；脚本同样可能输出非完全水密模型，复杂坏面需要复检。'}
+                ? tr('已按 Python 脚本语义完成清理、降面、法线修正和小孔补面；打印前仍建议在切片软件中复检尺寸与朝向。')
+                : tr('已按 Python 脚本语义处理；脚本同样可能输出非完全水密模型，复杂坏面需要复检。')}
             </div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Metric label="面数变化" value={`${formatNumber(report.initial.faces)} -> ${formatNumber(report.final.faces)}`} />
-        <Metric label="减少面数" value={formatNumber(Math.max(faceDelta, 0))} tone={faceDelta > 0 ? 'good' : 'default'} />
-        <Metric label="导出大小" value={formatBytes(outputSize)} />
-        <Metric label="补洞数量" value={formatNumber(report.filledHoles)} tone={report.filledHoles ? 'good' : 'default'} />
+        <Metric label={tr("面数变化")} value={`${formatNumber(report.initial.faces)} -> ${formatNumber(report.final.faces)}`} />
+        <Metric label={tr("减少面数")} value={formatNumber(Math.max(faceDelta, 0))} tone={faceDelta > 0 ? 'good' : 'default'} />
+        <Metric label={tr("导出大小")} value={formatBytes(outputSize)} />
+        <Metric label={tr("补洞数量")} value={formatNumber(report.filledHoles)} tone={report.filledHoles ? 'good' : 'default'} />
       </div>
 
       <div className="tool-panel p-4">
         <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-2">
-          <div>删除退化面：{formatNumber(report.skippedDegenerateFaces)}</div>
-          <div>删除重复面：{formatNumber(report.skippedDuplicateFaces)}</div>
-          <div>移除碎片：{formatNumber(report.removedFragments)}</div>
-          <div>降面小片：{formatNumber(report.removedPostSimplifyFragments)}</div>
-          <div>非流形面：{formatNumber(report.removedNonManifoldFaces)}</div>
-          <div>降面执行：{report.simplified ? '是' : '否'}</div>
-          <div>补洞范围：单三角孔 / 单四边孔</div>
+          <div>{tr("删除退化面：")}{formatNumber(report.skippedDegenerateFaces)}</div>
+          <div>{tr("删除重复面：")}{formatNumber(report.skippedDuplicateFaces)}</div>
+          <div>{tr("移除碎片：")}{formatNumber(report.removedFragments)}</div>
+          <div>{tr("降面小片：")}{formatNumber(report.removedPostSimplifyFragments)}</div>
+          <div>{tr("非流形面：")}{formatNumber(report.removedNonManifoldFaces)}</div>
+          <div>{tr("降面执行：")}{report.simplified ? tr('是') : tr('否')}</div>
+          <div>{tr("补洞范围：单三角孔 / 单四边孔")}</div>
           <div>
-            降面误差：{report.simplifyError === null ? '-' : report.simplifyError.toPrecision(3)}
+            {tr("降面误差：")}{report.simplifyError === null ? '-' : report.simplifyError.toPrecision(3)}
           </div>
           <div>
-            底座：{report.baseInfo ? `直径 ${formatSize(report.baseInfo.diameter)} / 厚度 ${formatSize(report.baseInfo.thickness)}` : '未添加'}
+            {tr("底座：")}{report.baseInfo ? tr(`直径 ${formatSize(report.baseInfo.diameter)} / 厚度 ${formatSize(report.baseInfo.thickness)}`) : tr('未添加')}
           </div>
         </div>
         {report.notes.length > 0 && (
@@ -565,14 +567,15 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
         )}
       </div>
 
-      <StatsGrid title="输入模型" stats={report.initial} />
-      <StatsGrid title="清理后模型" stats={report.afterCleanup} />
-      <StatsGrid title="最终模型" stats={report.final} />
+      <StatsGrid title={tr("输入模型")} stats={report.initial} />
+      <StatsGrid title={tr("清理后模型")} stats={report.afterCleanup} />
+      <StatsGrid title={tr("最终模型")} stats={report.final} />
     </div>
   );
 };
 
 export const StlRepairTool: React.FC = () => {
+  useLocaleRender();
   const workerRef = useRef<Worker | null>(null);
   const wallWorkerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
@@ -804,18 +807,18 @@ export const StlRepairTool: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
       <Card className="flex min-h-0 flex-col xl:w-[24rem] xl:flex-none">
         <CardHeader
-          title="STL 修复/降面"
-          description="浏览器本地处理，适合快速清理碎片、降面和导出可复检 STL。"
+          title={tr("STL 修复/降面")}
+          description={tr("浏览器本地处理，适合快速清理碎片、降面和导出可复检 STL。")}
         />
         <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
           <UploadPanel className="min-h-[8.5rem]">
             <label className="flex w-full cursor-pointer flex-col items-center gap-2 p-5 text-center">
               <Upload className="h-8 w-8 text-primary-600" />
               <span className="max-w-full truncate text-sm font-semibold text-slate-700">
-                {file ? file.name : '选择 STL 文件'}
+                {file ? file.name : tr('选择 STL 文件')}
               </span>
               <span className="text-xs text-slate-500">
-                {file ? `${formatBytes(file.size)} · 不会上传到服务器` : '支持 ASCII / 二进制 STL'}
+                {file ? tr(`${formatBytes(file.size)} · 不会上传到服务器`) : tr('支持 ASCII / 二进制 STL')}
               </span>
               <input
                 className="hidden"
@@ -829,7 +832,7 @@ export const StlRepairTool: React.FC = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
             <div className="flex items-center gap-2 font-medium text-slate-800">
               {processing ? <Loader2 className="h-4 w-4 animate-spin text-primary-700" /> : <RefreshCw className="h-4 w-4 text-primary-700" />}
-              {processing && progressText ? progressText : statusText}
+              {tr(processing && progressText ? progressText : statusText)}
             </div>
             {processing && (
               <div className="mt-2.5 h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
@@ -851,7 +854,7 @@ export const StlRepairTool: React.FC = () => {
 
           <div className="grid gap-3">
             <div>
-              <FieldLabel hint={`${formatNumber(options.targetFaces)} 面`}>目标三角面数上限</FieldLabel>
+              <FieldLabel hint={tr(`${formatNumber(options.targetFaces)} 面`)}>{tr("目标三角面数上限")}</FieldLabel>
               <Input
                 type="number"
                 min={1000}
@@ -862,7 +865,7 @@ export const StlRepairTool: React.FC = () => {
               />
             </div>
             <div>
-              <FieldLabel hint="0 为脚本同款精确去重">焊接容差</FieldLabel>
+              <FieldLabel hint={tr("0 为脚本同款精确去重")}>{tr("焊接容差")}</FieldLabel>
               <Input
                 type="number"
                 min={0}
@@ -872,7 +875,7 @@ export const StlRepairTool: React.FC = () => {
               />
             </div>
             <div>
-              <FieldLabel hint="meshoptimizer 相对误差">降面误差</FieldLabel>
+              <FieldLabel hint={tr("meshoptimizer 相对误差")}>{tr("降面误差")}</FieldLabel>
               <Input
                 type="number"
                 min={0.0001}
@@ -888,74 +891,74 @@ export const StlRepairTool: React.FC = () => {
           <div className="grid gap-2">
             <CheckboxRow
               checked={options.keepLargest}
-              label="只保留最大连通块"
-              hint="清除扫描或生成模型里常见的小碎片。"
+              label={tr("只保留最大连通块")}
+              hint={tr("清除扫描或生成模型里常见的小碎片。")}
               onChange={checked => updateOption('keepLargest', checked)}
             />
             <CheckboxRow
               checked={options.decimate}
-              label="超过目标时自动降面"
-              hint="使用 meshoptimizer，结果可能受原模型拓扑限制。"
+              label={tr("超过目标时自动降面")}
+              hint={tr("使用 meshoptimizer，结果可能受原模型拓扑限制。")}
               onChange={checked => updateOption('decimate', checked)}
             />
             <CheckboxRow
               checked={options.fillHoles}
-              label="尝试补小孔"
-              hint="对齐 Trimesh fill_holes 的轻量范围，仅补单三角孔和单四边孔。"
+              label={tr("尝试补小孔")}
+              hint={tr("对齐 Trimesh fill_holes 的轻量范围，仅补单三角孔和单四边孔。")}
               onChange={checked => updateOption('fillHoles', checked)}
             />
             <CheckboxRow
               checked={options.addBase}
-              label="添加圆形底座"
-              hint="按 Python 脚本同款比例生成，直接合并到 STL。"
+              label={tr("添加圆形底座")}
+              hint={tr("按 Python 脚本同款比例生成，直接合并到 STL。")}
               onChange={checked => updateOption('addBase', checked)}
             />
           </div>
 
           <div className="grid gap-3 border-t border-slate-200 pt-3">
             <div>
-              <FieldLabel>预览渲染材质</FieldLabel>
+              <FieldLabel>{tr("预览渲染材质")}</FieldLabel>
               <Select value={materialType} onChange={event => setMaterialType(event.target.value as typeof materialType)}>
-                <option value="default">默认 (Matte Green)</option>
-                <option value="gold">🏆 皇家黄金 (Gold PBR)</option>
-                <option value="silver">🥈 抛光白银 (Silver PBR)</option>
-                <option value="jade">🍀 冰种温润翡翠 (Jade SSS)</option>
-                <option value="glass">💎 钢化玻璃 (Glass Refract)</option>
+                <option value="default">{tr("默认 (Matte Green)")}</option>
+                <option value="gold">{tr("🏆 皇家黄金 (Gold PBR)")}</option>
+                <option value="silver">{tr("🥈 抛光白银 (Silver PBR)")}</option>
+                <option value="jade">{tr("🍀 冰种温润翡翠 (Jade SSS)")}</option>
+                <option value="glass">{tr("💎 钢化玻璃 (Glass Refract)")}</option>
               </Select>
             </div>
             <CheckboxRow
               checked={showDiagnostics}
-              label="开启坏面霓虹诊断模式"
-              hint="自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。"
+              label={tr("开启坏面霓虹诊断模式")}
+              hint={tr("自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。")}
               onChange={checked => setShowDiagnostics(checked)}
             />
             <CheckboxRow
               checked={wallThicknessEnabled}
-              label="开启壁厚热力图"
-              hint="在 Worker 中采样估算薄壁风险：红色低于阈值，橙色接近阈值，绿色相对安全。"
+              label={tr("开启壁厚热力图")}
+              hint={tr("在 Worker 中采样估算薄壁风险：红色低于阈值，橙色接近阈值，绿色相对安全。")}
               onChange={checked => setWallThicknessEnabled(checked)}
             />
             <div>
-              <FieldLabel>壁厚分析模式</FieldLabel>
+              <FieldLabel>{tr("壁厚分析模式")}</FieldLabel>
               <Select
                 value={wallThicknessMode}
-                aria-label="壁厚分析模式"
+                aria-label={tr("壁厚分析模式")}
                 disabled={!wallThicknessEnabled}
                 onChange={event => setWallThicknessMode(event.target.value as WallThicknessMode)}
               >
-                <option value="fast">快速采样 (推荐)</option>
-                <option value="precise">精细采样 (较慢)</option>
+                <option value="fast">{tr("快速采样 (推荐)")}</option>
+                <option value="precise">{tr("精细采样 (较慢)")}</option>
               </Select>
               {wallThicknessEnabled && (
                 <p className={`mt-1 text-[11px] leading-4 ${preciseModeWarning ? 'text-amber-700' : 'text-slate-500'}`}>
                   {estimatedWallWork === null
-                    ? '导入模型后会预估分析成本；大模型建议先用快速采样。'
-                    : `预计约 ${formatNumber(estimatedWallWork)} 次候选射线测试，Worker 会用网格预筛并在超预算时返回局部报告。${preciseModeWarning ? ' 当前模型较大，建议优先使用快速采样。' : ''}`}
+                    ? tr('导入模型后会预估分析成本；大模型建议先用快速采样。')
+                    : tr(`预计约 ${formatNumber(estimatedWallWork)} 次候选射线测试，Worker 会用网格预筛并在超预算时返回局部报告。${preciseModeWarning ? ' 当前模型较大，建议优先使用快速采样。' : ''}`)}
                 </p>
               )}
             </div>
             <div>
-              <FieldLabel hint={`${formatSize(wallThicknessThreshold)} mm`}>壁厚风险阈值</FieldLabel>
+              <FieldLabel hint={tr(`${formatSize(wallThicknessThreshold)} mm`)}>{tr("壁厚风险阈值")}</FieldLabel>
               <Input
                 type="number"
                 min={0.1}
@@ -966,70 +969,60 @@ export const StlRepairTool: React.FC = () => {
               />
             </div>
             <div>
-              <FieldLabel>环境光预设</FieldLabel>
+              <FieldLabel>{tr("环境光预设")}</FieldLabel>
               <Select value={environmentPreset} onChange={event => setEnvironmentPreset(event.target.value as EnvironmentPreset)}>
-                <option value="studio">明亮工作室</option>
-                <option value="warm">暖金展示台</option>
-                <option value="cool">冷蓝工程灯</option>
-                <option value="contrast">深色高对比</option>
+                <option value="studio">{tr("明亮工作室")}</option>
+                <option value="warm">{tr("暖金展示台")}</option>
+                <option value="cool">{tr("冷蓝工程灯")}</option>
+                <option value="contrast">{tr("深色高对比")}</option>
               </Select>
             </div>
             <CheckboxRow
               checked={softShadows}
-              label="柔和阴影"
-              hint="为 PBR 预览启用更有空间感的阴影表现。"
+              label={tr("柔和阴影")}
+              hint={tr("为 PBR 预览启用更有空间感的阴影表现。")}
               onChange={checked => setSoftShadows(checked)}
             />
           </div>
 
           {wallReport && (
             <div className={wallReport.thinFaces > 0 ? 'status-warning p-3 text-xs' : 'status-success p-3 text-xs'}>
-              <div className="font-semibold">壁厚采样诊断</div>
+              <div className="font-semibold">{tr("壁厚采样诊断")}</div>
               <div className="mt-1 leading-5">
-                已采样 {formatNumber(wallReport.sampledFaces)} 个面，低于 {formatSize(wallReport.threshold)} mm 的风险面 {formatNumber(wallReport.thinFaces)} 个；
-                最小估算厚度 {wallReport.minThickness === null ? '未命中对向面' : `${formatSize(wallReport.minThickness)} mm`}；
-                采样率 {(wallReport.sampleRate * 100).toFixed(1)}%，置信度 {wallReport.confidence}，耗时 {Math.round(wallReport.elapsedMs)} ms；
-                估算工作量 {formatNumber(wallReport.estimatedWork || 0)} 次射线测试；
-                加速结构 {wallReport.acceleration || 'none'}，实际候选测试 {formatNumber(wallReport.candidateTests || 0)} 次，跳过 {formatNumber(wallReport.skippedFaces || 0)} 个候选面。
-              </div>
+                {tr("已采样")}{formatNumber(wallReport.sampledFaces)} {tr("个面，低于")}{formatSize(wallReport.threshold)} {tr("mm 的风险面")}{formatNumber(wallReport.thinFaces)} {tr("个； 最小估算厚度")}{wallReport.minThickness === null ? tr('未命中对向面') : `${formatSize(wallReport.minThickness)} mm`}{tr("； 采样率")}{(wallReport.sampleRate * 100).toFixed(1)}{tr("%，置信度")}{wallReport.confidence}{tr("，耗时")}{Math.round(wallReport.elapsedMs)} {tr("ms； 估算工作量")}{formatNumber(wallReport.estimatedWork || 0)} {tr("次射线测试； 加速结构")}{wallReport.acceleration || 'none'}{tr("，实际候选测试")}{formatNumber(wallReport.candidateTests || 0)} {tr("次，跳过")}{formatNumber(wallReport.skippedFaces || 0)} {tr("个候选面。")}</div>
               {wallReport.partial && (
                 <div className="mt-1 leading-5 text-amber-700">
-                  已达到浏览器预算上限，本次结果为局部采样报告；可切换快速模式或降低模型面数后复检。
-                </div>
+                  {tr("已达到浏览器预算上限，本次结果为局部采样报告；可切换快速模式或降低模型面数后复检。")}</div>
               )}
               <div className="mt-1 leading-5 text-amber-700">
-                该分析是浏览器端工程辅助估算，不等价专业切片软件或工业级测厚结果。
-              </div>
+                {tr("该分析是浏览器端工程辅助估算，不等价专业切片软件或工业级测厚结果。")}</div>
             </div>
           )}
           {wallAnalysisRunning && (
             <Button variant="secondary" onClick={cancelWallAnalysis}>
-              取消壁厚分析
-            </Button>
+              {tr("取消壁厚分析")}</Button>
           )}
 
-          {error && <div className="status-error p-3 text-sm">{error}</div>}
+          {error && <div className="status-error p-3 text-sm">{tr(error)}</div>}
 
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />}>
-              开始处理
-            </Button>
+              {tr("开始处理")}</Button>
             <Button
               variant="secondary"
               onClick={handleDownload}
               disabled={!stlBuffer || processing}
               icon={<Download className="h-4 w-4" />}
             >
-              下载 STL
-            </Button>
+              {tr("下载 STL")}</Button>
           </div>
         </CardContent>
       </Card>
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <CardHeader
-          title="模型预览与报告"
-          description="可旋转查看修复结果；报告展示拓扑风险，不把轻量清理误报为完整修复。"
+          title={tr("模型预览与报告")}
+          description={tr("可旋转查看修复结果；报告展示拓扑风险，不把轻量清理误报为完整修复。")}
           actions={
             report ? (
               <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">

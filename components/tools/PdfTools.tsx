@@ -1,3 +1,5 @@
+import { runtimeAsset } from './shared/runtimeAssets';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useRef, useState } from 'react';
 import {
   FileText,
@@ -22,10 +24,9 @@ import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
 import { notifyToast } from './shared/notifyToast';
 import type { PDFDocument } from 'pdf-lib';
 
-const PDFJS_VERSION = '5.4.449';
-const PDFJS_MODULE_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
-const PDFJS_WORKER_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
-const PDFJS_MODULE_FALLBACK_URL = `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
+const PDFJS_VERSION = runtimeAsset('pdfjs').version;
+const PDFJS_MODULE_URL = runtimeAsset('pdfjs').url;
+const PDFJS_WORKER_URL = runtimeAsset('pdfWorker').url;
 const MAX_PDF_PAGES = 120;
 const MAX_PDF_IMAGE_PIXELS = 90_000_000;
 
@@ -45,7 +46,7 @@ const createRuntimeState = (): RuntimeAssetLoaderState => ({
 });
 
 const loadPdfJs = async (onState?: (state: RuntimeAssetLoaderState) => void) => {
-  const pdfjsLib = await loadRuntimeAsset<typeof import('https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.449/build/pdf.min.mjs')>({
+  const pdfjsLib = await loadRuntimeAsset<typeof import('pdfjs-dist')>({
     url: PDFJS_MODULE_URL,
     kind: 'module',
     label: 'PDF.js',
@@ -53,8 +54,7 @@ const loadPdfJs = async (onState?: (state: RuntimeAssetLoaderState) => void) => 
     timeoutMs: 15000,
   retries: 1,
   cache: false,
-  fallbackUrls: [PDFJS_MODULE_FALLBACK_URL],
-  sourceLabel: 'CDN / fallback',
+  sourceLabel: 'Self-hosted / build-verified',
   onState,
   });
   pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL;
@@ -71,21 +71,20 @@ interface PdfPageItem {
 }
 
 export const PdfTools: React.FC = () => {
+  useLocaleRender();
   const [activeTab, setActiveTab] = useState<'merge' | 'toImage'>('merge');
 
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="PDF 视觉工作室"
-        description="支持 PDF 多文档页面级拆分、可视化卡片排序、90° 旋转、删除与极速混编导出。"
+        title={tr("PDF 视觉工作室")}
+        description={tr("支持 PDF 多文档页面级拆分、可视化卡片排序、90° 旋转、删除与极速混编导出。")}
       />
       <Tabs>
         <TabButton active={activeTab === 'merge'} onClick={() => setActiveTab('merge')}>
-          PDF 混编与合并
-        </TabButton>
+          {tr("PDF 混编与合并")}</TabButton>
         <TabButton active={activeTab === 'toImage'} onClick={() => setActiveTab('toImage')}>
-          PDF 转图片
-        </TabButton>
+          {tr("PDF 转图片")}</TabButton>
       </Tabs>
       <CardContent className="flex-1 overflow-auto p-0 bg-slate-50 dark:bg-slate-950">
         {activeTab === 'merge' ? <PdfMergeTool /> : <PdfToImageTool />}
@@ -95,6 +94,7 @@ export const PdfTools: React.FC = () => {
 };
 
 const PdfMergeTool: React.FC = () => {
+  useLocaleRender();
   const [pages, setPages] = useState<PdfPageItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
@@ -132,36 +132,42 @@ const PdfMergeTool: React.FC = () => {
       for (let fileIndex = 0; fileIndex < addedFiles.length; fileIndex += 1) {
         if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 页面加载', 'AbortError');
         const file = addedFiles[fileIndex];
+        if (file.size > 64 * 1024 * 1024) throw new Error('PDF file limit: 64 MB');
         const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-        if (pdf.numPages + newPages.length + pages.length > MAX_PDF_PAGES) {
-          throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批处理。`);
-        }
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-          if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 页面加载', 'AbortError');
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 0.35 }); // Low scale for fast previews
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-
-          if (context) {
-            await page.render({ canvasContext: context, viewport }).promise;
-            const thumbnailSrc = canvas.toDataURL('image/jpeg', 0.8);
-            newPages.push({
-              id: `${file.name}-${i}-${Date.now()}-${Math.random()}`,
-              file,
-              fileName: file.name,
-              pageIndex: i - 1, // 0-indexed
-              rotation: 0,
-              thumbnailSrc,
-            });
+        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+        const pdf = await loadingTask.promise;
+        try {
+          if (pdf.numPages + newPages.length + pages.length > MAX_PDF_PAGES) {
+            throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批处理。`);
           }
-          updateTask('loadPages', newPages.length + pages.length, Math.min(MAX_PDF_PAGES, pages.length + pdf.numPages));
+
+          for (let i = 1; i <= pdf.numPages; i++) {
+            if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 页面加载', 'AbortError');
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 0.35 }); // Low scale for fast previews
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            if (context) {
+              await page.render({ canvas, canvasContext: context, viewport }).promise;
+              const thumbnailSrc = canvas.toDataURL('image/jpeg', 0.8);
+              newPages.push({
+                id: `${file.name}-${i}-${Date.now()}-${Math.random()}`,
+                file,
+                fileName: file.name,
+                pageIndex: i - 1, // 0-indexed
+                rotation: 0,
+                thumbnailSrc,
+              });
+            }
+            updateTask('loadPages', newPages.length + pages.length, Math.min(MAX_PDF_PAGES, pages.length + pdf.numPages));
+          }
+          updateTask('loadPages', fileIndex + 1, addedFiles.length);
+        } finally {
+          await loadingTask.destroy();
         }
-        updateTask('loadPages', fileIndex + 1, addedFiles.length);
       }
 
       setPages(prev => [...prev, ...newPages]);
@@ -287,11 +293,10 @@ const PdfMergeTool: React.FC = () => {
         </div>
         <div>
           <p className="font-semibold text-slate-700 dark:text-slate-200">
-            {isLoading ? '解析 PDF 文档中，请稍候...' : '添加并混编 PDF 文件'}
+            {isLoading ? tr('解析 PDF 文档中，请稍候...') : tr('添加并混编 PDF 文件')}
           </p>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            支持拖拽或多选，文档会自动按页拆分为可视化卡片
-          </p>
+            {tr("支持拖拽或多选，文档会自动按页拆分为可视化卡片")}</p>
         </div>
         {!isLoading && (
           <input
@@ -317,12 +322,12 @@ const PdfMergeTool: React.FC = () => {
         <div className={taskState.error ? 'status-warning p-3 text-xs' : 'status-info p-3 text-xs'}>
           <div className="flex items-center justify-between gap-3">
             <span>
-              {taskState.kind === 'loadPages' ? 'PDF 页面加载' : 'PDF 合并导出'}：
+              {taskState.kind === 'loadPages' ? tr('PDF 页面加载') : tr('PDF 合并导出')}：
               {taskState.current}/{taskState.total} ({taskState.progress}%)
               {taskState.error ? ` · ${taskState.error}` : ''}
             </span>
             {(isLoading || isMerging) && (
-              <Button size="xs" variant="secondary" onClick={cancelTask}>取消</Button>
+              <Button size="xs" variant="secondary" onClick={cancelTask}>{tr("取消")}</Button>
             )}
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -339,22 +344,20 @@ const PdfMergeTool: React.FC = () => {
             <div>
               <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-primary-500" />
-                页面大纲混编区
-              </h3>
+                {tr("页面大纲混编区")}</h3>
               <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                当前共拆分出 <span className="font-bold text-primary-600">{pages.length}</span> 个页面卡片，右侧操作合并
-              </p>
+                {tr("当前共拆分出")}<span className="font-bold text-primary-600">{pages.length}</span> {tr("个页面卡片，右侧操作合并")}</p>
             </div>
             
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={clearAllPages}>清空页面</Button>
+              <Button size="sm" variant="secondary" onClick={clearAllPages}>{tr("清空页面")}</Button>
               <Button
                 onClick={() => mergePdfs('stash')}
                 disabled={isMerging}
                 variant="secondary"
                 icon={stashed ? <Check className="w-4 h-4 text-green-600" /> : <ClipboardList className="w-4 h-4" />}
               >
-                {stashed ? '已送入暂存箱' : '送入暂存箱'}
+                {stashed ? tr('已送入暂存箱') : tr('送入暂存箱')}
               </Button>
               <Button
                 onClick={() => mergePdfs('download')}
@@ -362,8 +365,7 @@ const PdfMergeTool: React.FC = () => {
                 isLoading={isMerging}
                 icon={<Merge className="w-4 h-4" />}
               >
-                开始混编并导出 PDF
-              </Button>
+                {tr("开始混编并导出 PDF")}</Button>
             </div>
           </div>
 
@@ -397,11 +399,11 @@ const PdfMergeTool: React.FC = () => {
                 {/* Info and action panel */}
                 <div className="p-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-1.5 bg-slate-50/50 dark:bg-slate-900/30">
                   <div className="min-w-0">
-                    <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={p.fileName}>
+                    <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300 truncate" title={tr(p.fileName)}>
                       {p.fileName}
                     </div>
                     <div className="text-[9px] text-slate-400 font-semibold">
-                      原第 {p.pageIndex + 1} 页 {p.rotation > 0 ? `· 旋转 ${p.rotation}°` : ''}
+                      {tr("原第")}{p.pageIndex + 1} {tr("页")}{p.rotation > 0 ? tr(`· 旋转 ${p.rotation}°`) : ''}
                     </div>
                   </div>
 
@@ -411,21 +413,21 @@ const PdfMergeTool: React.FC = () => {
                       onClick={() => movePage(idx, -1)}
                       disabled={idx === 0}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex justify-center text-slate-500 disabled:opacity-20 transition-colors"
-                      title="向前移动"
+                      title={tr("向前移动")}
                     >
                       <ArrowLeft className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => rotatePage(p.id, 'left')}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex justify-center text-slate-500 transition-colors"
-                      title="向左旋转 90°"
+                      title={tr("向左旋转 90°")}
                     >
                       <RotateCcw className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => rotatePage(p.id, 'right')}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex justify-center text-slate-500 transition-colors"
-                      title="向右旋转 90°"
+                      title={tr("向右旋转 90°")}
                     >
                       <RotateCw className="w-3 h-3" />
                     </button>
@@ -433,14 +435,14 @@ const PdfMergeTool: React.FC = () => {
                       onClick={() => movePage(idx, 1)}
                       disabled={idx === pages.length - 1}
                       className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded flex justify-center text-slate-500 disabled:opacity-20 transition-colors"
-                      title="向后移动"
+                      title={tr("向后移动")}
                     >
                       <ArrowRight className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => deletePage(p.id)}
                       className="p-1 hover:bg-red-50 dark:hover:bg-red-950/30 rounded flex justify-center text-red-500 transition-colors"
-                      title="删除该页"
+                      title={tr("删除该页")}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -456,6 +458,7 @@ const PdfMergeTool: React.FC = () => {
 };
 
 const PdfToImageTool: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [isConverting, setIsConverting] = useState(false);
@@ -472,9 +475,10 @@ const PdfToImageTool: React.FC = () => {
     }
   };
 
-  const stashPage = (imgBase64: string, index: number) => {
+  const stashPage = async (imgBase64: string, index: number) => {
+    try {
     const baseName = file ? file.name.split('.').shift() : 'pdf_page';
-    useScratchpadStore.getState().addItem(
+    await useScratchpadStore.getState().addItemAsync(
       {
         name: `${baseName}_page_${index + 1}.png`,
         content: imgBase64,
@@ -486,6 +490,7 @@ const PdfToImageTool: React.FC = () => {
     notifyToast({ title: 'PDF 页面已暂存', description: `${baseName}_page_${index + 1}.png`, tone: 'success' });
     setStashedIndices(prev => ({ ...prev, [index]: true }));
     setTimeout(() => setStashedIndices(prev => ({ ...prev, [index]: false })), 2000);
+    } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
   };
 
   const convert = async () => {
@@ -497,39 +502,45 @@ const PdfToImageTool: React.FC = () => {
 
     try {
       const pdfjsLib = await loadPdfJs(setRuntimeState);
+      if (file.size > 64 * 1024 * 1024) throw new Error('PDF file limit: 64 MB');
       const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-      if (pdf.numPages > MAX_PDF_PAGES) {
-        throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批转换。`);
-      }
-      const newImages: string[] = [];
-      let totalPixels = 0;
-
-      for (let i = 1; i <= pdf.numPages; i++) {
-        if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 转图片', 'AbortError');
-        const page = await pdf.getPage(i);
-        const viewport = page.getViewport({ scale: 2 }); // Higher scale for better quality
-        totalPixels += viewport.width * viewport.height;
-        if (totalPixels > MAX_PDF_IMAGE_PIXELS) {
-          throw new Error('累计页面像素过大，已停止转换以保护浏览器内存。');
+      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+      const pdf = await loadingTask.promise;
+      try {
+        if (pdf.numPages > MAX_PDF_PAGES) {
+          throw new Error(`PDF 页数超过当前安全上限 ${MAX_PDF_PAGES} 页，请分批转换。`);
         }
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+        const newImages: string[] = [];
+        let totalPixels = 0;
 
-        if (context) {
-          await page.render({ canvasContext: context, viewport }).promise;
-          newImages.push(canvas.toDataURL('image/png'));
+        for (let i = 1; i <= pdf.numPages; i++) {
+          if (controller.signal.aborted) throw new DOMException('用户已取消 PDF 转图片', 'AbortError');
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 }); // Higher scale for better quality
+          totalPixels += viewport.width * viewport.height;
+          if (totalPixels > MAX_PDF_IMAGE_PIXELS) {
+            throw new Error('累计页面像素过大，已停止转换以保护浏览器内存。');
+          }
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+
+          if (context) {
+            await page.render({ canvas, canvasContext: context, viewport }).promise;
+            newImages.push(canvas.toDataURL('image/png'));
+          }
+          setTaskState({
+            kind: 'convertImages',
+            current: i,
+            total: pdf.numPages,
+            progress: Math.round((i / pdf.numPages) * 100),
+          });
         }
-        setTaskState({
-          kind: 'convertImages',
-          current: i,
-          total: pdf.numPages,
-          progress: Math.round((i / pdf.numPages) * 100),
-        });
+        setImages(newImages);
+      } finally {
+        await loadingTask.destroy();
       }
-      setImages(newImages);
     } catch (e) {
       console.error(e);
       const message = (e as Error).name === 'AbortError' ? '已取消 PDF 转图片' : (e as Error).message;
@@ -551,8 +562,8 @@ const PdfToImageTool: React.FC = () => {
             <ImageIcon className="w-8 h-8 text-primary-500" />
           </div>
           <div>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">选择 PDF 文件转图片</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">本地渲染为高品质 PNG 并提供多维分段下载</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{tr("选择 PDF 文件转图片")}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{tr("本地渲染为高品质 PNG 并提供多维分段下载")}</p>
           </div>
           <input
             type="file"
@@ -566,12 +577,12 @@ const PdfToImageTool: React.FC = () => {
           <div className="tool-section flex items-center gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
             <FileText className="w-6 h-6 text-red-500" />
             <span className="flex-1 font-semibold text-slate-700 dark:text-slate-350">{file.name}</span>
-            <Button variant="secondary" size="sm" onClick={() => setFile(null)}>更换文件</Button>
+            <Button variant="secondary" size="sm" onClick={() => setFile(null)}>{tr("更换文件")}</Button>
           </div>
 
           {images.length === 0 && (
             <Button onClick={convert} disabled={isConverting} className="w-full">
-              {isConverting ? '正在转换页面...' : '开始转换为高清图片'}
+              {isConverting ? tr('正在转换页面...') : tr('开始转换为高清图片')}
             </Button>
           )}
         </div>
@@ -585,11 +596,11 @@ const PdfToImageTool: React.FC = () => {
         <div className={taskState.error ? 'status-warning p-3 text-xs' : 'status-info p-3 text-xs'}>
           <div className="flex items-center justify-between gap-3">
             <span>
-              PDF 转图片：{taskState.current}/{taskState.total} ({taskState.progress}%)
+              {tr("PDF 转图片：")}{taskState.current}/{taskState.total} ({taskState.progress}%)
               {taskState.error ? ` · ${taskState.error}` : ''}
             </span>
             {isConverting && (
-              <Button size="xs" variant="secondary" onClick={() => abortRef.current?.abort()}>取消</Button>
+              <Button size="xs" variant="secondary" onClick={() => abortRef.current?.abort()}>{tr("取消")}</Button>
             )}
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
@@ -606,21 +617,20 @@ const PdfToImageTool: React.FC = () => {
                 <img src={img} alt={`Page ${idx + 1}`} className="w-full h-full object-contain" />
               </div>
               <div className="flex items-center justify-between px-1">
-                <span className="text-xs font-semibold text-slate-500">第 {idx + 1} 页</span>
+                <span className="text-xs font-semibold text-slate-500">{tr("第")}{idx + 1} {tr("页")}</span>
                 <div className="flex gap-3">
                   <button
                     onClick={() => stashPage(img, idx)}
                     className="text-primary-600 dark:text-primary-400 text-xs font-bold hover:underline cursor-pointer"
                   >
-                    {stashedIndices[idx] ? '已暂存' : '暂存'}
+                    {stashedIndices[idx] ? tr('已暂存') : tr('暂存')}
                   </button>
                   <a
                     href={img}
                     download={`page_${idx + 1}.png`}
                     className="text-primary-600 dark:text-primary-400 text-xs font-bold hover:underline font-mono"
                   >
-                    下载 PNG
-                  </a>
+                    {tr("下载 PNG")}</a>
                 </div>
               </div>
             </div>

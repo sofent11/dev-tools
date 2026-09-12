@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState } from 'react';
 import {
   Hash, Fingerprint,
@@ -21,7 +23,8 @@ const useCopyToClipboard = () => {
 // --- String Manipulation Tool ---
 // Includes: Trim, Dedup, Sort, Full/Half width
 export const StringManipulatorTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/StringTools.tsx:StringManipulatorTool:input", '');
   const [output, setOutput] = useState('');
   const { copied, copy } = useCopyToClipboard();
 
@@ -74,15 +77,15 @@ export const StringManipulatorTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="文本处理"
-        description="去重、排序、全半角转换、去除空行"
+        title={tr("文本处理")}
+        description={tr("去重、排序、全半角转换、去除空行")}
         actions={
             <div className="flex gap-1 flex-wrap justify-end">
                 <Button size="sm" variant="secondary" onClick={handleTrim}>Trim Lines</Button>
                 <Button size="sm" variant="secondary" onClick={handleDedup}>Dedup</Button>
                 <Button size="sm" variant="secondary" onClick={handleSort}>Sort</Button>
-                <Button size="sm" variant="secondary" onClick={handleToFullWidth}>全角</Button>
-                <Button size="sm" variant="secondary" onClick={handleToHalfWidth}>半角</Button>
+                <Button size="sm" variant="secondary" onClick={handleToFullWidth}>{tr("全角")}</Button>
+                <Button size="sm" variant="secondary" onClick={handleToHalfWidth}>{tr("半角")}</Button>
             </div>
         }
       />
@@ -119,7 +122,8 @@ export const StringManipulatorTool: React.FC = () => {
 
 // --- Slug Generator ---
 export const SlugTool: React.FC = () => {
-    const [input, setInput] = useState('');
+  useLocaleRender();
+    const [input, setInput] = useDraftState("components/tools/StringTools.tsx:SlugTool:input", '');
     const [output, setOutput] = useState('');
     const { copied, copy } = useCopyToClipboard();
 
@@ -135,7 +139,7 @@ export const SlugTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="Slug 生成器" description="标题转 URL Slug" />
+            <CardHeader title={tr("Slug 生成器")} description={tr("标题转 URL Slug")} />
             <CardContent className="space-y-4">
                 <input
                     type="text"
@@ -166,6 +170,7 @@ export const SlugTool: React.FC = () => {
 
 // --- Random String / Short ID ---
 export const RandomStringTool: React.FC = () => {
+  useLocaleRender();
     const [length, setLength] = useState(16);
     const [output, setOutput] = useState('');
     const [useNumbers, setUseNumbers] = useState(true);
@@ -189,7 +194,7 @@ export const RandomStringTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="随机字符串 / ID" description="生成随机字符串或 NanoID" />
+            <CardHeader title={tr("随机字符串 / ID")} description={tr("生成随机字符串或 NanoID")} />
             <CardContent className="space-y-6">
                 <div className="tool-panel flex flex-wrap items-center gap-4 p-4">
                     <label className="text-sm">Length: </label>

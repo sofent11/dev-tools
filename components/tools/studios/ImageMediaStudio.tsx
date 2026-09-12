@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { lazy } from 'react';
 import { FileVideo, Grid3X3, Image, Images, LayoutTemplate, Palette, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -25,10 +26,11 @@ const subTools: SubTool[] = [
 ];
 
 export const ImageMediaStudio: React.FC = () => {
+  useLocaleRender();
   return (
     <TabbedToolbox
-      title="图片、动画与视频工作室"
-      description="集中处理图片压缩转换、抠图、水印、人像裁剪、动画帧提取、拼豆图纸和浏览器本地优先的视频解析"
+      title={tr("图片、动画与视频工作室")}
+      description={tr("集中处理图片压缩转换、抠图、水印、人像裁剪、动画帧提取、拼豆图纸和浏览器本地优先的视频解析")}
       tools={subTools}
       defaultTab="image"
     />

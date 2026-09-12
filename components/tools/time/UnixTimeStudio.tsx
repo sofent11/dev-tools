@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Copy,
@@ -47,6 +48,7 @@ const getDayOfWeekCN = (date: Date): string => {
 };
 
 export const UnixTimeStudio: React.FC = () => {
+  useLocaleRender();
   const [tickerNow, setTickerNow] = useState(() => new Date());
 
   // Conversion States
@@ -221,40 +223,39 @@ export const UnixTimeStudio: React.FC = () => {
           <CardContent className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-5">
             <div>
               <h3 className="text-xs font-bold text-primary-600 dark:text-primary-400 uppercase tracking-wider mb-1">
-                ⏱️ 当前时间与全局时间戳
-              </h3>
+                {tr("⏱️ 当前时间与全局时间戳")}</h3>
               <p className="text-2xl font-black text-slate-800 dark:text-slate-100 font-mono tracking-tight">
                 {tickerNow.toLocaleString('zh-CN', { hour12: false })}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                时区: {Intl.DateTimeFormat().resolvedOptions().timeZone}
+                {tr("时区:")}{Intl.DateTimeFormat().resolvedOptions().timeZone}
               </p>
             </div>
             
             <div className="flex gap-3">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col justify-center min-w-[120px] shadow-sm relative group">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-0.5">秒级 (s)</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-0.5">{tr("秒级 (s)")}</span>
                 <span className="font-mono text-sm font-black text-slate-700 dark:text-slate-300">
                   {Math.floor(tickerNow.getTime() / 1000)}
                 </span>
                 <button
                   onClick={() => handleCopy(Math.floor(tickerNow.getTime() / 1000).toString(), 'ticker-s')}
                   className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-                  title="复制秒级时间戳"
+                  title={tr("复制秒级时间戳")}
                 >
                   {copiedStates['ticker-s'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
               </div>
 
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col justify-center min-w-[140px] shadow-sm relative group">
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-0.5">毫秒级 (ms)</span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-0.5">{tr("毫秒级 (ms)")}</span>
                 <span className="font-mono text-sm font-black text-slate-700 dark:text-slate-300">
                   {tickerNow.getTime()}
                 </span>
                 <button
                   onClick={() => handleCopy(tickerNow.getTime().toString(), 'ticker-ms')}
                   className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
-                  title="复制毫秒级时间戳"
+                  title={tr("复制毫秒级时间戳")}
                 >
                   {copiedStates['ticker-ms'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
@@ -266,7 +267,7 @@ export const UnixTimeStudio: React.FC = () => {
         <Card className="bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent border-emerald-100 dark:border-emerald-950/20">
           <CardContent className="p-5 flex flex-col justify-between h-full">
             <div>
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">今日时间进度</span>
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">{tr("今日时间进度")}</span>
               <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300 font-mono">
                 <span>00:00</span>
                 <span>{((tickerNow.getHours() * 3600 + tickerNow.getMinutes() * 60 + tickerNow.getSeconds()) / 86400 * 100).toFixed(2)}%</span>
@@ -281,7 +282,7 @@ export const UnixTimeStudio: React.FC = () => {
             </div>
             <div className="text-[10px] text-slate-500 mt-2 font-mono flex items-center gap-1">
               <Compass className="w-3 h-3 text-emerald-600" />
-              <span>今日剩余秒数: {86400 - (tickerNow.getHours() * 3600 + tickerNow.getMinutes() * 60 + tickerNow.getSeconds())} 秒</span>
+              <span>{tr("今日剩余秒数:")}{86400 - (tickerNow.getHours() * 3600 + tickerNow.getMinutes() * 60 + tickerNow.getSeconds())} {tr("秒")}</span>
             </div>
           </CardContent>
         </Card>
@@ -295,42 +296,42 @@ export const UnixTimeStudio: React.FC = () => {
           {/* Card: Timestamp -> Date Time */}
           <Card>
             <CardHeader
-              title="时间戳 ➔ 日期时间转换"
-              description="双向无缝转换，支持自定义时区与丰富的毫秒级秒级自动兼容转换"
+              title={tr("时间戳 ➔ 日期时间转换")}
+              description={tr("双向无缝转换，支持自定义时区与丰富的毫秒级秒级自动兼容转换")}
               actions={
                 <div className="flex gap-1.5 flex-wrap">
-                  <Button size="sm" variant="secondary" onClick={applyPresetNow}>现在</Button>
-                  <Button size="sm" variant="secondary" onClick={applyPresetStartOfToday}>今日零点</Button>
-                  <Button size="sm" variant="secondary" onClick={applyPresetEndOfToday}>今日早鸣</Button>
-                  <Button size="sm" variant="secondary" onClick={applyPresetPlus24Hours}>+24 小时</Button>
+                  <Button size="sm" variant="secondary" onClick={applyPresetNow}>{tr("现在")}</Button>
+                  <Button size="sm" variant="secondary" onClick={applyPresetStartOfToday}>{tr("今日零点")}</Button>
+                  <Button size="sm" variant="secondary" onClick={applyPresetEndOfToday}>{tr("今日早鸣")}</Button>
+                  <Button size="sm" variant="secondary" onClick={applyPresetPlus24Hours}>{tr("+24 小时")}</Button>
                 </div>
               }
             />
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
-                  <FieldLabel>输入 Unix 时间戳</FieldLabel>
+                  <FieldLabel>{tr("输入 Unix 时间戳")}</FieldLabel>
                   <Input
                     className="font-mono text-sm"
                     value={timestampInput}
                     onChange={event => setTimestampInput(event.target.value)}
-                    placeholder="例如: 1780148255"
+                    placeholder={tr("例如: 1780148255")}
                   />
                 </div>
                 <div>
-                  <FieldLabel>单位</FieldLabel>
+                  <FieldLabel>{tr("单位")}</FieldLabel>
                   <Select value={unit} onChange={event => setUnit(event.target.value as 'ms' | 's')}>
-                    <option value="s">秒 (s)</option>
-                    <option value="ms">毫秒 (ms)</option>
+                    <option value="s">{tr("秒 (s)")}</option>
+                    <option value="ms">{tr("毫秒 (ms)")}</option>
                   </Select>
                 </div>
               </div>
 
               <div>
-                <FieldLabel hint="选择转换输出所对应的参考时区">目标显示时区</FieldLabel>
+                <FieldLabel hint={tr("选择转换输出所对应的参考时区")}>{tr("目标显示时区")}</FieldLabel>
                 <Select value={targetZone} onChange={event => setTargetZone(event.target.value)}>
                   {WORLD_ZONES.map(z => (
-                    <option key={z.id} value={z.id}>{z.flag} {z.name}</option>
+                    <option key={z.id} value={z.id}>{z.flag} {tr(z.name)}</option>
                   ))}
                 </Select>
               </div>
@@ -338,7 +339,7 @@ export const UnixTimeStudio: React.FC = () => {
               {timestampConversionOutput ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">本地时间 (Locale)</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("本地时间 (Locale)")}</div>
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold">{timestampConversionOutput.local}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.local, 'conv-local')}
@@ -349,7 +350,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
 
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">选定目标时区时间 (Zoned)</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("选定目标时区时间 (Zoned)")}</div>
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold">{timestampConversionOutput.zoned}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.zoned, 'conv-zoned')}
@@ -360,7 +361,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
 
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">ISO 8601 格式</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("ISO 8601 格式")}</div>
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 break-all">{timestampConversionOutput.iso}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.iso, 'conv-iso')}
@@ -371,7 +372,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
 
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">UTC 格式</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("UTC 格式")}</div>
                     <div className="font-mono text-xs text-slate-800 dark:text-slate-200">{timestampConversionOutput.utc}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.utc, 'conv-utc')}
@@ -382,7 +383,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="status-error p-3 text-xs leading-5">⚠️ 请输入有效的数字时间戳以查看转换。</div>
+                <div className="status-error p-3 text-xs leading-5">{tr("⚠️ 请输入有效的数字时间戳以查看转换。")}</div>
               )}
             </CardContent>
           </Card>
@@ -390,29 +391,28 @@ export const UnixTimeStudio: React.FC = () => {
           {/* Card: Date Time -> Timestamp */}
           <Card>
             <CardHeader
-              title="日期时间 ➔ 时间戳转换"
-              description="支持标准 ISO-8601 或自定义的文本日期格式智能解析"
+              title={tr("日期时间 ➔ 时间戳转换")}
+              description={tr("支持标准 ISO-8601 或自定义的文本日期格式智能解析")}
               actions={
-                <Button size="sm" variant="secondary" onClick={applyDatePresetNow}>现在</Button>
+                <Button size="sm" variant="secondary" onClick={applyDatePresetNow}>{tr("现在")}</Button>
               }
             />
             <CardContent className="space-y-4">
               <div>
-                <FieldLabel hint="支持任意标准可解析日期格式，例如 YYYY-MM-DD HH:mm:ss 或 ISO">
-                  输入日期时间字符串
-                </FieldLabel>
+                <FieldLabel hint={tr("支持任意标准可解析日期格式，例如 YYYY-MM-DD HH:mm:ss 或 ISO")}>
+                  {tr("输入日期时间字符串")}</FieldLabel>
                 <Input
                   className="font-mono text-sm"
                   value={dateStrInput}
                   onChange={event => setDateStrInput(event.target.value)}
-                  placeholder="例如: 2026-05-30 23:00:00"
+                  placeholder={tr("例如: 2026-05-30 23:00:00")}
                 />
               </div>
 
               {dateStrConversionOutput ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">秒级时间戳 (s)</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("秒级时间戳 (s)")}</div>
                     <div className="font-mono text-sm text-slate-900 dark:text-slate-100 font-extrabold">{dateStrConversionOutput.seconds}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.seconds, 'd-sec')}
@@ -423,7 +423,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
 
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">毫秒级时间戳 (ms)</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("毫秒级时间戳 (ms)")}</div>
                     <div className="font-mono text-sm text-slate-900 dark:text-slate-100 font-extrabold">{dateStrConversionOutput.milliseconds}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.milliseconds, 'd-ms')}
@@ -434,7 +434,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
 
                   <div className="tool-panel p-3.5 relative group">
-                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">解析为 ISO 格式</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">{tr("解析为 ISO 格式")}</div>
                     <div className="font-mono text-xs text-slate-700 dark:text-slate-350 break-all">{dateStrConversionOutput.iso}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.iso, 'd-iso')}
@@ -445,7 +445,7 @@ export const UnixTimeStudio: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="status-error p-3 text-xs leading-5">⚠️ 日期格式不正确，解析失败。</div>
+                <div className="status-error p-3 text-xs leading-5">{tr("⚠️ 日期格式不正确，解析失败。")}</div>
               )}
             </CardContent>
           </Card>
@@ -453,13 +453,13 @@ export const UnixTimeStudio: React.FC = () => {
           {/* Card: Date Diff Calculator */}
           <Card>
             <CardHeader
-              title="📅 日期时间跨度计算器"
-              description="支持高精度跨度统计，快速计算两个精确时刻之间的差距"
+              title={tr("📅 日期时间跨度计算器")}
+              description={tr("支持高精度跨度统计，快速计算两个精确时刻之间的差距")}
             />
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
                 <div>
-                  <FieldLabel>起始时间 (Start Date)</FieldLabel>
+                  <FieldLabel>{tr("起始时间 (Start Date)")}</FieldLabel>
                   <input
                     type="datetime-local"
                     className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 text-sm font-semibold"
@@ -468,7 +468,7 @@ export const UnixTimeStudio: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <FieldLabel>结束时间 (End Date)</FieldLabel>
+                  <FieldLabel>{tr("结束时间 (End Date)")}</FieldLabel>
                   <input
                     type="datetime-local"
                     className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-200 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100 text-sm font-semibold"
@@ -482,32 +482,32 @@ export const UnixTimeStudio: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 mt-2">
                   <div className="tool-panel p-3 col-span-2 bg-gradient-to-r from-primary-500/5 to-transparent flex items-center justify-between">
                     <div>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase block">总时间差距</span>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">{tr("总时间差距")}</span>
                       <span className="text-base font-extrabold text-primary-700 dark:text-primary-400 font-mono">
-                        {dateDiffOutput.daysAndHours}
+                        {tr(dateDiffOutput.daysAndHours)}
                       </span>
                     </div>
                     <Calculator className="w-5 h-5 text-primary-600 opacity-60" />
                   </div>
                   <div className="tool-panel p-3">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">折合天数</span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{dateDiffOutput.totalDays}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{tr("折合天数")}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{tr(dateDiffOutput.totalDays)}</span>
                   </div>
                   <div className="tool-panel p-3">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">折合小时</span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{dateDiffOutput.totalHours}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{tr("折合小时")}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{tr(dateDiffOutput.totalHours)}</span>
                   </div>
                   <div className="tool-panel p-3">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">折合分钟</span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{dateDiffOutput.totalMinutes}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{tr("折合分钟")}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{tr(dateDiffOutput.totalMinutes)}</span>
                   </div>
                   <div className="tool-panel p-3">
-                    <span className="text-[10px] text-slate-400 font-bold uppercase block">折合秒数</span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{dateDiffOutput.totalSeconds}</span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{tr("折合秒数")}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 font-mono">{tr(dateDiffOutput.totalSeconds)}</span>
                   </div>
                 </div>
               ) : (
-                <div className="status-error p-3 text-xs leading-5">⚠️ 请配置有效的起止时间。</div>
+                <div className="status-error p-3 text-xs leading-5">{tr("⚠️ 请配置有效的起止时间。")}</div>
               )}
             </CardContent>
           </Card>
@@ -519,8 +519,8 @@ export const UnixTimeStudio: React.FC = () => {
           {/* Card: World Clock Comparison */}
           <Card className="flex flex-col max-h-[460px]">
             <CardHeader
-              title="🌐 世界主要城市时区时钟"
-              description="高精度秒级同步跳秒比较表"
+              title={tr("🌐 世界主要城市时区时钟")}
+              description={tr("高精度秒级同步跳秒比较表")}
             />
             <CardContent className="app-scrollbar overflow-y-auto space-y-2.5 flex-1 pr-1">
               {WORLD_ZONES.map(zone => (
@@ -546,12 +546,12 @@ export const UnixTimeStudio: React.FC = () => {
           {/* Card: Cron Trigger Predictor */}
           <Card>
             <CardHeader
-              title="⏳ Cron 表达式执行预测"
-              description="使用 cron-parser 瞬间展现未来 5 次的精确执行时刻"
+              title={tr("⏳ Cron 表达式执行预测")}
+              description={tr("使用 cron-parser 瞬间展现未来 5 次的精确执行时刻")}
             />
             <CardContent className="space-y-4">
               <div>
-                <FieldLabel hint="支持 5 位标准 Cron 表达式">输入 Cron 表达式</FieldLabel>
+                <FieldLabel hint={tr("支持 5 位标准 Cron 表达式")}>{tr("输入 Cron 表达式")}</FieldLabel>
                 <Input
                   className="font-mono text-sm font-bold text-slate-800 dark:text-slate-200"
                   value={cronExpression}
@@ -568,8 +568,7 @@ export const UnixTimeStudio: React.FC = () => {
                 <div className="space-y-2">
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block flex items-center gap-1">
                     <ListOrdered className="w-3.5 h-3.5 text-primary-600" />
-                    未来 5 次触发预测
-                  </span>
+                    {tr("未来 5 次触发预测")}</span>
                   
                   <div className="space-y-1.5">
                     {cronPreview.dates.map((date, idx) => {
@@ -584,8 +583,8 @@ export const UnixTimeStudio: React.FC = () => {
                           className="tool-panel p-2.5 flex flex-col gap-1 text-xs relative group"
                         >
                           <div className="flex items-center justify-between text-slate-400">
-                            <span className="font-bold text-primary-600">第 {idx + 1} 次</span>
-                            <span className="font-semibold">{dayOfWeek}</span>
+                            <span className="font-bold text-primary-600">{tr("第")}{idx + 1} {tr("次")}</span>
+                            <span className="font-semibold">{tr(dayOfWeek)}</span>
                           </div>
                           <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
                             {localStr}
@@ -597,7 +596,7 @@ export const UnixTimeStudio: React.FC = () => {
                           <button
                             onClick={() => handleCopy(timestampStr, key)}
                             className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
-                            title="复制触发时刻秒级时间戳"
+                            title={tr("复制触发时刻秒级时间戳")}
                           >
                             {copiedStates[key] ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
                           </button>

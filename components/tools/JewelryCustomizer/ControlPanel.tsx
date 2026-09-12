@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect } from 'react';
 import { Type, Settings, Download, Eye, Box, Sparkles, FileCode, Split, Check } from 'lucide-react';
 
@@ -95,6 +96,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
   isProcessing,
   diagnostics,
 }) => {
+  useLocaleRender();
   const [activeCategory, setActiveCategory] = useState<'all' | 'elegant' | 'script' | 'cute' | 'modern'>('all');
 
   // Inject font-faces dynamically into document header for live typography card previews
@@ -143,17 +145,14 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="pb-4 border-b border-slate-100">
         <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
           <Settings className="w-5 h-5 text-primary-600 animate-spin-slow" />
-          定制参数
-        </h2>
+          {tr("定制参数")}</h2>
         <p className="text-xs text-slate-400 mt-1">
-          调整参数以满足生产制造及3D渲染要求
-        </p>
+          {tr("调整参数以满足生产制造及3D渲染要求")}</p>
       </div>
       {/* Preview Mode Switcher */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-          <Eye className="w-4 h-4 text-slate-500" /> 预览模式
-        </label>
+          <Eye className="w-4 h-4 text-slate-500" /> {tr("预览模式")}</label>
         <div className="grid grid-cols-3 rounded-lg border border-slate-200 bg-slate-50 p-1">
           <button
             type="button"
@@ -163,8 +162,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             }`}
           >
             <Sparkles className="h-3.5 w-3.5" />
-            2D 矢量
-          </button>
+            {tr("2D 矢量")}</button>
           <button
             type="button"
             onClick={() => setPreviewMode('3d')}
@@ -173,8 +171,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             }`}
           >
             <Box className="h-3.5 w-3.5" />
-            3D 效果
-          </button>
+            {tr("3D 效果")}</button>
           <button
             type="button"
             onClick={() => setPreviewMode('split')}
@@ -183,8 +180,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             }`}
           >
             <Split className="h-3.5 w-3.5" />
-            联动分屏
-          </button>
+            {tr("联动分屏")}</button>
         </div>
       </div>
 
@@ -192,32 +188,30 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="space-y-4">
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-            <Type className="w-4 h-4" /> 定制文字
-          </label>
+            <Type className="w-4 h-4" /> {tr("定制文字")}</label>
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-primary-100 focus:border-primary-400 min-h-16 text-sm"
-            placeholder="请输入文字..."
+            placeholder={tr("请输入文字...")}
           />
         </div>
 
         <div className="space-y-2.5">
           <label className="text-sm font-medium text-slate-700 flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Type className="w-4 h-4 text-indigo-500" /> 艺术字形选择
-            </span>
-            <span className="text-[10px] text-slate-400">{filteredFonts.length} 款可用</span>
+              <Type className="w-4 h-4 text-indigo-500" /> {tr("艺术字形选择")}</span>
+            <span className="text-[10px] text-slate-400">{filteredFonts.length} {tr("款可用")}</span>
           </label>
 
           {/* Category Tabs */}
           <div className="flex gap-1 overflow-x-auto pb-1.5 app-scrollbar">
             {[
-              { id: 'all', label: '全部' },
-              { id: 'elegant', label: '高雅' },
-              { id: 'script', label: '手写' },
-              { id: 'cute', label: '卡通' },
-              { id: 'modern', label: '现代' },
+              { id: 'all', label: tr('全部') },
+              { id: 'elegant', label: tr('高雅') },
+              { id: 'script', label: tr('手写') },
+              { id: 'cute', label: tr('卡通') },
+              { id: 'modern', label: tr('现代') },
             ].map((cat) => (
               <button
                 key={cat.id}
@@ -229,7 +223,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                     : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {cat.label}
+                {tr(cat.label)}
               </button>
             ))}
           </div>
@@ -261,7 +255,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
                     {text ? text.slice(0, 4) : 'Aa'}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium truncate max-w-full">
-                    {font.name.replace(' (自动加固)', '')}
+                    {font.name.replace(tr(' (自动加固)'), '')}
                   </span>
                 </button>
               );
@@ -274,12 +268,11 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       {(previewMode === '3d' || previewMode === 'split') && (
         <div className="space-y-4 rounded-xl border border-indigo-100 bg-indigo-50/30 p-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-indigo-800 flex items-center gap-1.5">
-            <Box className="w-3.5 h-3.5" /> 3D 立体模型参数
-          </h3>
+            <Box className="w-3.5 h-3.5" /> {tr("3D 立体模型参数")}</h3>
 
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
-              <label className="font-medium text-slate-700">首饰厚度 (Thickness)</label>
+              <label className="font-medium text-slate-700">{tr("首饰厚度 (Thickness)")}</label>
               <span className="text-indigo-600 font-semibold">{extrusionThicknessMm}mm</span>
             </div>
             <input
@@ -295,30 +288,30 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold text-slate-600">文字材质 (Text)</label>
+              <label className="text-[10px] font-semibold text-slate-600">{tr("文字材质 (Text)")}</label>
               <select
                 value={metalMaterial}
                 onChange={(e) => setMetalMaterial(e.target.value as 'gold' | 'platinum' | 'rose_gold' | 'silver')}
                 className="w-full px-2 py-1 text-xs border border-indigo-200 rounded-md bg-white focus:ring-2 focus:ring-indigo-100"
               >
-                <option value="gold">黄金 (Gold)</option>
-                <option value="platinum">白金 (Platinum)</option>
-                <option value="rose_gold">玫瑰金 (Rose)</option>
-                <option value="silver">纯银 (Silver)</option>
+                <option value="gold">{tr("黄金 (Gold)")}</option>
+                <option value="platinum">{tr("白金 (Platinum)")}</option>
+                <option value="rose_gold">{tr("玫瑰金 (Rose)")}</option>
+                <option value="silver">{tr("纯银 (Silver)")}</option>
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-semibold text-slate-600">底框材质 (Backing)</label>
+              <label className="text-[10px] font-semibold text-slate-600">{tr("底框材质 (Backing)")}</label>
               <select
                 value={frameMaterial}
                 onChange={(e) => setFrameMaterial(e.target.value as 'gold' | 'platinum' | 'rose_gold' | 'silver')}
                 className="w-full px-2 py-1 text-xs border border-indigo-200 rounded-md bg-white focus:ring-2 focus:ring-indigo-100"
                 disabled={frameStyle === 'none'}
               >
-                <option value="gold">黄金 (Gold)</option>
-                <option value="platinum">白金 (Platinum)</option>
-                <option value="rose_gold">玫瑰金 (Rose)</option>
-                <option value="silver">纯银 (Silver)</option>
+                <option value="gold">{tr("黄金 (Gold)")}</option>
+                <option value="platinum">{tr("白金 (Platinum)")}</option>
+                <option value="rose_gold">{tr("玫瑰金 (Rose)")}</option>
+                <option value="silver">{tr("纯银 (Silver)")}</option>
               </select>
             </div>
           </div>
@@ -329,24 +322,22 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
           <Settings className="w-3.5 h-3.5 text-indigo-500 animate-spin-slow" />
-          首饰连接挂件 & 一体化底框
-        </h3>
+          {tr("首饰连接挂件 & 一体化底框")}</h3>
 
         {/* Backdrop Frame Selection */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-            底框底板样式
-          </label>
+            {tr("底框底板样式")}</label>
           <select
             value={frameStyle}
             onChange={(e) => setFrameStyle(e.target.value as 'none' | 'contour' | 'bar' | 'heart' | 'oval')}
             className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-100"
           >
-            <option value="none">无底框 (仅文本)</option>
-            <option value="contour">气泡轮廓底板 (Contour)</option>
-            <option value="bar">圆角一体横条 (Rounded Bar)</option>
-            <option value="oval">高雅椭圆底板 (Oval Plate)</option>
-            <option value="heart">唯美爱心底板 (Heart Plate)</option>
+            <option value="none">{tr("无底框 (仅文本)")}</option>
+            <option value="contour">{tr("气泡轮廓底板 (Contour)")}</option>
+            <option value="bar">{tr("圆角一体横条 (Rounded Bar)")}</option>
+            <option value="oval">{tr("高雅椭圆底板 (Oval Plate)")}</option>
+            <option value="heart">{tr("唯美爱心底板 (Heart Plate)")}</option>
           </select>
         </div>
 
@@ -354,7 +345,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         {frameStyle !== 'none' && (
           <div className="space-y-2 pl-2 border-l-2 border-indigo-100">
             <div className="flex justify-between text-xs">
-              <label className="font-medium text-slate-600">底板宽度留边 (Padding)</label>
+              <label className="font-medium text-slate-600">{tr("底板宽度留边 (Padding)")}</label>
               <span className="text-indigo-600 font-semibold">{framePaddingMm}mm</span>
             </div>
             <input
@@ -372,17 +363,16 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         {/* Loop Type Selection */}
         <div className="space-y-2 pt-2 border-t border-slate-100">
           <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-            首饰连接挂耳 / 吊坠孔
-          </label>
+            {tr("首饰连接挂耳 / 吊坠孔")}</label>
           <select
             value={loopType}
             onChange={(e) => setLoopType(e.target.value as 'none' | 'top' | 'double_side' | 'double_top')}
             className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-md bg-white focus:ring-2 focus:ring-indigo-100"
           >
-            <option value="none">无挂件孔 (纯文本/贴片)</option>
-            <option value="top">单吊坠孔 (正上方居中)</option>
-            <option value="double_side">项链双耳挂钩 (左右两侧)</option>
-            <option value="double_top">项链双吊耳 (上方左右)</option>
+            <option value="none">{tr("无挂件孔 (纯文本/贴片)")}</option>
+            <option value="top">{tr("单吊坠孔 (正上方居中)")}</option>
+            <option value="double_side">{tr("项链双耳挂钩 (左右两侧)")}</option>
+            <option value="double_top">{tr("项链双吊耳 (上方左右)")}</option>
           </select>
         </div>
 
@@ -391,7 +381,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="space-y-3 pl-2 border-l-2 border-indigo-100">
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <label className="font-medium text-slate-600">挂耳外径 (Outer Diameter)</label>
+                <label className="font-medium text-slate-600">{tr("挂耳外径 (Outer Diameter)")}</label>
                 <span className="text-indigo-600 font-semibold">{loopOuterDiameterMm}mm</span>
               </div>
               <input
@@ -406,7 +396,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             </div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <label className="font-medium text-slate-600">挂耳内孔径 (Chain Hole)</label>
+                <label className="font-medium text-slate-600">{tr("挂耳内孔径 (Chain Hole)")}</label>
                 <span className="text-indigo-600 font-semibold">{loopInnerDiameterMm}mm</span>
               </div>
               <input
@@ -426,7 +416,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
       <div className="space-y-6">
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">字号 (Size)</label>
+            <label className="font-medium text-slate-700">{tr("字号 (Size)")}</label>
             <span className="text-slate-500">{fontSize}px</span>
           </div>
           <input
@@ -442,7 +432,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">增粗 (Offset)</label>
+            <label className="font-medium text-slate-700">{tr("增粗 (Offset)")}</label>
             <span className="text-slate-500">{offsetMm}mm</span>
           </div>
           <input
@@ -455,13 +445,12 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary-600"
           />
           <p className="text-xs text-slate-400">
-            增加线条粗细以满足工艺最小线宽要求
-          </p>
+            {tr("增加线条粗细以满足工艺最小线宽要求")}</p>
         </div>
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">字距 (Letter Spacing)</label>
+            <label className="font-medium text-slate-700">{tr("字距 (Letter Spacing)")}</label>
             <span className="text-slate-500">{letterSpacingMm}mm</span>
           </div>
           <input
@@ -477,7 +466,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">最小连桥宽度</label>
+            <label className="font-medium text-slate-700">{tr("最小连桥宽度")}</label>
             <span className="text-slate-500">{minBridgeMm}mm</span>
           </div>
           <input
@@ -493,7 +482,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">桥接最大间隙</label>
+            <label className="font-medium text-slate-700">{tr("桥接最大间隙")}</label>
             <span className="text-slate-500">{bridgeMaxGapMm}mm</span>
           </div>
           <input
@@ -509,7 +498,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">扁平化误差</label>
+            <label className="font-medium text-slate-700">{tr("扁平化误差")}</label>
             <span className="text-slate-500">{flattenToleranceMm}mm</span>
           </div>
           <input
@@ -525,7 +514,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-slate-700">自动压缩字距以连通</label>
+            <label className="text-sm font-medium text-slate-700">{tr("自动压缩字距以连通")}</label>
             <input
               type="checkbox"
               checked={autoTighten}
@@ -534,7 +523,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
             />
           </div>
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">最大压缩量</label>
+            <label className="font-medium text-slate-700">{tr("最大压缩量")}</label>
             <span className="text-slate-500">{autoTightenMaxMm}mm</span>
           </div>
           <input
@@ -551,7 +540,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <label className="font-medium text-slate-700">单位换算 (units/mm)</label>
+            <label className="font-medium text-slate-700">{tr("单位换算 (units/mm)")}</label>
             <span className="text-slate-500">{unitsPerMm}</span>
           </div>
           <input
@@ -568,9 +557,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {diagnostics && (
         <div className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md p-3 space-y-1">
-          <div>连通分量：{diagnostics.componentsBeforeRepair} → {diagnostics.componentsAfterRepair}</div>
-          <div>应用字距：{diagnostics.appliedLetterSpacingMm.toFixed(2)}mm</div>
-          <div>桥接数量：{diagnostics.usedBridgeCount}</div>
+          <div>{tr("连通分量：")}{diagnostics.componentsBeforeRepair} → {diagnostics.componentsAfterRepair}</div>
+          <div>{tr("应用字距：")}{diagnostics.appliedLetterSpacingMm.toFixed(2)}mm</div>
+          <div>{tr("桥接数量：")}{diagnostics.usedBridgeCount}</div>
         </div>
       )}
 
@@ -578,36 +567,33 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
 
       {/* Action Group */}
       <div className="space-y-2 border-t border-slate-100 pt-4">
-        <div className="text-xs font-semibold text-slate-400 mb-1">矢量图纸导出 (2D CAD)</div>
+        <div className="text-xs font-semibold text-slate-400 mb-1">{tr("矢量图纸导出 (2D CAD)")}</div>
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={onExportSvg}
             disabled={isProcessing || !text}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
           >
-            <Download className="w-3.5 h-3.5" /> SVG 格式
-          </button>
+            <Download className="w-3.5 h-3.5" /> {tr("SVG 格式")}</button>
           <button
             onClick={onExportDxf}
             disabled={isProcessing || !text}
             className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 cursor-pointer"
           >
-            <FileCode className="w-3.5 h-3.5" /> DXF 格式
-          </button>
+            <FileCode className="w-3.5 h-3.5" /> {tr("DXF 格式")}</button>
         </div>
 
-        <div className="text-xs font-semibold text-slate-400 mt-2 mb-1">三维实体导出 (3D Print)</div>
+        <div className="text-xs font-semibold text-slate-400 mt-2 mb-1">{tr("三维实体导出 (3D Print)")}</div>
         <button
           onClick={onExportStl}
           disabled={isProcessing || !text}
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-700 bg-indigo-600 py-3 font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-50 cursor-pointer"
         >
           {isProcessing ? (
-            '计算中...'
+            tr('计算中...')
           ) : (
             <>
-              <Download className="w-4 h-4" /> 导出 STL 打印模型
-            </>
+              <Download className="w-4 h-4" /> {tr("导出 STL 打印模型")}</>
           )}
         </button>
       </div>

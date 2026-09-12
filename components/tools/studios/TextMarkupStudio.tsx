@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { AlignLeft, ArrowRightLeft, Braces, CaseUpper, FileText, Link, Regex, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -24,11 +25,11 @@ const subTools: SubTool[] = [
   { id: 'html-format', name: 'HTML 格式化/压缩器', description: 'HTML 美化与压缩', icon: Braces, component: HtmlFormatTool },
 ];
 
-export const TextMarkupStudio: React.FC = () => (
+export const TextMarkupStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="文本与标记处理工作室"
-    description="把纯文本、正则、Diff、Markdown 与 HTML 处理放在同一条编辑任务流里，减少跨菜单跳转"
+    title={tr("文本与标记处理工作室")}
+    description={tr("把纯文本、正则、Diff、Markdown 与 HTML 处理放在同一条编辑任务流里，减少跨菜单跳转")}
     tools={subTools}
     defaultTab="case"
   />
-);
+); };

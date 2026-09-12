@@ -1,3 +1,5 @@
+import { runtimeAsset } from './shared/runtimeAssets';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   FileVideo, 
@@ -22,8 +24,8 @@ import { useScratchpadStore } from './shared/scratchpadStore';
 import { notifyToast } from './shared/notifyToast';
 
 const SCRIPT_URLS = {
-  lottie: 'https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js',
-  gifuct: 'https://cdn.jsdelivr.net/npm/gifuct-js@2.1.2/dist/gifuct-js.min.js'
+  lottie: runtimeAsset('lottie').url,
+  gifuct: runtimeAsset('gifuct').url
 };
 
 interface FrameData {
@@ -48,8 +50,8 @@ const MAX_FRAME_PIXELS = 4096 * 4096;
 const MAX_TOTAL_PIXELS = 160_000_000;
 
 interface ImageDecoderConstructor {
-  new(init: { data: Blob; type: string }): {
-    tracks?: { selectedTrack?: { frameCount?: number } };
+  new(init: { data: ArrayBuffer; type: string }): {
+    tracks?: { ready?: Promise<void>; selectedTrack?: { frameCount?: number } };
     decode: (options?: { frameIndex?: number }) => Promise<{ image: VideoFrame }>;
     close: () => void;
   };
@@ -120,6 +122,7 @@ const isImageDecoderEndError = (err: unknown) => {
 };
 
 export const AnimationFrameExtractor: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [fileType, setFileType] = useState<'lottie' | 'gif' | 'webp' | 'apng' | null>(null);
   const [status, setStatus] = useState('请上传 GIF 动图或 Lottie JSON 动画文件');
@@ -150,7 +153,7 @@ export const AnimationFrameExtractor: React.FC = () => {
   const playIntervalRef = useRef<any>(null);
 
   // Global Scratchpad Store
-  const stashItem = useScratchpadStore(state => state.addItem);
+  const stashItem = useScratchpadStore(state => state.addItemAsync);
 
   const clearFrameObjectUrls = useCallback(() => {
     objectUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
@@ -181,16 +184,18 @@ export const AnimationFrameExtractor: React.FC = () => {
     try {
       if (type === 'lottie') {
         await loadScriptWithCache(SCRIPT_URLS.lottie, {
+          expectedSha256: runtimeAsset('lottie').sha256,
           label: 'Lottie 渲染引擎',
-          version: '5.12.2',
+          version: runtimeAsset('lottie').version,
           retries: 2,
           timeoutMs: 15000,
           onStatus: handleRuntimeStatus,
         });
       } else {
         await loadScriptWithCache(SCRIPT_URLS.gifuct, {
+          expectedSha256: runtimeAsset('gifuct').sha256,
           label: 'GIF 解码引擎',
-          version: '2.1.2',
+          version: runtimeAsset('gifuct').version,
           retries: 2,
           timeoutMs: 15000,
           onStatus: handleRuntimeStatus,
@@ -268,7 +273,8 @@ export const AnimationFrameExtractor: React.FC = () => {
       throw new Error(`当前浏览器的 ImageDecoder 不支持 ${mimeType} 动图解码。`);
     }
 
-    const decoder = new window.ImageDecoder({ data: uploadedFile, type: mimeType });
+    if (uploadedFile.size > 64 * 1024 * 1024) throw new Error('Animation file limit: 64 MB');
+    const decoder = new window.ImageDecoder({ data: await uploadedFile.arrayBuffer(), type: mimeType });
     const framePlan = getImageDecoderFramePlan(decoder.tracks?.selectedTrack?.frameCount);
     if (framePlan.frameCount > MAX_DECODED_FRAMES) {
       throw new Error(`检测到 ${framePlan.frameCount} 帧，超过当前安全上限 ${MAX_DECODED_FRAMES} 帧。请截取较短片段后重试。`);
@@ -377,9 +383,11 @@ export const AnimationFrameExtractor: React.FC = () => {
       try {
         await initDependencies('gif');
         const arrayBuffer = await uploadedFile.arrayBuffer();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const gif = new (window as any).Gifuct(arrayBuffer);
-        const rawFrames = gif.decompressFrames(true);
+        const api = (window as Window & { gifuct?: typeof import('gifuct-js') }).gifuct;
+        if (!api) throw new Error('GIF runtime failed to initialize');
+        const gif = api.parseGIF(arrayBuffer);
+        if (gif.frames.length > MAX_DECODED_FRAMES + 1 || gif.lsd.width * gif.lsd.height > MAX_FRAME_PIXELS) throw new Error('GIF exceeds frame or pixel budget');
+        const rawFrames = api.decompressFrames(gif, true);
 
         if (!rawFrames || rawFrames.length === 0) {
           throw new Error('GIF 文件中未检测到有效帧');
@@ -393,22 +401,30 @@ export const AnimationFrameExtractor: React.FC = () => {
         const ctx = canvas.getContext('2d')!;
         let totalPixels = 0;
 
-        // Render each frame offscreen to save as base64 images
+        // Composite frame patches on the logical screen, honoring GIF disposal modes.
+        canvas.width = gif.lsd.width;
+        canvas.height = gif.lsd.height;
+        if (canvas.width * canvas.height > MAX_FRAME_PIXELS) throw new Error('GIF frame exceeds pixel budget');
+        let previous: (typeof rawFrames)[number] | undefined;
+        let restore: ImageData | undefined;
         for (let i = 0; i < rawFrames.length; i++) {
           if (abortController.signal.aborted) throw new DOMException('用户已取消解析', 'AbortError');
+          if (previous?.disposalType === 2) ctx.clearRect(previous.dims.left, previous.dims.top, previous.dims.width, previous.dims.height);
+          else if (previous?.disposalType === 3 && restore) ctx.putImageData(restore, 0, 0);
           const rawFrame = rawFrames[i];
-          canvas.width = rawFrame.dims.width;
-          canvas.height = rawFrame.dims.height;
+          restore = rawFrame.disposalType === 3 ? ctx.getImageData(0, 0, canvas.width, canvas.height) : undefined;
           totalPixels += canvas.width * canvas.height;
-          if (totalPixels > MAX_TOTAL_PIXELS) {
-            throw new Error('累计帧像素过大，已停止解析以保护浏览器内存。');
-          }
-          
-          const imgData = ctx.createImageData(rawFrame.dims.width, rawFrame.dims.height);
-          imgData.data.set(rawFrame.patch);
-          ctx.putImageData(imgData, 0, 0);
-
+          if (totalPixels > MAX_TOTAL_PIXELS) throw new Error('GIF exceeds the total pixel budget');
+          const patch = document.createElement('canvas');
+          patch.width = rawFrame.dims.width; patch.height = rawFrame.dims.height;
+          const patchContext = patch.getContext('2d');
+          if (!patchContext) throw new Error('Canvas is unavailable');
+          const pixels = patchContext.createImageData(patch.width, patch.height);
+          pixels.data.set(rawFrame.patch);
+          patchContext.putImageData(pixels, 0, 0);
+          ctx.drawImage(patch, rawFrame.dims.left, rawFrame.dims.top);
           parsedFrames.push(await createFrameData(i, canvas, rawFrame.delay || 100));
+          previous = rawFrame;
         }
 
         setDecodedFrames(parsedFrames);
@@ -543,15 +559,17 @@ export const AnimationFrameExtractor: React.FC = () => {
   const handleStashFrame = async () => {
     if (!previewCanvasRef.current || !file) return;
 
-    previewCanvasRef.current.toBlob((blob) => {
+    previewCanvasRef.current.toBlob(async (blob) => {
+      try {
       if (blob) {
         const baseName = file.name.split('.').shift() || 'animation';
         const name = `${baseName}_frame_${String(currentFrame + 1).padStart(3, '0')}.png`;
         
-        stashItem(name, blob, 'image', 'image/png');
+        await stashItem(name, blob, 'image', 'image/png');
         setStashedIndex(currentFrame);
         setTimeout(() => setStashedIndex(null), 1500);
       }
+      } catch (error) { notifyToast({ title: '暂存箱保存失败', description: (error as Error).message, tone: 'error' }); }
     }, 'image/png');
   };
 
@@ -688,8 +706,8 @@ export const AnimationFrameExtractor: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="动图与 Lottie 动画帧提取工坊"
-        description="本地提取 GIF、APNG、WebP 动图及 Lottie JSON 动画文件的每一个关键帧，支持可视化逐帧时间轴精细预览及批量打包。"
+        title={tr("动图与 Lottie 动画帧提取工坊")}
+        description={tr("本地提取 GIF、APNG、WebP 动图及 Lottie JSON 动画文件的每一个关键帧，支持可视化逐帧时间轴精细预览及批量打包。")}
       />
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto min-h-0">
         
@@ -699,8 +717,8 @@ export const AnimationFrameExtractor: React.FC = () => {
             <FileVideo className="w-8 h-8 text-primary-500 animate-bounce" />
           </div>
           <div>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">上传 GIF / APNG / WebP 动图 或 Lottie JSON 文件</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">本地读取，完全保护个人创意安全，无需传输服务器</p>
+            <p className="font-semibold text-slate-700 dark:text-slate-200">{tr("上传 GIF / APNG / WebP 动图 或 Lottie JSON 文件")}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{tr("本地读取，完全保护个人创意安全，无需传输服务器")}</p>
           </div>
           <input
             type="file"
@@ -715,11 +733,11 @@ export const AnimationFrameExtractor: React.FC = () => {
           <div className="max-w-md mx-auto w-full p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-xl flex items-center gap-3 shadow-xs">
             <RefreshCw className="w-5 h-5 text-primary-500 animate-spin shrink-0" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{status}</p>
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">{tr(status)}</p>
               <p className="text-[10px] text-slate-400 mt-0.5">
                 {frameBatch
-                  ? `${frameBatch.kind === 'exportZip' ? 'ZIP 导出' : '批量暂存'}：${frameBatch.current}/${frameBatch.total} (${frameBatch.progress}%)`
-                  : '正在使用 Canvas / WebCodecs 管道提取帧，已启用内存预算保护'}
+                  ? tr(`${frameBatch.kind === 'exportZip' ? 'ZIP 导出' : '批量暂存'}：${frameBatch.current}/${frameBatch.total} (${frameBatch.progress}%)`)
+                  : tr('正在使用 Canvas / WebCodecs 管道提取帧，已启用内存预算保护')}
               </p>
               {frameBatch && (
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -737,16 +755,15 @@ export const AnimationFrameExtractor: React.FC = () => {
               }}
               className="rounded-lg border border-slate-200 px-2 py-1 text-[10px] font-bold text-slate-500 hover:bg-slate-50"
             >
-              取消
-            </button>
+              {tr("取消")}</button>
           </div>
         )}
 
         {extractError && !isExtracting && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-            <div className="font-bold">动画解析未完成</div>
+            <div className="font-bold">{tr("动画解析未完成")}</div>
             <p className="mt-1 leading-5">{extractError}</p>
-            <p className="mt-1 leading-5">如果是 APNG/WebP，请确认浏览器支持 WebCodecs ImageDecoder；大尺寸或超长动画建议先裁剪后再导入。</p>
+            <p className="mt-1 leading-5">{tr("如果是 APNG/WebP，请确认浏览器支持 WebCodecs ImageDecoder；大尺寸或超长动画建议先裁剪后再导入。")}</p>
           </div>
         )}
 
@@ -769,7 +786,7 @@ export const AnimationFrameExtractor: React.FC = () => {
               {/* Time Scrubber Timeline */}
               <div className="space-y-2 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs flex-none">
                 <div className="flex justify-between items-center text-xs font-bold text-slate-600 dark:text-slate-300">
-                  <span className="font-mono">帧率: {fps} FPS</span>
+                  <span className="font-mono">{tr("帧率:")}{fps} FPS</span>
                   {frames[currentFrame] && (
                     <span className="font-mono text-slate-400">{frames[currentFrame].delayMs} ms · {frames[currentFrame].width}x{frames[currentFrame].height}</span>
                   )}
@@ -797,14 +814,14 @@ export const AnimationFrameExtractor: React.FC = () => {
                       else renderGifFrame(next);
                     }}
                     className="p-2 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
-                    title="前一帧"
+                    title={tr("前一帧")}
                   >
                     <SkipBack className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => setIsPlaying(!isPlaying)}
                     className="p-3 bg-primary-600 hover:bg-primary-700 text-white rounded-full shadow transition-all active:scale-95"
-                    title={isPlaying ? '暂停' : '播放'}
+                    title={tr(isPlaying ? '暂停' : '播放')}
                   >
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 fill-current" />}
                   </button>
@@ -816,7 +833,7 @@ export const AnimationFrameExtractor: React.FC = () => {
                       else renderGifFrame(next);
                     }}
                     className="p-2 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-600 dark:text-slate-300 transition-colors"
-                    title="后一帧"
+                    title={tr("后一帧")}
                   >
                     <SkipForward className="w-4 h-4" />
                   </button>
@@ -831,11 +848,10 @@ export const AnimationFrameExtractor: React.FC = () => {
               <div className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl shadow-sm space-y-4 flex-none">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-5 h-5 text-primary-500" />
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">导出当前选定帧</h3>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{tr("导出当前选定帧")}</h3>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  当前处于动画第 <span className="font-bold text-primary-600">{currentFrame + 1}</span> 帧。点击以下操作将该单帧导出为透明 PNG 图像。
-                </p>
+                  {tr("当前处于动画第")}<span className="font-bold text-primary-600">{currentFrame + 1}</span> {tr("帧。点击以下操作将该单帧导出为透明 PNG 图像。")}</p>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button
@@ -843,14 +859,13 @@ export const AnimationFrameExtractor: React.FC = () => {
                     variant="secondary"
                     icon={stashedIndex === currentFrame ? <Check className="w-4 h-4 text-green-500" /> : <ClipboardList className="w-4 h-4" />}
                   >
-                    {stashedIndex === currentFrame ? '已送入暂存箱' : '送入暂存箱'}
+                    {stashedIndex === currentFrame ? tr('已送入暂存箱') : tr('送入暂存箱')}
                   </Button>
                   <Button
                     onClick={handleDownloadFrame}
                     icon={<Download className="w-4 h-4" />}
                   >
-                    下载单帧 PNG
-                  </Button>
+                    {tr("下载单帧 PNG")}</Button>
                 </div>
               </div>
 
@@ -858,11 +873,10 @@ export const AnimationFrameExtractor: React.FC = () => {
               <div className="p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl shadow-sm space-y-4 flex-none">
                 <div className="flex items-center gap-2">
                   <FolderArchive className="w-5 h-5 text-primary-500" />
-                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">批量帧打包导出</h3>
+                  <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{tr("批量帧打包导出")}</h3>
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  一键渲染、压缩并打包动画的全部 <span className="font-bold text-primary-600">{totalFrames}</span> 个关键帧。
-                </p>
+                  {tr("一键渲染、压缩并打包动画的全部")}<span className="font-bold text-primary-600">{totalFrames}</span> {tr("个关键帧。")}</p>
 
                 <div className="grid grid-cols-2 gap-3">
                   <Button
@@ -871,15 +885,14 @@ export const AnimationFrameExtractor: React.FC = () => {
                     icon={stashedAll ? <Check className="w-4 h-4 text-green-500" /> : <ClipboardList className="w-4 h-4" />}
                     disabled={isExtracting}
                   >
-                    {stashedAll ? '全帧已暂存' : '全帧送入暂存箱'}
+                    {stashedAll ? tr('全帧已暂存') : tr('全帧送入暂存箱')}
                   </Button>
                   <Button
                     onClick={handleExportAllZip}
                     disabled={isExtracting}
                     icon={<FolderArchive className="w-4 h-4" />}
                   >
-                    打包 ZIP 下载
-                  </Button>
+                    {tr("打包 ZIP 下载")}</Button>
                 </div>
               </div>
 
@@ -887,9 +900,9 @@ export const AnimationFrameExtractor: React.FC = () => {
               <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-2.5 text-xs text-blue-800 flex-1 overflow-auto max-h-[160px]">
                 <Info className="w-4.5 h-4.5 mt-0.5 shrink-0" />
                 <div className="space-y-1 leading-normal">
-                  <h4 className="font-bold">本地运行提示</h4>
-                  <p>1. 本工具使用 CDN 动态缓存引擎，首次加载可能会有数秒延迟，成功载入后将自动缓存在本地实现秒级离线冷启动。</p>
-                  <p>2. 支持 stashing 机制，已导出的 PNG 单帧可以立刻通过“送入暂存箱”同步到全局 Drawer 中，打通所有图形图像工具链。</p>
+                  <h4 className="font-bold">{tr("本地运行提示")}</h4>
+                  <p>{tr("1. 解码引擎随站点部署，加载时校验 SHA-256；缓存不可用时仍可直接加载本站资源。")}</p>
+                  <p>{tr("2. 支持 stashing 机制，已导出的 PNG 单帧可以立刻通过“送入暂存箱”同步到全局 Drawer 中，打通所有图形图像工具链。")}</p>
                 </div>
               </div>
 
@@ -901,10 +914,9 @@ export const AnimationFrameExtractor: React.FC = () => {
         {!file && (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-slate-400 text-xs gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 dark:bg-slate-900/10 min-h-[300px]">
             <AlertCircle className="w-12 h-12 stroke-1 text-slate-300 dark:text-slate-800" />
-            <span className="font-bold">等待上传解析文件</span>
+            <span className="font-bold">{tr("等待上传解析文件")}</span>
             <p className="text-[10px] text-slate-500 text-center max-w-[260px] leading-relaxed">
-              支持上传标准 GIF、APNG、animated WebP 或 Lottie JSON。APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，不支持时会给出明确降级提示。
-            </p>
+              {tr("支持上传标准 GIF、APNG、animated WebP 或 Lottie JSON。APNG/WebP 依赖浏览器 WebCodecs ImageDecoder 能力，不支持时会给出明确降级提示。")}</p>
           </div>
         )}
 

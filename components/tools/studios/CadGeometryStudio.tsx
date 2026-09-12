@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { lazy } from 'react';
 import { Box, Boxes, Gem, Layers, Ruler } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -16,11 +17,11 @@ const subTools: SubTool[] = [
   { id: 'smart-geometry', name: '小学几何解题', description: '加载 JSON 交互讲解', icon: Ruler, component: SmartGeometryTool },
 ];
 
-export const CadGeometryStudio: React.FC = () => (
+export const CadGeometryStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="3D 打印、CAD 与几何工作室"
-    description="面向 3D 打印、CAD 建模、首饰定制和交互几何讲解的空间计算工具集合"
+    title={tr("3D 打印、CAD 与几何工作室")}
+    description={tr("面向 3D 打印、CAD 建模、首饰定制和交互几何讲解的空间计算工具集合")}
     tools={subTools}
     defaultTab="jewelry"
   />
-);
+); };

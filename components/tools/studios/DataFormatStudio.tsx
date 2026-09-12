@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Braces, Code, Database, FileCode, FileJson, FileSpreadsheet, GitCompareArrows } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -20,11 +21,11 @@ const subTools: SubTool[] = [
   { id: 'json-diff', name: 'JSON 结构化对比', description: '树状增删改对比', icon: GitCompareArrows, component: JsonDiffTool },
 ];
 
-export const DataFormatStudio: React.FC = () => (
+export const DataFormatStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="数据格式与结构工作室"
-    description="围绕结构化数据的格式化、转换、Schema 生成与差异对比组织，适合 API、配置与数据建模场景"
+    title={tr("数据格式与结构工作室")}
+    description={tr("围绕结构化数据的格式化、转换、Schema 生成与差异对比组织，适合 API、配置与数据建模场景")}
     tools={subTools}
     defaultTab="json"
   />
-);
+); };

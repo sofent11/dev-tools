@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -40,6 +41,7 @@ const PRESET_COLORS = [
 ];
 
 export const CsgWorkbench: React.FC = () => {
+  useLocaleRender();
   const containerRef = useRef<HTMLDivElement>(null);
   const sharedMesh = useMeshStore(state => state.sharedMesh);
   
@@ -914,7 +916,7 @@ export const CsgWorkbench: React.FC = () => {
                 onClick={() => setGizmoMode(mode)}
                 className={`text-[10px] font-bold px-2 py-1.5 rounded transition-all cursor-pointer capitalize ${gizmoMode === mode ? 'bg-primary-500 text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
               >
-                {mode === 'translate' ? '移动' : mode === 'rotate' ? '旋转' : '缩放'}
+                {mode === 'translate' ? tr('移动') : mode === 'rotate' ? tr('旋转') : tr('缩放')}
               </button>
             ))}
           </div>
@@ -922,17 +924,17 @@ export const CsgWorkbench: React.FC = () => {
 
         <div className="absolute top-4 left-4 flex items-center gap-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
           <div className="flex items-center gap-1">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">样式：</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{tr("样式：")}</span>
             <select
               value={materialType}
               onChange={event => setMaterialType(event.target.value as MaterialType)}
               className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-700 dark:text-slate-200 focus:outline-none"
             >
-              <option value="default">默认风格</option>
-              <option value="gold">🏆 皇家黄金</option>
-              <option value="silver">🥈 抛光白银</option>
-              <option value="jade">🍀 温润翡翠</option>
-              <option value="glass">💎 高透玻璃</option>
+              <option value="default">{tr("默认风格")}</option>
+              <option value="gold">{tr("🏆 皇家黄金")}</option>
+              <option value="silver">{tr("🥈 抛光白银")}</option>
+              <option value="jade">{tr("🍀 温润翡翠")}</option>
+              <option value="glass">{tr("💎 高透玻璃")}</option>
             </select>
           </div>
           <div className="h-4 w-px bg-slate-350 dark:bg-slate-700" />
@@ -941,7 +943,7 @@ export const CsgWorkbench: React.FC = () => {
             className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors cursor-pointer ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
           >
             <Eye className="w-3.5 h-3.5" />
-            <span>网格线</span>
+            <span>{tr("网格线")}</span>
           </button>
         </div>
 
@@ -951,7 +953,7 @@ export const CsgWorkbench: React.FC = () => {
             <div className="flex flex-col items-center gap-3 bg-white dark:bg-slate-900 px-6 py-4 rounded-xl border border-slate-200/50 shadow-md w-72">
               <RefreshCw className="w-8 h-8 animate-spin text-primary-600" />
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 text-center">
-                {progressText || '正在进行三维实体布尔运算...'}
+                {progressText || tr('正在进行三维实体布尔运算...')}
               </span>
               <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
@@ -965,8 +967,7 @@ export const CsgWorkbench: React.FC = () => {
                 onClick={cancelCsg}
                 className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
-                取消
-              </button>
+                {tr("取消")}</button>
             </div>
           </div>
         )}
@@ -982,7 +983,7 @@ export const CsgWorkbench: React.FC = () => {
                 ? 'border-blue-200 bg-blue-50 text-blue-800'
                 : 'border-amber-200 bg-amber-50 text-amber-800'
           }`}>
-            {statusMessage.text}
+            {tr(statusMessage.text)}
           </div>
         )}
         {!resultGeometry ? (
@@ -991,15 +992,15 @@ export const CsgWorkbench: React.FC = () => {
             {sharedMesh && (
               <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
-                  <span className="truncate">💡 共享内存可载入网格模型</span>
+                  <span className="truncate">{tr("💡 共享内存可载入网格模型")}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => importSharedMesh(sharedMesh)}
                   className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
-                  title={sharedMesh.fileName}
+                  title={tr(sharedMesh.fileName)}
                 >
-                  导入：{sharedMesh.fileName}
+                  {tr("导入：")}{sharedMesh.fileName}
                 </button>
               </div>
             )}
@@ -1009,7 +1010,7 @@ export const CsgWorkbench: React.FC = () => {
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-primary-600" />
-                  <span>3D 实体场景大纲树</span>
+                  <span>{tr("3D 实体场景大纲树")}</span>
                 </h4>
                 <div className="flex gap-1">
                   {(['cube', 'sphere', 'cylinder', 'cone'] as const).map(type => (
@@ -1017,7 +1018,7 @@ export const CsgWorkbench: React.FC = () => {
                       key={type}
                       onClick={() => addShape(type)}
                       className="p-1 rounded bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
-                      title={`添加${type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}`}
+                      title={tr(`添加${type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}`)}
                     >
                       <Plus className="w-3 h-3" />
                     </button>
@@ -1050,7 +1051,7 @@ export const CsgWorkbench: React.FC = () => {
                             }));
                           }}
                           className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer disabled:cursor-not-allowed"
-                          title={isBase ? '基准实体不可勾选' : '勾选作为布尔工具'}
+                          title={tr(isBase ? '基准实体不可勾选' : '勾选作为布尔工具')}
                         />
                         <div
                           className="w-2.5 h-2.5 rounded-full border border-white"
@@ -1076,10 +1077,9 @@ export const CsgWorkbench: React.FC = () => {
                             setToolShapeIds(prev => ({ ...prev, [s.id]: false }));
                           }}
                           className={`px-1 py-0.5 rounded text-[9px] font-bold ${isBase ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800'}`}
-                          title="设为布尔基准实体"
+                          title={tr("设为布尔基准实体")}
                         >
-                          基准
-                        </button>
+                          {tr("基准")}</button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1111,7 +1111,7 @@ export const CsgWorkbench: React.FC = () => {
                 <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between flex-none">
                   <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
                     <Settings className="w-3.5 h-3.5 text-primary-600" />
-                    <span>属性配置 ({selectedShape.name})</span>
+                    <span>{tr("属性配置 (")}<span data-i18n-skip>{selectedShape.name}</span>)</span>
                   </h4>
                 </div>
 
@@ -1124,7 +1124,7 @@ export const CsgWorkbench: React.FC = () => {
                         onClick={() => handleParamChange(selectedShape.id, 'type', type)}
                         className={`text-[10px] py-1 font-medium border rounded transition-all capitalize ${selectedShape.type === type ? 'border-primary-500 bg-primary-50/50 text-primary-600 font-semibold' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
                       >
-                        {type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}
+                        {type === 'cube' ? tr('立方体') : type === 'sphere' ? tr('球体') : type === 'cylinder' ? tr('圆柱') : tr('圆锥')}
                       </button>
                     ))}
                   </div>
@@ -1134,7 +1134,7 @@ export const CsgWorkbench: React.FC = () => {
                     <label className="flex items-center justify-center gap-2 border border-dashed border-slate-300 hover:border-primary-500 rounded-lg py-1.5 cursor-pointer bg-slate-50 hover:bg-primary-50/20 transition-all dark:bg-slate-800/40 dark:border-slate-700">
                       <Upload className="w-3.5 h-3.5 text-slate-400" />
                       <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 truncate">
-                        {selectedShape.type === 'upload' ? `已载入: ${selectedShape.uploadedFileName.slice(0, 15)}...` : '导入自定义 STL 模型'}
+                        {selectedShape.type === 'upload' ? tr(`已载入: ${selectedShape.uploadedFileName.slice(0, 15)}...`) : tr('导入自定义 STL 模型')}
                       </span>
                       <input
                         type="file"
@@ -1151,19 +1151,19 @@ export const CsgWorkbench: React.FC = () => {
                   <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1.5 flex-none">
                     <h5 className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
                       <Ruler className="w-3 h-3 text-slate-400" />
-                      <span>实体精确量测尺寸 (包围盒 mm)</span>
+                      <span>{tr("实体精确量测尺寸 (包围盒 mm)")}</span>
                     </h5>
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-center">
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">长度 (X)</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("长度 (X)")}</span>
                         <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.x} mm</span>
                       </div>
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">宽度 (Y)</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("宽度 (Y)")}</span>
                         <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.y} mm</span>
                       </div>
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">高度 (Z)</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("高度 (Z)")}</span>
                         <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.z} mm</span>
                       </div>
                     </div>
@@ -1172,10 +1172,10 @@ export const CsgWorkbench: React.FC = () => {
 
                 {/* Position parameters */}
                 <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">空间坐标位移 (位置)</h4>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("空间坐标位移 (位置)")}</h4>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 X</span>
+                      <span className="font-medium text-slate-500">{tr("位置 X")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posX}</span>
                     </div>
                     <input
@@ -1187,7 +1187,7 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 Y</span>
+                      <span className="font-medium text-slate-500">{tr("位置 Y")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posY}</span>
                     </div>
                     <input
@@ -1199,7 +1199,7 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 Z</span>
+                      <span className="font-medium text-slate-500">{tr("位置 Z")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posZ}</span>
                     </div>
                     <input
@@ -1215,56 +1215,51 @@ export const CsgWorkbench: React.FC = () => {
                 {selectedShape.id !== baseShapeId && (
                   <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase">快速对齐 (调整至基准实体)</h4>
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("快速对齐 (调整至基准实体)")}</h4>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => alignShape('centerAll')}
                         className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold"
-                        title="完全居中"
+                        title={tr("完全居中")}
                       >
-                        完全居中对齐
-                      </button>
+                        {tr("完全居中对齐")}</button>
                       <button
                         onClick={() => alignShape('top')}
                         className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200"
-                        title="叠放上方"
+                        title={tr("叠放上方")}
                       >
-                        叠放在正上方
-                      </button>
+                        {tr("叠放在正上方")}</button>
                     </div>
                     <div className="grid grid-cols-3 gap-1">
                       <button
                         onClick={() => alignShape('right')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="右贴齐"
+                        title={tr("右贴齐")}
                       >
-                        右侧贴合
-                      </button>
+                        {tr("右侧贴合")}</button>
                       <button
                         onClick={() => alignShape('left')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="左贴齐"
+                        title={tr("左贴齐")}
                       >
-                        左侧贴合
-                      </button>
+                        {tr("左侧贴合")}</button>
                       <button
                         onClick={() => alignShape('bottom')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="底贴齐"
+                        title={tr("底贴齐")}
                       >
-                        底部贴合
-                      </button>
+                        {tr("底部贴合")}</button>
                     </div>
                   </div>
                 )}
 
                 {/* Scale parameters */}
                 <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">网格比例缩放 (尺寸)</h4>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("网格比例缩放 (尺寸)")}</h4>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 X</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 X")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleX}</span>
                     </div>
                     <input
@@ -1276,7 +1271,7 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 Y</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 Y")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleY}</span>
                     </div>
                     <input
@@ -1288,7 +1283,7 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 Z</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 Z")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleZ}</span>
                     </div>
                     <input
@@ -1306,7 +1301,7 @@ export const CsgWorkbench: React.FC = () => {
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2">
               <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                 <Settings className="w-3 h-3 text-slate-400" />
-                <span>场景多物体批量布尔计算</span>
+                <span>{tr("场景多物体批量布尔计算")}</span>
               </h4>
               <div className="grid grid-cols-3 gap-2">
                 <button
@@ -1315,16 +1310,16 @@ export const CsgWorkbench: React.FC = () => {
                   className="bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>合并</span>
+                  <span>{tr("合并")}</span>
                 </button>
                 <button
                   onClick={() => executeCsg('subtract')}
                   disabled={isProcessing}
                   className="bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
-                  title="从选定的基准实体中相减所有勾选的工具实体"
+                  title={tr("从选定的基准实体中相减所有勾选的工具实体")}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>相减</span>
+                  <span>{tr("相减")}</span>
                 </button>
                 <button
                   onClick={() => executeCsg('intersect')}
@@ -1332,7 +1327,7 @@ export const CsgWorkbench: React.FC = () => {
                   className="bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5" />
-                  <span>相交</span>
+                  <span>{tr("相交")}</span>
                 </button>
               </div>
             </div>
@@ -1344,27 +1339,25 @@ export const CsgWorkbench: React.FC = () => {
               <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50 p-4 rounded-xl">
                 <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
                   <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                  批量布尔运算成功！
-                </h4>
+                  {tr("批量布尔运算成功！")}</h4>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-                  网格实体已在本地融合成型；这是实验级浏览器布尔结果，导出后请继续用修复工具或切片软件复核。
-                </p>
+                  {tr("网格实体已在本地融合成型；这是实验级浏览器布尔结果，导出后请继续用修复工具或切片软件复核。")}</p>
               </div>
 
               {/* Bounding Box Stats */}
               <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2.5">
-                <h5 className="text-xs font-bold text-slate-500 uppercase">新合成网格拓扑</h5>
+                <h5 className="text-xs font-bold text-slate-500 uppercase">{tr("新合成网格拓扑")}</h5>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">总顶点数 (Vertices)</span>
+                  <span className="text-slate-500">{tr("总顶点数 (Vertices)")}</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.vertices}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">三角面数 (Triangles)</span>
+                  <span className="text-slate-500">{tr("三角面数 (Triangles)")}</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.triangles}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">制造可信度</span>
-                  <span className="font-semibold text-amber-600">需导出复检</span>
+                  <span className="text-slate-500">{tr("制造可信度")}</span>
+                  <span className="font-semibold text-amber-600">{tr("需导出复检")}</span>
                 </div>
               </div>
             </div>
@@ -1376,14 +1369,14 @@ export const CsgWorkbench: React.FC = () => {
                 className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>导出 3D STL 文件 (二进制)</span>
+                <span>{tr("导出 3D STL 文件 (二进制)")}</span>
               </button>
               <button
                 onClick={handleReset}
                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>返回场景树大纲继续设计</span>
+                <span>{tr("返回场景树大纲继续设计")}</span>
               </button>
             </div>
           </div>

@@ -1,3 +1,5 @@
+import { ToolErrorBoundary } from './ToolErrorBoundary';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect, Suspense, lazy, useCallback } from 'react';
 import { LucideIcon } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
@@ -30,6 +32,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   tools,
   defaultTab,
 }) => {
+  useLocaleRender();
   const getFallbackTab = useCallback(() => (
     defaultTab && tools.some(t => t.id === defaultTab)
       ? defaultTab
@@ -65,9 +68,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
       const nextTab = getTabFromLocation();
       setActiveTabId(nextTab);
 
-      if (hash && !tools.some(t => t.id === hash)) {
-        window.history.replaceState(null, '', `#${encodeURIComponent(nextTab)}`);
-      }
+
     };
 
     syncActiveTabFromLocation();
@@ -97,12 +98,20 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
       {/* Premium Tab Bar Wrapper */}
       <div className="flex-none border-b border-slate-200 bg-white/50 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50 sticky top-0 z-20">
         <div className="flex items-center justify-between px-6 py-2 overflow-x-auto scrollbar-none">
-          <div className="flex gap-2 min-w-max py-1">
+          <div className="flex gap-2 min-w-max py-1" role="tablist" aria-label="Tools">
             {tools.map(tool => {
               const isActive = tool.id === activeTabId;
               const Icon = tool.icon;
               return (
                 <button
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={isActive ? 0 : -1}
+                  onKeyDown={event => {
+                    const index = tools.findIndex(item => item.id === tool.id);
+                    const next = event.key === 'ArrowRight' ? (index + 1) % tools.length : event.key === 'ArrowLeft' ? (index + tools.length - 1) % tools.length : event.key === 'Home' ? 0 : event.key === 'End' ? tools.length - 1 : -1;
+                    if (next >= 0) { event.preventDefault(); handleTabSelect(tools[next].id); (event.currentTarget.parentElement?.children[next] as HTMLButtonElement)?.focus(); }
+                  }}
                   key={tool.id}
                   type="button"
                   onClick={() => handleTabSelect(tool.id)}
@@ -112,13 +121,13 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
                       ? "bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-100 dark:bg-primary-950/40 dark:text-primary-400 dark:ring-primary-900/50"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
                   )}
-                  title={tool.description}
+                  title={tr(tool.description)}
                 >
                   <Icon className={twMerge(
                     "w-4 h-4 transition-transform duration-200 group-hover:scale-110",
                     isActive ? "text-primary-600 dark:text-primary-400" : "text-slate-400 dark:text-slate-500"
                   )} />
-                  <span>{tool.name}</span>
+                  <span>{tr(tool.name)}</span>
                 </button>
               );
             })}
@@ -133,10 +142,10 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
           <div className="mb-4 flex-none rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-              {title} • {activeTool.name}
+              {tr(title)} • {tr(activeTool.name)}
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {description} — 当前工具：{activeTool.description || activeTool.name}
+              {tr(description)} {tr("— 当前工具：")}{tr(activeTool.description || activeTool.name)}
             </p>
           </div>
 
@@ -147,17 +156,16 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
                   <div className="flex h-full min-h-[25rem] items-center justify-center rounded-xl border border-slate-200/60 bg-white/50 dark:border-slate-800/60 dark:bg-slate-900/50 text-sm font-medium text-slate-500 backdrop-blur-sm">
                     <div className="flex flex-col items-center gap-3">
                       <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent"></div>
-                      <span>正在加载 {activeTool.name}...</span>
+                      <span>{tr("正在加载")}{tr(activeTool.name)}...</span>
                     </div>
                   </div>
                 }
               >
-                <ActiveComponent />
+                <ToolErrorBoundary key={activeTabId}><ActiveComponent /></ToolErrorBoundary>
               </Suspense>
             ) : (
               <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 text-sm text-slate-400">
-                未加载工具组件
-              </div>
+                {tr("未加载工具组件")}</div>
             )}
           </div>
         </div>

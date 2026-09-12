@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React from 'react';
 import { twMerge } from 'tailwind-merge';
 
@@ -53,25 +54,25 @@ export const FieldLabel: React.FC<{
   children: React.ReactNode;
   hint?: React.ReactNode;
   className?: string;
-}> = ({ children, hint, className = '' }) => (
+}> = ({ children, hint, className = '' }) => { useLocaleRender(); return (
   <label className={twMerge('field-label', className)}>
     <span>{children}</span>
-    {hint && <span className="text-xs font-medium text-slate-400">{hint}</span>}
+    {hint && <span className="text-xs font-medium text-slate-400">{tr(hint)}</span>}
   </label>
-);
+); };
 
 export const ToolShell: React.FC<{
   children: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
+}> = ({ children, className = '' }) => { useLocaleRender(); return (
   <div className={twMerge('flex h-full min-h-0 flex-col gap-4', className)}>{children}</div>
-);
+); };
 
 export const CodePanel: React.FC<{
   children?: React.ReactNode;
   className?: string;
   muted?: boolean;
-}> = ({ children, className = '', muted = false }) => (
+}> = ({ children, className = '', muted = false }) => { useLocaleRender(); return (
   <div
     className={twMerge(
       muted
@@ -82,37 +83,37 @@ export const CodePanel: React.FC<{
   >
     {children}
   </div>
-);
+); };
 
 export const ResultPanel: React.FC<{
   children: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
+}> = ({ children, className = '' }) => { useLocaleRender(); return (
   <div className={twMerge('tool-section p-4', className)}>{children}</div>
-);
+); };
 
 export const UploadPanel: React.FC<{
   children: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
+}> = ({ children, className = '' }) => { useLocaleRender(); return (
   <div className={twMerge('tool-upload', className)}>{children}</div>
-);
+); };
 
 export const Tabs: React.FC<{
   children: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
+}> = ({ children, className = '' }) => { useLocaleRender(); return (
   <div className={twMerge('flex flex-wrap gap-1 border-b border-slate-200 bg-white px-4', className)}>
     {children}
   </div>
-);
+); };
 
 export const TabButton: React.FC<{
   active?: boolean;
   children: React.ReactNode;
   className?: string;
   onClick?: () => void;
-}> = ({ active = false, children, className = '', onClick }) => (
+}> = ({ active = false, children, className = '', onClick }) => { useLocaleRender(); return (
   <button
     type="button"
     onClick={onClick}
@@ -126,4 +127,4 @@ export const TabButton: React.FC<{
   >
     {children}
   </button>
-);
+); };

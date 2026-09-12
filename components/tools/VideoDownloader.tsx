@@ -1,3 +1,6 @@
+import { readPreference, writePreference } from './shared/browserStorage';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
@@ -397,10 +400,10 @@ const parseBilibili = async (url: string): Promise<ParseResult> => {
     })),
     ...dashVideo.map((item, index) => ({
       id: `bili-dash-${index}`,
-      quality: item.id ? `${item.id}P` : guessQuality(item.baseUrl || item.base_url, index),
+      quality: item.id ? `${item.id}P` : guessQuality(item.baseUrl || item.base_url || '', index),
       format: item.mimeType?.split('/').pop() || 'm4s',
       resolution: item.width && item.height ? `${item.width}x${item.height}` : undefined,
-      url: item.baseUrl || item.base_url,
+      url: item.baseUrl || item.base_url || '',
       source: 'Bilibili DASH',
       referer: 'https://www.bilibili.com/',
     })),
@@ -446,13 +449,15 @@ const parseFromSource = (source: string, pageUrl: string, platform: Platform): P
   };
 };
 
-const parseWithWorker = async (endpoint: string, url: string): Promise<ParseResult> => {
+const parseWithWorker = async (endpoint: string, url: string, token = ''): Promise<ParseResult> => {
   const apiUrl = `${normalizeWorkerEndpoint(endpoint)}/api/extract`;
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    signal: AbortSignal.timeout(30000),
     body: JSON.stringify({ url }),
   });
   const payload = await response.json().catch(() => null);
@@ -509,15 +514,17 @@ const buildCommand = (format: VideoFormat) => {
 };
 
 const getBlockedWarning = (platform: Platform) =>
-  `浏览器无法直接访问该页面或接口，常见原因是 CORS、登录态、地区限制或平台风控。你仍可以打开原页面，查看网页源码后粘贴到“源码解析”模式中扫描媒体地址。${platformHints[platform]}`;
+  `浏览器无法直接访问该页面或接口，常见原因是 CORS、登录态、地区限制或平台风控。你仍可以打开原页面，查看网页源码后粘贴到“源码解析”模式中扫描媒体地址。${tr(platformHints[platform])}`;
 
 export const VideoDownloader: React.FC = () => {
+  useLocaleRender();
   const [mode, setMode] = useState<ParseMode>('url');
-  const [input, setInput] = useState(sampleUrl);
-  const [workerEndpoint, setWorkerEndpoint] = useState(() => localStorage.getItem(WORKER_ENDPOINT_STORAGE_KEY) || DEFAULT_WORKER_ENDPOINT);
+  const [input, setInput] = useDraftState("components/tools/VideoDownloader.tsx:VideoDownloader:input", sampleUrl);
+  const [workerToken, setWorkerToken] = useState('');
+  const [workerEndpoint, setWorkerEndpoint] = useState(() => readPreference(WORKER_ENDPOINT_STORAGE_KEY) || DEFAULT_WORKER_ENDPOINT);
   const [workerHealth, setWorkerHealth] = useState<WorkerHealthState>('idle');
   const [workerHealthMessage, setWorkerHealthMessage] = useState('');
-  const [source, setSource] = useState('');
+  const [source, setSource] = useDraftState("components/tools/VideoDownloader.tsx:VideoDownloader:source", '');
   const [status, setStatus] = useState<ParseStatus>('idle');
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -560,9 +567,9 @@ export const VideoDownloader: React.FC = () => {
     setWorkerHealthMessage('');
     const normalized = normalizeWorkerEndpoint(value);
     if (normalized) {
-      localStorage.setItem(WORKER_ENDPOINT_STORAGE_KEY, normalized);
+      writePreference(WORKER_ENDPOINT_STORAGE_KEY, normalized);
     } else {
-      localStorage.removeItem(WORKER_ENDPOINT_STORAGE_KEY);
+      writePreference(WORKER_ENDPOINT_STORAGE_KEY, null);
     }
   };
 
@@ -606,7 +613,7 @@ export const VideoDownloader: React.FC = () => {
       if (mode === 'source') {
         nextResult = parseFromSource(source, targetUrl, nextPlatform);
       } else if (normalizeWorkerEndpoint(workerEndpoint)) {
-        nextResult = await parseWithWorker(workerEndpoint, targetUrl);
+        nextResult = await parseWithWorker(workerEndpoint, targetUrl, workerToken);
       } else if (nextPlatform === 'direct') {
         nextResult = parseDirect(targetUrl);
       } else if (nextPlatform === 'vimeo') {
@@ -641,8 +648,8 @@ export const VideoDownloader: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="视频下载解析器"
-        description="本地优先解析媒体直链、公开页面和源码中的视频资源；平台受登录态、地区、CORS 与风控限制，私有 Worker 为可选增强。"
+        title={tr("视频下载解析器")}
+        description={tr("本地优先解析媒体直链、公开页面和源码中的视频资源；平台受登录态、地区、CORS 与风控限制，私有 Worker 为可选增强。")}
         actions={
           <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button
@@ -653,8 +660,7 @@ export const VideoDownloader: React.FC = () => {
               }`}
             >
               <Link2 className="h-3.5 w-3.5" />
-              链接
-            </button>
+              {tr("链接")}</button>
             <button
               type="button"
               onClick={() => setMode('source')}
@@ -663,8 +669,7 @@ export const VideoDownloader: React.FC = () => {
               }`}
             >
               <Clipboard className="h-3.5 w-3.5" />
-              源码
-            </button>
+              {tr("源码")}</button>
           </div>
         }
       />
@@ -674,17 +679,20 @@ export const VideoDownloader: React.FC = () => {
           <div className="border-b border-slate-200 bg-slate-50/70 p-5 lg:border-b-0 lg:border-r">
             <div className="space-y-4">
               <div>
-                <FieldLabel hint={platformLabels[platform]}>视频页面或媒体直链</FieldLabel>
+                <FieldLabel hint={tr(platformLabels[platform])}>{tr("视频页面或媒体直链")}</FieldLabel>
                 <Input
                   value={input}
                   onChange={event => setInput(event.target.value)}
-                  placeholder="粘贴 Bilibili / Vimeo / Pinterest / mp4 / m3u8 链接"
+                  placeholder={tr("粘贴 Bilibili / Vimeo / Pinterest / mp4 / m3u8 链接")}
                   className="font-mono"
                 />
               </div>
 
               <div>
-                <FieldLabel hint={workerEndpoint ? '优先使用' : '可选'}>Cloudflare Worker API</FieldLabel>
+                <label className="block text-xs">Worker access token (optional, session only)
+                  <input type="password" autoComplete="off" aria-label="Worker access token" value={workerToken} onChange={event => setWorkerToken(event.target.value)} className="mt-1 block w-full rounded border p-2" />
+                </label>
+                <FieldLabel hint={tr(workerEndpoint ? '优先使用' : '可选')}>Cloudflare Worker API</FieldLabel>
                 <div className="flex gap-2">
                   <Input
                     value={workerEndpoint}
@@ -699,27 +707,26 @@ export const VideoDownloader: React.FC = () => {
                     onClick={runWorkerHealthCheck}
                     isLoading={workerHealth === 'checking'}
                   >
-                    检测
-                  </Button>
+                    {tr("检测")}</Button>
                 </div>
                 <div className={`mt-1 text-[11px] leading-5 ${
                   workerHealth === 'ready' ? 'text-emerald-700' : workerHealth === 'error' ? 'text-amber-700' : 'text-slate-500'
                 }`}>
                   {workerHealthMessage || (workerEndpoint === DEFAULT_WORKER_ENDPOINT
-                    ? '默认使用 sopace 公共 Worker；您也可以替换为自己的 Cloudflare Worker，建议先点击检测。'
+                    ? tr('默认使用 sopace 公共 Worker；您也可以替换为自己的 Cloudflare Worker，建议先点击检测。')
                     : workerEndpoint
-                      ? '填入后会优先调用您配置的 Worker；建议先点击检测。'
-                      : '未配置 Worker 时仅使用浏览器本地能力，部分平台将受限于跨域报错。')}
+                      ? tr('填入后会优先调用您配置的 Worker；建议先点击检测。')
+                      : tr('未配置 Worker 时仅使用浏览器本地能力，部分平台将受限于跨域报错。'))}
                 </div>
               </div>
 
               {mode === 'source' && (
                 <div>
-                  <FieldLabel hint="跨域失败时使用">页面源码 / JSON 配置</FieldLabel>
+                  <FieldLabel hint={tr("跨域失败时使用")}>{tr("页面源码 / JSON 配置")}</FieldLabel>
                   <Textarea
                     value={source}
                     onChange={event => setSource(event.target.value)}
-                    placeholder="粘贴网页源码、__INITIAL_STATE__、playerConfig 或接口 JSON..."
+                    placeholder={tr("粘贴网页源码、__INITIAL_STATE__、playerConfig 或接口 JSON...")}
                     className="min-h-56 resize-y font-mono text-xs"
                   />
                 </div>
@@ -731,8 +738,7 @@ export const VideoDownloader: React.FC = () => {
                 icon={status === 'parsing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 className="w-full"
               >
-                开始解析
-              </Button>
+                {tr("开始解析")}</Button>
 
               <div className="tool-section overflow-hidden rounded-xl border border-slate-200/80 bg-white/50 p-4 shadow-sm backdrop-blur-sm transition-all duration-300">
                 <button
@@ -742,8 +748,7 @@ export const VideoDownloader: React.FC = () => {
                 >
                   <span className="flex items-center gap-2">
                     <Cpu className={`h-4 w-4 transition-transform duration-500 ${showWorkerInfo ? 'text-indigo-600 rotate-180' : 'text-slate-500'}`} />
-                    配置解析 Worker
-                  </span>
+                    {tr("配置解析 Worker")}</span>
                   {showWorkerInfo ? (
                     <ChevronUp className="h-4 w-4 text-slate-500 transition-transform duration-300" />
                   ) : (
@@ -754,32 +759,27 @@ export const VideoDownloader: React.FC = () => {
                 {showWorkerInfo ? (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
                     <p className="text-slate-500">
-                      默认提供 sopace 公共 Worker 作为开箱即用的解析端点；您也可以替换为自己的 Cloudflare Worker。多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制，Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。
-                    </p>
+                      {tr("默认提供 sopace 公共 Worker 作为开箱即用的解析端点；您也可以替换为自己的 Cloudflare Worker。多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制，Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。")}</p>
                     <div className="grid gap-2 md:grid-cols-2">
                       {videoCapabilityBoundaries.map(item => (
                         <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-2.5">
-                          <div className="font-semibold text-slate-800">{item.label}</div>
-                          <div className="mt-1 text-slate-600">{item.support}</div>
-                          <div className="mt-1 text-amber-700">边界：{item.boundary}</div>
+                          <div className="font-semibold text-slate-800">{tr(item.label)}</div>
+                          <div className="mt-1 text-slate-600">{tr(item.support)}</div>
+                          <div className="mt-1 text-amber-700">{tr("边界：")}{tr(item.boundary)}</div>
                         </div>
                       ))}
                     </div>
                     <div className="rounded-lg bg-slate-50 p-2.5">
-                      <div className="mb-1 font-semibold text-slate-800">极速部署步骤：</div>
+                      <div className="mb-1 font-semibold text-slate-800">{tr("极速部署步骤：")}</div>
                       <ol className="list-decimal pl-4 space-y-1 text-slate-600">
                         <li>
-                          登录 <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline hover:text-indigo-700">Cloudflare 仪表盘</a>，创建一个新的 Workers。
-                        </li>
+                          {tr("登录")}<a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline hover:text-indigo-700">{tr("Cloudflare 仪表盘")}</a>{tr("，创建一个新的 Workers。")}</li>
                         <li>
-                          复制下方完整的解析脚本代码。
-                        </li>
+                          {tr("复制下方完整的解析脚本代码。")}</li>
                         <li>
-                          在 Cloudflare 网页编辑器中清空原有内容，粘贴脚本并点击「Deploy」。
-                        </li>
+                          {tr("在 Cloudflare 网页编辑器中清空原有内容，粘贴脚本并点击「Deploy」。")}</li>
                         <li>
-                          复制部署成功后的 API 域名，填入上方的「Cloudflare Worker API」框中。
-                        </li>
+                          {tr("复制部署成功后的 API 域名，填入上方的「Cloudflare Worker API」框中。")}</li>
                       </ol>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -790,7 +790,7 @@ export const VideoDownloader: React.FC = () => {
                         onClick={copyWorkerScript}
                         className="w-full justify-center py-2"
                       >
-                        {workerScriptCopied ? '已复制 Worker 脚本！' : '一键复制 Worker 脚本'}
+                        {workerScriptCopied ? tr('已复制 Worker 脚本！') : tr('一键复制 Worker 脚本')}
                       </Button>
                       <div className="relative">
                         <div className="absolute right-2 top-2 z-10 rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-white">
@@ -804,24 +804,23 @@ export const VideoDownloader: React.FC = () => {
                   </div>
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    默认使用 sopace 公共 Worker；填入自有 Worker 域名后会优先调用您的配置。清空后仅使用浏览器本地能力，部分平台将受限于跨域报错。
-                  </p>
+                    {tr("默认使用 sopace 公共 Worker；填入自有 Worker 域名后会优先调用您的配置。清空后仅使用浏览器本地能力，部分平台将受限于跨域报错。")}</p>
                 )}
               </div>
 
               <div className="tool-panel p-4">
-                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">平台提示</div>
-                <p className="text-sm leading-6 text-slate-700">{platformHints[platform]}</p>
+                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">{tr("平台提示")}</div>
+                <p className="text-sm leading-6 text-slate-700">{tr(platformHints[platform])}</p>
               </div>
 
               <div className="tool-panel p-4">
-                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">能力矩阵</div>
+                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">{tr("能力矩阵")}</div>
                 <div className="grid gap-2 text-xs text-slate-600">
-                  <div className="flex justify-between gap-3"><span>媒体直链 / m3u8 / mpd</span><strong className="text-emerald-700">本地可用</strong></div>
-                  <div className="flex justify-between gap-3"><span>页面源码扫描</span><strong className="text-emerald-700">本地可用</strong></div>
-                  <div className="flex justify-between gap-3"><span>Vimeo / Bilibili 公开接口</span><strong className="text-amber-700">受 CORS/权限影响</strong></div>
-                  <div className="flex justify-between gap-3"><span>抖音 / 小红书 / Pinterest</span><strong className="text-amber-700">建议私有 Worker</strong></div>
-                  <div className="flex justify-between gap-3"><span>Twitter / X</span><strong className="text-red-700">纯浏览器不承诺支持</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("媒体直链 / m3u8 / mpd")}</span><strong className="text-emerald-700">{tr("本地可用")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("页面源码扫描")}</span><strong className="text-emerald-700">{tr("本地可用")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("Vimeo / Bilibili 公开接口")}</span><strong className="text-amber-700">{tr("受 CORS/权限影响")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("抖音 / 小红书 / Pinterest")}</span><strong className="text-amber-700">{tr("建议私有 Worker")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Twitter / X</span><strong className="text-red-700">{tr("纯浏览器不承诺支持")}</strong></div>
                 </div>
               </div>
             </div>
@@ -835,7 +834,7 @@ export const VideoDownloader: React.FC = () => {
                 }`}
               >
                 {status === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4" /> : <AlertTriangle className="mt-0.5 h-4 w-4" />}
-                <span className="leading-5">{message || '准备解析。'}</span>
+                <span className="leading-5">{message || tr('准备解析。')}</span>
               </div>
             )}
 
@@ -859,16 +858,16 @@ export const VideoDownloader: React.FC = () => {
                     </div>
                     <h3 className="break-words text-lg font-semibold leading-7 text-slate-950">{result.title}</h3>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                      {result.author && <span className="rounded border border-slate-200 px-2 py-1">作者：{result.author}</span>}
-                      {result.duration && <span className="rounded border border-slate-200 px-2 py-1">时长：{result.duration}</span>}
-                      <span className="rounded border border-slate-200 px-2 py-1">候选：{selectedFormats.length}</span>
+                      {result.author && <span className="rounded border border-slate-200 px-2 py-1">{tr("作者：")}{result.author}</span>}
+                      {result.duration && <span className="rounded border border-slate-200 px-2 py-1">{tr("时长：")}{result.duration}</span>}
+                      <span className="rounded border border-slate-200 px-2 py-1">{tr("候选：")}{selectedFormats.length}</span>
                     </div>
                   </div>
                 </div>
 
                 {hasPreview && previewUrl && (
                   <div>
-                    <div className="mb-2 text-sm font-semibold text-slate-800">预览</div>
+                    <div className="mb-2 text-sm font-semibold text-slate-800">{tr("预览")}</div>
                     <video src={previewUrl} controls className="aspect-video w-full rounded-lg bg-slate-950" />
                   </div>
                 )}
@@ -899,7 +898,7 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Copy className="h-3.5 w-3.5" />}
                               onClick={() => copyText(`url-${format.id}`, format.url)}
                             >
-                              {copiedId === `url-${format.id}` ? '已复制' : '复制链接'}
+                              {copiedId === `url-${format.id}` ? tr('已复制') : tr('复制链接')}
                             </Button>
                             <Button
                               size="sm"
@@ -907,7 +906,7 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Terminal className="h-3.5 w-3.5" />}
                               onClick={() => copyText(`cmd-${format.id}`, buildCommand(format))}
                             >
-                              {copiedId === `cmd-${format.id}` ? '已复制' : '复制命令'}
+                              {copiedId === `cmd-${format.id}` ? tr('已复制') : tr('复制命令')}
                             </Button>
                             <Button
                               size="sm"
@@ -915,11 +914,10 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Clipboard className="h-3.5 w-3.5" />}
                               onClick={() => stashFormat(format)}
                             >
-                              暂存
-                            </Button>
+                              {tr("暂存")}</Button>
                             <a href={format.url} target="_blank" rel="noreferrer" download={`video-${index}.${format.format}`}>
                               <Button size="sm" icon={format.format === 'm3u8' || format.format === 'mpd' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}>
-                                {format.format === 'm3u8' || format.format === 'mpd' ? '打开' : '下载'}
+                                {format.format === 'm3u8' || format.format === 'mpd' ? tr('打开') : tr('下载')}
                               </Button>
                             </a>
                           </div>
@@ -932,17 +930,15 @@ export const VideoDownloader: React.FC = () => {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
-                    暂无候选地址。切换到源码解析，粘贴页面 HTML 或 JSON 配置后可继续扫描。
-                  </div>
+                    {tr("暂无候选地址。切换到源码解析，粘贴页面 HTML 或 JSON 配置后可继续扫描。")}</div>
                 )}
               </div>
             ) : (
               <div className="flex min-h-[28rem] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center">
                 <FileVideo className="mb-4 h-12 w-12 text-slate-300" />
-                <div className="text-base font-semibold text-slate-800">等待解析视频地址</div>
+                <div className="text-base font-semibold text-slate-800">{tr("等待解析视频地址")}</div>
                 <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  支持媒体直链、Vimeo/Bilibili 公开资源，以及页面源码中的 mp4 / m3u8 / webm / DASH 扫描；复杂平台请部署自己的 Worker 或改用源码解析。
-                </p>
+                  {tr("支持媒体直链、Vimeo/Bilibili 公开资源，以及页面源码中的 mp4 / m3u8 / webm / DASH 扫描；复杂平台请部署自己的 Worker 或改用源码解析。")}</p>
               </div>
             )}
           </div>

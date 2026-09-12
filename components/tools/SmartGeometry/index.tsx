@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useEffect, useRef } from 'react';
 import { FolderOpen, Hand, MousePointer2, PenLine, Save, Trash2, Undo2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -28,6 +29,7 @@ function isGeometryQuestion(value: unknown): value is GeometryQuestion {
 }
 
 export const SmartGeometryTool: React.FC = () => {
+  useLocaleRender();
   const {
     auxHistory,
     clearAuxiliaryLines,
@@ -102,8 +104,7 @@ export const SmartGeometryTool: React.FC = () => {
                   : 'text-slate-500 hover:text-slate-700',
               )}
             >
-              交互模式
-            </button>
+              {tr("交互模式")}</button>
             <button
               onClick={() => setMode('teaching')}
               className={cn(
@@ -113,16 +114,15 @@ export const SmartGeometryTool: React.FC = () => {
                   : 'text-slate-500 hover:text-slate-700',
               )}
             >
-              教学模式
-            </button>
+              {tr("教学模式")}</button>
           </div>
 
           <div className="hidden h-6 w-px bg-slate-200 md:block" />
           <div>
             <h1 className="text-base font-bold text-slate-900 md:text-lg">
-              {question?.meta.title || '智能几何练习'}
+              <span data-i18n-skip>{question?.meta.title || tr('智能几何练习')}</span>
             </h1>
-            <p className="text-xs font-semibold uppercase text-slate-500">小学几何解题工作区</p>
+            <p className="text-xs font-semibold uppercase text-slate-500">{tr("小学几何解题工作区")}</p>
           </div>
         </div>
 
@@ -139,16 +139,14 @@ export const SmartGeometryTool: React.FC = () => {
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
           >
             <FolderOpen size={16} />
-            加载 JSON
-          </button>
+            {tr("加载 JSON")}</button>
           <button
             onClick={handleSaveJson}
             disabled={!question}
             className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save size={16} />
-            保存 JSON
-          </button>
+            {tr("保存 JSON")}</button>
 
           <span
             className={cn(
@@ -159,10 +157,10 @@ export const SmartGeometryTool: React.FC = () => {
             )}
           >
             {question?.meta.difficulty === 'easy'
-              ? '简单'
+              ? tr('简单')
               : question?.meta.difficulty === 'hard'
-                ? '困难'
-                : '中等'}
+                ? tr('困难')
+                : tr('中等')}
           </span>
         </div>
       </header>
@@ -171,27 +169,27 @@ export const SmartGeometryTool: React.FC = () => {
         {mode === 'interactive' && (
           <nav className="relative z-20 flex w-14 shrink-0 flex-col items-center gap-6 border-r border-slate-200 bg-white py-5 md:w-16">
             <div className="flex flex-col items-center gap-3">
-              <ToolButton active={tool === 'pan'} onClick={() => setTool('pan')} icon={<Hand size={20} />} label="漫游画布" />
+              <ToolButton active={tool === 'pan'} onClick={() => setTool('pan')} icon={<Hand size={20} />} label={tr("漫游画布")} />
               <ToolButton
                 active={tool === 'move'}
                 onClick={() => setTool('move')}
                 icon={<MousePointer2 size={20} />}
-                label="移动端点"
+                label={tr("移动端点")}
               />
               <ToolButton
                 active={tool === 'line'}
                 onClick={() => setTool('line')}
                 icon={<PenLine size={20} />}
-                label="画辅助线"
+                label={tr("画辅助线")}
               />
               <div className="my-1 h-px w-8 bg-slate-100" />
               <ToolButton
                 onClick={undoLastAux}
                 icon={<Undo2 size={20} />}
-                label="撤销辅助线"
+                label={tr("撤销辅助线")}
                 disabled={auxHistory.length === 0}
               />
-              <ToolButton onClick={clearAuxiliaryLines} icon={<Trash2 size={20} />} label="清空辅助线" />
+              <ToolButton onClick={clearAuxiliaryLines} icon={<Trash2 size={20} />} label={tr("清空辅助线")} />
             </div>
           </nav>
         )}
@@ -210,8 +208,8 @@ export const SmartGeometryTool: React.FC = () => {
 
           {mode === 'interactive' && question?.meta?.originalText && (
             <div className="pointer-events-none absolute left-4 top-4 z-10 max-w-[min(24rem,calc(100%-2rem))] rounded-lg border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-sm md:left-6 md:top-6">
-              <h3 className="mb-2 border-b border-slate-200 pb-2 text-sm font-bold text-slate-800">题目已知条件</h3>
-              <div className="markdown-body text-sm font-medium leading-relaxed text-slate-700">
+              <h3 className="mb-2 border-b border-slate-200 pb-2 text-sm font-bold text-slate-800">{tr("题目已知条件")}</h3>
+              <div data-i18n-skip className="markdown-body text-sm font-medium leading-relaxed text-slate-700">
                 <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                   {question.meta.originalText}
                 </ReactMarkdown>
@@ -237,11 +235,12 @@ function ToolButton({
   label: string;
   onClick: () => void;
 }) {
+  useLocaleRender();
   return (
     <button
       type="button"
       onClick={onClick}
-      title={label}
+      title={tr(label)}
       disabled={disabled}
       className={cn(
         'flex h-10 w-10 items-center justify-center rounded-lg border transition-all',

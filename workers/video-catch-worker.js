@@ -45,7 +45,17 @@ const QUALITY_MAP = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env = {}) {
+    const origin = request.headers.get('origin');
+    const origins = (env.ALLOWED_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
+    if (origin && origins.length && !origins.includes(origin)) return json({ ok: false, error: 'Origin not allowed' }, 403);
+    if (request.method !== 'OPTIONS' && new URL(request.url).pathname === '/api/extract') {
+      if (env.ACCESS_TOKEN && request.headers.get('authorization') !== `Bearer ${env.ACCESS_TOKEN}`) return json({ ok: false, error: 'Unauthorized' }, 401);
+      if (env.RATE_LIMITER) {
+        const { success } = await env.RATE_LIMITER.limit({ key: request.headers.get('cf-connecting-ip') || 'anonymous' });
+        if (!success) return json({ ok: false, error: 'Rate limit exceeded' }, 429);
+      }
+    }
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: JSON_HEADERS });
     }
@@ -74,6 +84,9 @@ export default {
         return json({ ok: false, error: 'Missing url. Use /api/extract?url=...' }, 400);
       }
 
+      assertPublicUrl(inputUrl);
+      const allowedHosts = (env.ALLOWED_HOSTS || '').split(',').map(value => value.trim()).filter(Boolean);
+      if (allowedHosts.length && !allowedHosts.includes(new URL(inputUrl).hostname)) return json({ ok: false, error: 'Host not allowed' }, 403);
       const result = await extract(inputUrl, env);
       return json({ ok: true, ...result });
     } catch (error) {
@@ -93,6 +106,8 @@ async function readInputUrl(request, parsed) {
     return parsed.searchParams.get('url')?.trim() || '';
   }
   if (request.method === 'POST') {
+    const bytes = await readLimitedBody(request, 16 * 1024);
+    request = new Request(request.url, { method: 'POST', headers: request.headers, body: bytes });
     const contentType = request.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const body = await request.json().catch(() => ({}));
@@ -158,7 +173,7 @@ function parseDirect(url) {
 }
 
 async function fetchText(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await boundedFetch(url, {
     redirect: options.redirect || 'follow',
     headers: {
       'user-agent': USER_AGENT,
@@ -173,7 +188,7 @@ async function fetchText(url, options = {}) {
 }
 
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await boundedFetch(url, {
     method: options.method || 'GET',
     redirect: options.redirect || 'follow',
     body: options.body,
@@ -328,7 +343,7 @@ async function extractGeneric(url) {
 async function extractBilibili(inputUrl) {
   let url = inputUrl;
   if (/b23\.tv/i.test(url)) {
-    const response = await fetch(url, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
+    const response = await boundedFetch(url, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
     url = response.url || url;
   }
 
@@ -521,7 +536,7 @@ async function extractDouyin(inputUrl, env) {
 async function resolveDouyinUrl(url) {
   if (/douyin\.com\/video\//i.test(url)) return url;
   try {
-    const response = await fetch(url, {
+    const response = await boundedFetch(url, {
       redirect: 'follow',
       headers: {
         'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
@@ -536,7 +551,7 @@ async function resolveDouyinUrl(url) {
 
 async function getDouyinTtwid() {
   try {
-    const response = await fetch('https://ttwid.bytedance.com/ttwid/union/register/', {
+    const response = await boundedFetch('https://ttwid.bytedance.com/ttwid/union/register/', {
       method: 'POST',
       body: JSON.stringify({
         region: 'cn',
@@ -820,7 +835,7 @@ async function resolvePinterestShortUrl(url) {
   const code = new URL(url).pathname.replace(/^\/+|\/+$/g, '');
   if (code) {
     try {
-      const response = await fetch(`https://api.pinterest.com/url_shortener/${code}/redirect/`, {
+      const response = await boundedFetch(`https://api.pinterest.com/url_shortener/${code}/redirect/`, {
         redirect: 'follow',
         headers: { 'user-agent': USER_AGENT },
       });
@@ -830,7 +845,7 @@ async function resolvePinterestShortUrl(url) {
     }
   }
 
-  const response = await fetch(url, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
+  const response = await boundedFetch(url, { method: 'HEAD', redirect: 'follow', headers: { 'user-agent': USER_AGENT } });
   if (/pinterest\./i.test(response.url)) return response.url;
   throw new Error('Could not resolve Pinterest short link. Try the full pinterest.com URL.');
 }
@@ -843,7 +858,7 @@ function extractPinId(url) {
 
 async function getPinterestCsrf() {
   try {
-    const response = await fetch('https://www.pinterest.com/', {
+    const response = await boundedFetch('https://www.pinterest.com/', {
       headers: {
         'user-agent': USER_AGENT,
         accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -933,4 +948,63 @@ function pinterestDuration(videoList) {
     }
   }
   return null;
+}
+
+
+export function assertPublicUrl(value) {
+  const url = new URL(value);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Only public HTTP(S) URLs without credentials are allowed');
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  if (!host.includes('.') || host.includes(':') || /(?:^|\.)(?:localhost|local|internal|test|invalid)$/.test(host)) throw new Error('Private destinations are not allowed');
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+    const [a,b] = host.split('.').map(Number);
+    if (a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19))) throw new Error('Private destinations are not allowed');
+  }
+  return url;
+}
+
+async function readLimitedBody(response, limit) {
+  if (Number(response.headers.get('content-length') || 0) > limit) throw new Error('Response exceeds size budget');
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks = []; let length = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    length += value.length;
+    if (length > limit) { await reader.cancel(); throw new Error('Response exceeds size budget'); }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(length); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  return bytes;
+}
+
+export async function boundedFetch(value, options = {}) {
+  let url = assertPublicUrl(value);
+  let init = { ...options, redirect: 'manual' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  try {
+    for (let hop = 0; hop <= 3; hop++) {
+      const response = await fetch(url.href, { ...init, signal: controller.signal });
+      const location = response.headers.get('location');
+      if (response.status >= 300 && response.status < 400 && location) {
+        if (hop === 3) throw new Error('Too many redirects');
+        const next = assertPublicUrl(new URL(location, url).href);
+        const headers = new Headers(init.headers);
+        if (next.origin !== url.origin) { headers.delete('authorization'); headers.delete('cookie'); }
+        init = { ...init, headers };
+        if (response.status === 303 || ((response.status === 301 || response.status === 302) && init.method === 'POST')) init = { ...init, method: 'GET', body: undefined };
+        await response.body?.cancel(); url = next; continue;
+      }
+      const bytes = await readLimitedBody(response, 4 * 1024 * 1024);
+      const headers = new Headers(response.headers);
+      headers.delete('content-encoding'); headers.delete('content-length');
+      const result = new Response(init.method === 'HEAD' || [204,205,304].includes(response.status) ? null : bytes, { status: response.status, headers });
+      Object.defineProperty(result, 'url', { value: url.href });
+      return result;
+    }
+    throw new Error('Too many redirects');
+  } finally { clearTimeout(timer); }
 }

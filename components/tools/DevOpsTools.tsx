@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import { Check, Copy, RefreshCw } from 'lucide-react';
 import { CronExpressionParser } from 'cron-parser';
@@ -16,9 +18,9 @@ interface PermissionGroupProps {
     toggle: (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => void;
 }
 
-const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => (
+const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => { useLocaleRender(); return (
     <div className="tool-panel flex flex-col gap-3 p-4">
-        <span className="font-semibold text-slate-700">{label}</span>
+        <span className="font-semibold text-slate-700">{tr(label)}</span>
         <div className="flex gap-4">
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].read} onChange={() => toggle(role, 'read')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
@@ -34,9 +36,10 @@ const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissi
             </label>
         </div>
     </div>
-);
+); };
 
 export const ChmodTool: React.FC = () => {
+  useLocaleRender();
   const [permissions, setPermissions] = useState({
     owner: { read: true, write: true, execute: false }, // 6
     group: { read: true, write: false, execute: false }, // 4
@@ -67,7 +70,7 @@ export const ChmodTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="Chmod 计算器" description="Linux 文件权限计算 (Octal & Symbolic)。" />
+      <CardHeader title={tr("Chmod 计算器")} description={tr("Linux 文件权限计算 (Octal & Symbolic)。")} />
       <CardContent className="flex-1 flex flex-col gap-6">
         <div className="flex flex-col md:flex-row gap-6">
             <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-slate-900 p-6 text-white">
@@ -110,6 +113,7 @@ const useCopy = () => {
 };
 
 export const CronTool: React.FC = () => {
+  useLocaleRender();
   const [fields, setFields] = useState({
     minute: '*/15',
     hour: '*',
@@ -117,7 +121,7 @@ export const CronTool: React.FC = () => {
     month: '*',
     weekday: '1-5',
   });
-  const [expression, setExpression] = useState('*/15 * * * 1-5');
+  const [expression, setExpression] = useDraftState("components/tools/DevOpsTools.tsx:CronTool:expression", '*/15 * * * 1-5');
   const { copied, copy } = useCopy();
 
   const generatedExpression = `${fields.minute} ${fields.hour} ${fields.day} ${fields.month} ${fields.weekday}`;
@@ -143,40 +147,40 @@ export const CronTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="Cron 表达式"
-        description="生成 5 字段 Unix Cron，反向解析并预览未来 5 次执行时间。"
+        title={tr("Cron 表达式")}
+        description={tr("生成 5 字段 Unix Cron，反向解析并预览未来 5 次执行时间。")}
         actions={
           <>
-            <Button size="sm" variant="secondary" onClick={() => setExpression(generatedExpression)} icon={<RefreshCw className="h-4 w-4" />}>使用表单值</Button>
-            <Button size="sm" variant="secondary" onClick={() => copy(expression)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制</Button>
+            <Button size="sm" variant="secondary" onClick={() => setExpression(generatedExpression)} icon={<RefreshCw className="h-4 w-4" />}>{tr("使用表单值")}</Button>
+            <Button size="sm" variant="secondary" onClick={() => copy(expression)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制")}</Button>
           </>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="space-y-4">
           {([
-            ['minute', '分钟'],
-            ['hour', '小时'],
-            ['day', '日期'],
-            ['month', '月份'],
-            ['weekday', '星期'],
+            ['minute', tr('分钟')],
+            ['hour', tr('小时')],
+            ['day', tr('日期')],
+            ['month', tr('月份')],
+            ['weekday', tr('星期')],
           ] as const).map(([key, label]) => (
             <div key={key}>
-              <FieldLabel>{label}</FieldLabel>
+              <FieldLabel>{tr(label)}</FieldLabel>
               <Select value={fields[key]} onChange={event => updateField(key, event.target.value)}>
                 {cronOptions[key].map(item => <option key={item} value={item}>{item}</option>)}
               </Select>
             </div>
           ))}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs font-semibold uppercase text-slate-500">表单生成</div>
+            <div className="text-xs font-semibold uppercase text-slate-500">{tr("表单生成")}</div>
             <code className="mt-1 block break-all text-sm font-semibold text-slate-900">{generatedExpression}</code>
           </div>
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
           <div>
-            <FieldLabel hint="minute hour day month weekday">Cron 表达式</FieldLabel>
+            <FieldLabel hint="minute hour day month weekday">{tr("Cron 表达式")}</FieldLabel>
             <Input className="font-mono" value={expression} onChange={event => setExpression(event.target.value)} />
           </div>
           {preview.error ? (
@@ -192,9 +196,9 @@ export const CronTool: React.FC = () => {
             </CodePanel>
           )}
           <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-            <div className="tool-panel p-3"><code>*</code><span className="ml-2">每个单位</span></div>
-            <div className="tool-panel p-3"><code>*/15</code><span className="ml-2">每 15 个单位</span></div>
-            <div className="tool-panel p-3"><code>1-5</code><span className="ml-2">范围</span></div>
+            <div className="tool-panel p-3"><code>*</code><span className="ml-2">{tr("每个单位")}</span></div>
+            <div className="tool-panel p-3"><code>*/15</code><span className="ml-2">{tr("每 15 个单位")}</span></div>
+            <div className="tool-panel p-3"><code>1-5</code><span className="ml-2">{tr("范围")}</span></div>
           </div>
         </div>
       </CardContent>

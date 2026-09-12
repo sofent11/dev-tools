@@ -1,8 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 
 export const UrlParser: React.FC = () => {
-    const [input, setInput] = useState('https://www.example.com:8080/path/to/resource?search=query&id=123#section-2');
+  useLocaleRender();
+    const [input, setInput] = useDraftState("components/tools/UrlParser.tsx:UrlParser:input", 'https://www.example.com:8080/path/to/resource?search=query&id=123#section-2');
 
     const { parsed, params } = useMemo(() => {
         try {
@@ -29,7 +32,7 @@ export const UrlParser: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="URL 解析器" description="解析 URL 的各个组成部分及查询参数。" />
+            <CardHeader title={tr("URL 解析器")} description={tr("解析 URL 的各个组成部分及查询参数。")} />
             <CardContent className="flex-1 overflow-auto space-y-6">
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">URL</label>

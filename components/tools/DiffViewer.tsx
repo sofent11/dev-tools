@@ -1,3 +1,5 @@
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -226,8 +228,9 @@ const JSON_EXAMPLE_NEW = `{
 }`;
 
 export const DiffViewer: React.FC = () => {
-  const [oldText, setOldText] = useState(JS_EXAMPLE_OLD);
-  const [newText, setNewText] = useState(JS_EXAMPLE_NEW);
+  useLocaleRender();
+  const [oldText, setOldText] = useDraftState("components/tools/DiffViewer.tsx:DiffViewer:oldText", JS_EXAMPLE_OLD);
+  const [newText, setNewText] = useDraftState("components/tools/DiffViewer.tsx:DiffViewer:newText", JS_EXAMPLE_NEW);
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'unified'>('side-by-side');
   
   // Slice Render Limits for 60 FPS Scrolling Optimization
@@ -265,19 +268,16 @@ export const DiffViewer: React.FC = () => {
   return (
     <Card className="h-full flex flex-col min-h-0 bg-slate-900 border-slate-800 text-slate-100">
       <CardHeader
-        title="文本差异比对分析器"
-        description="支持 Side-by-Side 分栏与 Unified 合并双布局切换，配备智能单词/字符级 (Word-level) 高对比度行内增删高亮，经长文本 Chunk 渲染优化。"
+        title={tr("文本差异比对分析器")}
+        description={tr("支持 Side-by-Side 分栏与 Unified 合并双布局切换，配备智能单词/字符级 (Word-level) 高对比度行内增删高亮，经长文本 Chunk 渲染优化。")}
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" onClick={() => loadExample('js')} icon={<FileText className="w-3.5 h-3.5" />}>
-              React 代码示例
-            </Button>
+              {tr("React 代码示例")}</Button>
             <Button size="sm" variant="secondary" onClick={() => loadExample('json')} icon={<FileText className="w-3.5 h-3.5" />}>
-              JSON 载荷示例
-            </Button>
+              {tr("JSON 载荷示例")}</Button>
             <Button size="sm" variant="secondary" onClick={clearInputs} icon={<RefreshCw className="w-3.5 h-3.5" />}>
-              清空
-            </Button>
+              {tr("清空")}</Button>
           </div>
         }
       />
@@ -287,10 +287,10 @@ export const DiffViewer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-1/3 min-h-[160px] flex-none">
           <div className="flex flex-col min-h-0">
             <div className="flex justify-between items-center mb-1 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider">原始文本 (Original)</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">{tr("原始文本 (Original)")}</span>
               <div className="flex items-center gap-2">
                 <ScratchpadPicker
-                  placeholder="暂存箱载入..."
+                  placeholder={tr("暂存箱载入...")}
                   filter={isScratchpadTextLike}
                   onLoad={content => {
                     if (typeof content === 'string') {
@@ -299,7 +299,7 @@ export const DiffViewer: React.FC = () => {
                     }
                   }}
                 />
-                <span className="text-slate-500 font-mono">{lines1.length} 行 | {oldText.length} 字符</span>
+                <span className="text-slate-500 font-mono">{lines1.length} {tr("行 |")}{oldText.length} {tr("字符")}</span>
               </div>
             </div>
             <textarea
@@ -309,15 +309,15 @@ export const DiffViewer: React.FC = () => {
                 setOldText(e.target.value);
                 setRenderLimit(150);
               }}
-              placeholder="请输入或粘贴原始文本..."
+              placeholder={tr("请输入或粘贴原始文本...")}
             />
           </div>
           <div className="flex flex-col min-h-0">
             <div className="flex justify-between items-center mb-1 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider">修改后文本 (Modified)</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">{tr("修改后文本 (Modified)")}</span>
               <div className="flex items-center gap-2">
                 <ScratchpadPicker
-                  placeholder="暂存箱载入..."
+                  placeholder={tr("暂存箱载入...")}
                   filter={isScratchpadTextLike}
                   onLoad={content => {
                     if (typeof content === 'string') {
@@ -326,7 +326,7 @@ export const DiffViewer: React.FC = () => {
                     }
                   }}
                 />
-                <span className="text-slate-500 font-mono">{lines2.length} 行 | {newText.length} 字符</span>
+                <span className="text-slate-500 font-mono">{lines2.length} {tr("行 |")}{newText.length} {tr("字符")}</span>
               </div>
             </div>
             <textarea
@@ -336,7 +336,7 @@ export const DiffViewer: React.FC = () => {
                 setNewText(e.target.value);
                 setRenderLimit(150);
               }}
-              placeholder="请输入或粘贴修改后的文本..."
+              placeholder={tr("请输入或粘贴修改后的文本...")}
             />
           </div>
         </div>
@@ -349,25 +349,25 @@ export const DiffViewer: React.FC = () => {
               className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold uppercase transition-all ${layoutMode === 'side-by-side' ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
             >
               <Split className="w-4 h-4" />
-              <span>双栏分栏 (Side-by-Side)</span>
+              <span>{tr("双栏分栏 (Side-by-Side)")}</span>
             </button>
             <button
               onClick={() => setLayoutMode('unified')}
               className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold uppercase transition-all ${layoutMode === 'unified' ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
             >
               <AlignLeft className="w-4 h-4" />
-              <span>单栏合并 (Unified)</span>
+              <span>{tr("单栏合并 (Unified)")}</span>
             </button>
           </div>
 
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              <span>新增 {additions} 行</span>
+              <span>{tr("新增")}{additions} {tr("行")}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
-              <span>删除 {deletions} 行</span>
+              <span>{tr("删除")}{deletions} {tr("行")}</span>
             </span>
           </div>
         </div>
@@ -536,7 +536,7 @@ export const DiffViewer: React.FC = () => {
           {totalRows === 0 && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
               <RefreshCw className="w-10 h-10 mb-3 animate-pulse" />
-              <p>暂无任何差异，请输入不同文本进行比对分析</p>
+              <p>{tr("暂无任何差异，请输入不同文本进行比对分析")}</p>
             </div>
           )}
 
@@ -547,8 +547,7 @@ export const DiffViewer: React.FC = () => {
                 onClick={() => setRenderLimit(prev => prev + 300)}
                 className="px-6 py-2 border border-slate-800 bg-slate-900 text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-md"
               >
-                展示更多差异行 (当前已加载 {renderLimit} / {totalRows} 行)
-              </button>
+                {tr("展示更多差异行 (当前已加载")}{renderLimit} / {totalRows} {tr("行)")}</button>
             </div>
           )}
         </div>

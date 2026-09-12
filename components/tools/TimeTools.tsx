@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState, useEffect } from 'react';
 import { Calculator, ArrowRight, Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
@@ -5,6 +6,7 @@ import { Button } from '../ui/Button';
 
 // --- Timestamp Tool ---
 export const TimestampTool: React.FC = () => {
+  useLocaleRender();
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const [inputTs, setInputTs] = useState<string>('');
   const [inputDate, setInputDate] = useState<string>('');
@@ -94,14 +96,14 @@ export const TimestampTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col space-y-4">
       <CardHeader 
-        title="时间戳转换" 
-        description={`Current Unix Timestamp: ${now}`} 
+        title={tr("时间戳转换")}
+        description={tr(`Current Unix Timestamp: ${now}`)}
         actions={
           <div className="flex gap-1.5 flex-wrap justify-end">
-            <Button size="sm" variant="secondary" onClick={setPresetNow}>当前时间</Button>
-            <Button size="sm" variant="secondary" onClick={setPresetStartOfToday}>今日零点</Button>
-            <Button size="sm" variant="secondary" onClick={setPresetEndOfToday}>今日早鸣</Button>
-            <Button size="sm" variant="secondary" onClick={setPresetPlusOneDay}>+24 小时</Button>
+            <Button size="sm" variant="secondary" onClick={setPresetNow}>{tr("当前时间")}</Button>
+            <Button size="sm" variant="secondary" onClick={setPresetStartOfToday}>{tr("今日零点")}</Button>
+            <Button size="sm" variant="secondary" onClick={setPresetEndOfToday}>{tr("今日早鸣")}</Button>
+            <Button size="sm" variant="secondary" onClick={setPresetPlusOneDay}>{tr("+24 小时")}</Button>
           </div>
         }
       />
@@ -180,6 +182,7 @@ export const TimestampTool: React.FC = () => {
 
 // --- Date Diff Tool ---
 export const DateDiffTool: React.FC = () => {
+  useLocaleRender();
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
     const [diff, setDiff] = useState('');
@@ -199,7 +202,7 @@ export const DateDiffTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="日期差值计算" description="计算两个日期之间的间隔" />
+            <CardHeader title={tr("日期差值计算")} description={tr("计算两个日期之间的间隔")} />
             <CardContent className="space-y-4">
                  <div className="flex gap-4">
                     <div className="flex-1">

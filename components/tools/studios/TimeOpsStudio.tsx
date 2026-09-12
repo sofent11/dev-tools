@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { CalendarClock, Clock, Terminal } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -12,11 +13,11 @@ const subTools: SubTool[] = [
   { id: 'chmod', name: 'Chmod 计算', description: 'Linux 权限计算', icon: Terminal, component: ChmodTool },
 ];
 
-export const TimeOpsStudio: React.FC = () => (
+export const TimeOpsStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="时间、Cron 与权限工作室"
-    description="集中处理时间戳、日期时区、调度表达式和 Linux 权限这些运维日常计算"
+    title={tr("时间、Cron 与权限工作室")}
+    description={tr("集中处理时间戳、日期时区、调度表达式和 Linux 权限这些运维日常计算")}
     tools={subTools}
     defaultTab="unix-time-studio"
   />
-);
+); };

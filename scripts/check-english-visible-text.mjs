@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appUrl = process.env.CHECK_I18N_APP_URL || 'http://127.0.0.1:3000';
 const hasHan = /[\u3400-\u9fff]/;
-const textSkipClosest = 'script,style,noscript,textarea,input,select,option,code,pre,[contenteditable="true"]';
-const attributeSkipClosest = 'script,style,noscript,code,pre,[contenteditable="true"]';
+const textSkipClosest = '[data-i18n-skip],script,style,noscript,textarea,input,select,option,code,pre,[contenteditable="true"]';
+const attributeSkipClosest = '[data-i18n-skip],script,style,noscript,code,pre,[contenteditable="true"]';
 
 const read = relativePath => fs.readFileSync(path.join(rootDir, relativePath), 'utf8');
 

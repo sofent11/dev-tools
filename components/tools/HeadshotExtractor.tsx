@@ -1,3 +1,5 @@
+import { runtimeAsset } from './shared/runtimeAssets';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -6,7 +8,6 @@ import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { 
-  installCdnCacheInterceptor, 
   registerCacheProgressListener, 
   unregisterCacheProgressListener 
 } from './shared/cdnCacheManager';
@@ -14,7 +15,7 @@ import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtime
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
 import { notifyToast } from './shared/notifyToast';
 
-const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm';
+const MEDIAPIPE_WASM_URL = runtimeAsset('vision_wasm_internal.wasm').url.replace(/\/[^/]+$/, '');
 const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
 type HeadshotTaskState = 'loadingModel' | 'detecting' | 'manual' | 'error' | 'ready';
 
@@ -25,11 +26,12 @@ const createRuntimeState = (
 ): RuntimeAssetLoaderState => ({
   status,
   label,
-  version: '0.10.0',
+  version: runtimeAsset('vision_wasm_internal.wasm').version,
   source,
 });
 
 export const HeadshotExtractor: React.FC = () => {
+  useLocaleRender();
   const [imgSrc, setImgSrc] = useState('');
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -41,6 +43,7 @@ export const HeadshotExtractor: React.FC = () => {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   
   // MediaPipe references
+  const activeRef = useRef(true);
   const faceDetectorRef = useRef<FaceDetector | null>(null);
   const [isModelLoading, setIsModelLoading] = useState(false);
   const isModelLoadingRef = useRef(false);
@@ -59,8 +62,12 @@ export const HeadshotExtractor: React.FC = () => {
   }, [modelRuntimeState, wasmRuntimeState]);
 
   useEffect(() => {
+    activeRef.current = true;
     initMediaPipe();
     return () => {
+      activeRef.current = false;
+      faceDetectorRef.current?.close();
+      faceDetectorRef.current = null;
       unregisterCacheProgressListener('tasks-vision');
       unregisterCacheProgressListener('blaze_face_short_range.tflite');
     };
@@ -77,7 +84,6 @@ export const HeadshotExtractor: React.FC = () => {
     
     try {
       // Install cache interceptor and register progress hooks
-      installCdnCacheInterceptor();
       registerCacheProgressListener('tasks-vision', (p) => {
         setWasmRuntimeState(prev => ({
           ...prev,
@@ -98,9 +104,10 @@ export const HeadshotExtractor: React.FC = () => {
       setWasmRuntimeState(createRuntimeState('MediaPipe WASM 运行时', MEDIAPIPE_WASM_URL, 'loading'));
       const wasmProbe = await loadRuntimeAsset<Response>({
         url: `${MEDIAPIPE_WASM_URL}/vision_wasm_internal.wasm`,
+        expectedSha256: runtimeAsset('vision_wasm_internal.wasm').sha256,
         kind: 'asset',
         label: 'MediaPipe WASM 运行时',
-        version: '0.10.0',
+        version: runtimeAsset('vision_wasm_internal.wasm').version,
         timeoutMs: 20000,
         retries: 1,
         cache: true,
@@ -124,18 +131,20 @@ export const HeadshotExtractor: React.FC = () => {
         cache: true,
         onState: setModelRuntimeState,
       });
-      await modelProbe.arrayBuffer();
+      const modelBuffer = new Uint8Array(await modelProbe.arrayBuffer());
       setModelRuntimeState(prev => ({ ...prev, status: 'ready', progress: 100 }));
       
-      faceDetectorRef.current = await FaceDetector.createFromOptions(vision, {
+      const detector = await FaceDetector.createFromOptions(vision, {
         baseOptions: {
-          modelAssetPath: MEDIAPIPE_MODEL_URL,
+          modelAssetBuffer: modelBuffer,
           delegate: "GPU"
         },
         runningMode: "IMAGE",
         minDetectionConfidence: 0.2 // Lowered for better sensitivity in full-body shots
       });
       
+      if (!activeRef.current) { detector.close(); return; }
+      faceDetectorRef.current = detector;
       setStatus('Ready. Please select an image.');
       setTaskState('ready');
     } catch (error) {
@@ -440,8 +449,8 @@ export const HeadshotExtractor: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="大头照提取 (Headshot Extraction)"
-        description="自动定位头部与肩部，支持人工微调裁剪 (Powered by MediaPipe)"
+        title={tr("大头照提取 (Headshot Extraction)")}
+        description={tr("自动定位头部与肩部，支持人工微调裁剪 (Powered by MediaPipe)")}
       />
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
         {/* Upload Area */}
@@ -450,8 +459,8 @@ export const HeadshotExtractor: React.FC = () => {
                 <Upload className="w-8 h-8 text-primary-500" />
             </div>
             <div>
-                <p className="font-medium text-slate-700">点击上传或拖拽图片</p>
-                <p className="text-sm text-slate-500">支持 JPG, PNG, WEBP</p>
+                <p className="font-medium text-slate-700">{tr("点击上传或拖拽图片")}</p>
+                <p className="text-sm text-slate-500">{tr("支持 JPG, PNG, WEBP")}</p>
             </div>
             <input
                 type="file"
@@ -472,7 +481,7 @@ export const HeadshotExtractor: React.FC = () => {
               ? 'border-rose-200 bg-rose-50 text-rose-700'
               : 'border-amber-200 bg-amber-50 text-amber-800'
           }`}>
-            {taskError}
+            {tr(taskError)}
           </div>
         )}
 
@@ -481,7 +490,7 @@ export const HeadshotExtractor: React.FC = () => {
             <div className="flex justify-between text-xs font-semibold text-slate-600">
               <span className="flex items-center gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary-500" />
-                {status}
+                {tr(status)}
               </span>
               <span>{runtimeProgress}%</span>
             </div>
@@ -494,8 +503,8 @@ export const HeadshotExtractor: React.FC = () => {
           </div>
         ) : (
           <div className="text-center text-sm text-slate-500">
-              {status}
-              {taskState === 'manual' && <span className="ml-2 font-semibold text-amber-700">手动裁剪模式</span>}
+              {tr(status)}
+              {taskState === 'manual' && <span className="ml-2 font-semibold text-amber-700">{tr("手动裁剪模式")}</span>}
               {isLoading && <RefreshCw className="inline ml-2 w-4 h-4 animate-spin" />}
           </div>
         )}
@@ -523,7 +532,7 @@ export const HeadshotExtractor: React.FC = () => {
                 {/* Preview & Action Area */}
                 <div className="w-full md:w-80 flex-none space-y-6">
                     <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-4">
-                        <h3 className="font-semibold text-slate-800">预览</h3>
+                        <h3 className="font-semibold text-slate-800">{tr("预览")}</h3>
                         <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg p-2 min-h-[150px]">
                             {completedCrop ? (
                                 <canvas
@@ -537,19 +546,17 @@ export const HeadshotExtractor: React.FC = () => {
                                     }}
                                 />
                             ) : (
-                                <span className="text-slate-400 text-sm">暂无预览</span>
+                                <span className="text-slate-400 text-sm">{tr("暂无预览")}</span>
                             )}
                         </div>
                         <Button onClick={onDownloadCrop} className="w-full" icon={<Download className="w-4 h-4" />}>
-                            保存裁剪结果
-                        </Button>
+                            {tr("保存裁剪结果")}</Button>
                     </div>
 
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                         <p>
-                            系统会自动尝试定位头部和肩部区域。您可以通过拖动选择框来微调位置。
-                        </p>
+                            {tr("系统会自动尝试定位头部和肩部区域。您可以通过拖动选择框来微调位置。")}</p>
                     </div>
                 </div>
             </div>

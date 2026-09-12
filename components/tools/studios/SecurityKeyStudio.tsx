@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Hash, KeyRound, Shield } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -24,11 +25,11 @@ const subTools: SubTool[] = [
   { id: 'sm-crypto', name: '国密算法套件 (SM2/3/4)', description: '中国商用国密离线加密/签名/哈希套件', icon: Shield, component: SmCryptoSuiteTool },
 ];
 
-export const SecurityKeyStudio: React.FC = () => (
+export const SecurityKeyStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="安全、令牌与密钥工作室"
-    description="围绕令牌检查、摘要认证、密码生成、证书私钥和离线加密组织敏感开发辅助工具"
+    title={tr("安全、令牌与密钥工作室")}
+    description={tr("围绕令牌检查、摘要认证、密码生成、证书私钥和离线加密组织敏感开发辅助工具")}
     tools={subTools}
     defaultTab="jwt"
   />
-);
+); };

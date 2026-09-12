@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Binary, Fingerprint, QrCode, WalletCards, Wand2 } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -18,11 +19,11 @@ const subTools: SubTool[] = [
   { id: 'qrcode', name: '二维码生成', description: '文本/WiFi/名片生成器', icon: QrCode, component: QrCodeTool },
 ];
 
-export const GeneratorUtilityStudio: React.FC = () => (
+export const GeneratorUtilityStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="生成器与实用计算工作室"
-    description="把随机标识、Mock 数据、占位文本、金额表达和二维码这些轻量生成任务集中管理"
+    title={tr("生成器与实用计算工作室")}
+    description={tr("把随机标识、Mock 数据、占位文本、金额表达和二维码这些轻量生成任务集中管理")}
     tools={subTools}
     defaultTab="uuid"
   />
-);
+); };

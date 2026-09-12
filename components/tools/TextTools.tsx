@@ -1,4 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import { useEffect } from 'react';
+import { runWorkerTask } from './shared/workerTask';
+import React, { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -16,7 +20,8 @@ const useCopyToClipboard = () => {
 
 // --- Case Converter Tool ---
 export const CaseConverterTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/TextTools.tsx:CaseConverterTool:input", '');
   const { copied, copy } = useCopyToClipboard();
 
   const toCamel = (s: string) => s.replace(/([-_][a-z])/ig, ($1) => $1.toUpperCase().replace('-', '').replace('_', ''));
@@ -37,11 +42,11 @@ export const CaseConverterTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="文本大小写转换" description="在不同命名规范之间转换文本（驼峰、下划线、连字符等）。" />
+      <CardHeader title={tr("文本大小写转换")} description={tr("在不同命名规范之间转换文本（驼峰、下划线、连字符等）。")} />
       <CardContent className="flex-1 overflow-auto space-y-4">
         <textarea
           className="w-full h-32 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
-          placeholder="输入文本..."
+          placeholder={tr("输入文本...")}
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
@@ -72,7 +77,8 @@ export const CaseConverterTool: React.FC = () => {
 
 // --- Text Statistics Tool ---
 export const TextStatsTool: React.FC = () => {
-  const [input, setInput] = useState('');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/TextTools.tsx:TextStatsTool:input", '');
 
   const stats = {
     chars: input.length,
@@ -83,30 +89,30 @@ export const TextStatsTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="文本统计" description="统计字符数、字数、行数等信息。" />
+      <CardHeader title={tr("文本统计")} description={tr("统计字符数、字数、行数等信息。")} />
       <CardContent className="flex-1 overflow-auto space-y-6">
          <textarea
           className="w-full h-48 p-4 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
-          placeholder="在此粘贴文本..."
+          placeholder={tr("在此粘贴文本...")}
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-4 bg-blue-50 rounded-xl text-center border border-blue-100">
                 <div className="text-2xl font-bold text-blue-700">{stats.chars}</div>
-                <div className="text-xs text-blue-500 uppercase font-semibold">字符总数</div>
+                <div className="text-xs text-blue-500 uppercase font-semibold">{tr("字符总数")}</div>
             </div>
             <div className="p-4 bg-emerald-50 rounded-xl text-center border border-emerald-100">
                 <div className="text-2xl font-bold text-emerald-700">{stats.charsNoSpace}</div>
-                <div className="text-xs text-emerald-500 uppercase font-semibold">非空字符</div>
+                <div className="text-xs text-emerald-500 uppercase font-semibold">{tr("非空字符")}</div>
             </div>
             <div className="p-4 bg-amber-50 rounded-xl text-center border border-amber-100">
                 <div className="text-2xl font-bold text-amber-700">{stats.words}</div>
-                <div className="text-xs text-amber-500 uppercase font-semibold">单词数</div>
+                <div className="text-xs text-amber-500 uppercase font-semibold">{tr("单词数")}</div>
             </div>
             <div className="p-4 bg-purple-50 rounded-xl text-center border border-purple-100">
                 <div className="text-2xl font-bold text-purple-700">{stats.lines}</div>
-                <div className="text-xs text-purple-500 uppercase font-semibold">行数</div>
+                <div className="text-xs text-purple-500 uppercase font-semibold">{tr("行数")}</div>
             </div>
         </div>
       </CardContent>
@@ -116,32 +122,40 @@ export const TextStatsTool: React.FC = () => {
 
 // --- Regex Tester Tool ---
 export const RegexTool: React.FC = () => {
-  const [regexStr, setRegexStr] = useState('');
-  const [flags, setFlags] = useState('gm');
-  const [testString, setTestString] = useState('');
+  useLocaleRender();
+  const [regexStr, setRegexStr] = useDraftState("components/tools/TextTools.tsx:RegexTool:regexStr", '');
+  const [flags, setFlags] = useDraftState("components/tools/TextTools.tsx:RegexTool:flags", 'gm');
+  const [testString, setTestString] = useDraftState("components/tools/TextTools.tsx:RegexTool:testString", '');
 
-  // Use useMemo for derived state instead of useEffect + setState
-  const { matches, error } = useMemo(() => {
-      if (!regexStr) return { matches: [], error: null };
-      try {
-          const regex = new RegExp(regexStr, flags);
-          const found = testString.match(regex);
-          return { matches: found ? Array.from(found) : [], error: null };
-      } catch {
-          return { matches: [], error: "Invalid Regular Expression" };
-      }
+  const [matches, setMatches] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setError(null);
+      if (!regexStr) { setMatches([]); setRunning(false); return; }
+      setRunning(true);
+      runWorkerTask<string[]>(new Worker(new URL('./text/regex.worker.ts', import.meta.url), { type: 'module' }),
+        { pattern: regexStr, flags, text: testString }, { signal: controller.signal, timeoutMs: 1500 })
+        .then(result => { if (!controller.signal.aborted) setMatches(result); })
+        .catch(error => { if (!controller.signal.aborted) { setMatches([]); setError(error.message); } })
+        .finally(() => { if (!controller.signal.aborted) setRunning(false); });
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [regexStr, flags, testString]);
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="正则表达式测试" description="实时测试 JS 正则表达式匹配结果。" />
+      <CardHeader title={tr("正则表达式测试")} description={tr("实时测试 JS 正则表达式匹配结果。")} />
+      {running && <p role="status">Running… Changing the input cancels the previous task.</p>}
       <CardContent className="flex-1 overflow-auto space-y-4">
         <div className="flex gap-2">
             <div className="flex-1 relative">
                  <span className="absolute left-3 top-2.5 text-slate-400 font-mono text-lg">/</span>
                  <input 
                     className="w-full pl-6 pr-2 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="正则表达式 (例如: [a-z]+)"
+                    placeholder={tr("正则表达式 (例如: [a-z]+)")}
                     value={regexStr}
                     onChange={e => setRegexStr(e.target.value)}
                  />
@@ -155,22 +169,22 @@ export const RegexTool: React.FC = () => {
             />
         </div>
         
-        {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
+        {error && <p className="text-sm text-red-500 font-medium">{tr(error)}</p>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full min-h-[300px]">
             <div className="flex flex-col">
-                <label className="text-sm font-medium text-slate-700 mb-1">测试文本</label>
+                <label className="text-sm font-medium text-slate-700 mb-1">{tr("测试文本")}</label>
                 <textarea 
                     className="flex-1 w-full p-3 border border-slate-200 rounded-lg font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-200"
                     value={testString}
                     onChange={e => setTestString(e.target.value)}
-                    placeholder="在此输入待匹配的文本..."
+                    placeholder={tr("在此输入待匹配的文本...")}
                 />
             </div>
             <div className="flex flex-col">
                 <label className="text-sm font-medium text-slate-700 mb-1 flex justify-between">
-                    <span>匹配结果</span>
-                    <span className="text-slate-400">{matches.length} 个匹配</span>
+                    <span>{tr("匹配结果")}</span>
+                    <span className="text-slate-400">{matches.length} {tr("个匹配")}</span>
                 </label>
                 <div className="flex-1 w-full p-3 bg-slate-900 text-green-400 font-mono text-sm rounded-lg overflow-y-auto border border-slate-700">
                     {matches.length === 0 ? (

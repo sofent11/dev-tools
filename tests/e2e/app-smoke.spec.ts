@@ -98,7 +98,7 @@ test('SVG optimizer sanitizes active content before preview', async ({ page }) =
 test('headshot extractor exposes manual mode when MediaPipe cannot load', async ({ page }) => {
   await page.route('**/*', route => {
     const url = route.request().url();
-    const isExternalMediaPipeAsset =
+    const isExternalMediaPipeAsset = url.includes('/vendor/@mediapipe-tasks-vision/') ||
       url.includes('cdn.jsdelivr.net/npm/@mediapipe/tasks-vision') ||
       url.includes('storage.googleapis.com/mediapipe-models') ||
       url.includes('vision_wasm_internal.wasm') ||
@@ -110,7 +110,7 @@ test('headshot extractor exposes manual mode when MediaPipe cannot load', async 
   });
   await page.goto('/tools/image-media-studio#headshot');
 
-  await expect(page.getByRole('heading', { name: /Headshot Extraction/ }).last()).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Headshot Extraction|大头照提取/ }).last()).toBeVisible();
   await expect(page.getByText('手动裁剪模式', { exact: true })).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('button', { name: /重试/ }).first()).toBeVisible();
 });

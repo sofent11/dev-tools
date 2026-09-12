@@ -1,3 +1,4 @@
+import enExtra from './en-extra.json';
 export type Locale = 'zh-CN' | 'en-US';
 
 export const LOCALES: { code: Locale; label: string; shortLabel: string }[] = [
@@ -1219,7 +1220,7 @@ const enUiTermReplacements: Array<[RegExp, string]> = [
 ];
 
 const reverseExact = Object.fromEntries(
-  Object.entries(enExact).map(([zh, en]) => [en, zh]),
+  Object.entries({ ...enExact, ...enExtra }).map(([zh, en]) => [en, zh]),
 ) as Record<string, string>;
 
 const hasHan = (value: string) => /[\p{Script=Han}]/u.test(value);
@@ -1239,11 +1240,12 @@ export const translateText = (value: string, locale: Locale): string => {
   }
 
   if (!hasHan(value)) return value;
-  const exact = enExact[value] ?? enExact[compact];
+  const additions: Record<string, string> = enExtra;
+  const exact = additions[value] ?? additions[compact] ?? enExact[value] ?? enExact[compact];
   if (exact) return preserveOuterWhitespace(value, exact);
 
-  let translated = value;
-  let matchedKnownUiPhrase = false;
+  let translated = value.replace(/版本 (.+) · /g, 'Version $1 · ').replace(/来源 (https?:[^ ]+)/g, 'Source $1').replace(/(\d+) 天 (\d+) 小时/g, '$1 days $2 hours');
+  let matchedKnownUiPhrase = translated !== value;
   for (const [source, replacement] of Object.entries(enExact).sort((a, b) => b[0].length - a[0].length)) {
     if (translated.includes(source)) {
       translated = translated.split(source).join(replacement);

@@ -1,9 +1,11 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Upload, Download, RefreshCw, Brush, Paintbrush, Pipette } from 'lucide-react';
 
 type BrushMode = 'erase' | 'restore' | 'none';
 
 export const BackgroundRemoval: React.FC = () => {
+  useLocaleRender();
   // States
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [keyColor, setKeyColor] = useState<{ r: number; g: number; b: number } | null>(null);
@@ -315,8 +317,7 @@ export const BackgroundRemoval: React.FC = () => {
             {/* Color picker cursor notification */}
             {isPickingColor && (
               <div className="absolute top-4 bg-primary-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow z-10 animate-bounce">
-                请在图片上点击你想去除的背景色
-              </div>
+                {tr("请在图片上点击你想去除的背景色")}</div>
             )}
           </div>
         ) : (
@@ -327,8 +328,8 @@ export const BackgroundRemoval: React.FC = () => {
                 <Upload className="w-6 h-6" />
               </div>
               <div className="min-w-0">
-                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200">上传你想抠图的图片</span>
-                <span className="block text-xs text-slate-400 mt-1">支持 PNG, JPG, JPEG 格式，100% 浏览器本地化处理</span>
+                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200">{tr("上传你想抠图的图片")}</span>
+                <span className="block text-xs text-slate-400 mt-1">{tr("支持 PNG, JPG, JPEG 格式，100% 浏览器本地化处理")}</span>
               </div>
               <input
                 type="file"
@@ -349,7 +350,7 @@ export const BackgroundRemoval: React.FC = () => {
               
               {/* Chroma Key Selector */}
               <div>
-                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">背景色去除 (Chroma Key)</h4>
+                <h4 className="text-xs font-bold text-slate-500 uppercase mb-2">{tr("背景色去除 (Chroma Key)")}</h4>
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => {
@@ -359,13 +360,13 @@ export const BackgroundRemoval: React.FC = () => {
                     className={`flex-1 flex items-center justify-center gap-2 text-xs font-semibold py-2 rounded-lg border transition-all ${isPickingColor ? 'bg-primary-500 text-white border-primary-500 shadow-sm' : 'border-slate-200 bg-slate-50 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800'}`}
                   >
                     <Pipette className="w-3.5 h-3.5" />
-                    <span>吸色背景抠除</span>
+                    <span>{tr("吸色背景抠除")}</span>
                   </button>
                   {keyColor && (
                     <div 
                       className="w-8 h-8 rounded-lg border border-slate-200 shadow-sm"
                       style={{ backgroundColor: keyColorHex }}
-                      title={`选定色: ${keyColorHex}`}
+                      title={tr(`选定色: ${keyColorHex}`)}
                     />
                   )}
                 </div>
@@ -374,12 +375,12 @@ export const BackgroundRemoval: React.FC = () => {
               {/* Advanced Sliders */}
               {keyColor && (
                 <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase">抠像阈值调节</h4>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase">{tr("抠像阈值调节")}</h4>
                   
                   {/* Tolerance */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-600 dark:text-slate-400">抠除容差 (Tolerance)</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-400">{tr("抠除容差 (Tolerance)")}</span>
                       <span className="font-semibold text-slate-900 dark:text-slate-100">{tolerance}</span>
                     </div>
                     <input
@@ -393,7 +394,7 @@ export const BackgroundRemoval: React.FC = () => {
                   {/* Feather */}
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-600 dark:text-slate-400">边缘羽化 (Feather)</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-400">{tr("边缘羽化 (Feather)")}</span>
                       <span className="font-semibold text-slate-900 dark:text-slate-100">{feather}</span>
                     </div>
                     <input
@@ -408,7 +409,7 @@ export const BackgroundRemoval: React.FC = () => {
 
               {/* Manual Brush Tool */}
               <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase">画笔精细修正</h4>
+                <h4 className="text-xs font-bold text-slate-500 uppercase">{tr("画笔精细修正")}</h4>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
@@ -418,7 +419,7 @@ export const BackgroundRemoval: React.FC = () => {
                     className={`flex items-center justify-center gap-1.5 py-1.5 border rounded-lg text-xs font-semibold transition-all ${brushMode === 'erase' ? 'bg-red-50 text-red-600 border-red-200 shadow-sm dark:bg-red-950/20' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
                   >
                     <Brush className="w-3.5 h-3.5" />
-                    <span>擦除背景</span>
+                    <span>{tr("擦除背景")}</span>
                   </button>
                   <button
                     onClick={() => {
@@ -428,14 +429,14 @@ export const BackgroundRemoval: React.FC = () => {
                     className={`flex items-center justify-center gap-1.5 py-1.5 border rounded-lg text-xs font-semibold transition-all ${brushMode === 'restore' ? 'bg-emerald-50 text-emerald-600 border-emerald-200 shadow-sm dark:bg-emerald-950/20' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
                   >
                     <Paintbrush className="w-3.5 h-3.5" />
-                    <span>画笔还原</span>
+                    <span>{tr("画笔还原")}</span>
                   </button>
                 </div>
 
                 {brushMode !== 'none' && (
                   <div>
                     <div className="flex justify-between text-xs mb-1">
-                      <span className="font-medium text-slate-600 dark:text-slate-400">画笔粗细</span>
+                      <span className="font-medium text-slate-600 dark:text-slate-400">{tr("画笔粗细")}</span>
                       <span className="font-semibold text-slate-900 dark:text-slate-100">{brushSize}px</span>
                     </div>
                     <input
@@ -450,14 +451,14 @@ export const BackgroundRemoval: React.FC = () => {
 
               {/* Backdrop Preview Selectors */}
               <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase">背景预览背景色</h4>
+                <h4 className="text-xs font-bold text-slate-500 uppercase">{tr("背景预览背景色")}</h4>
                 <div className="grid grid-cols-5 gap-1">
                   {(['grid', 'white', 'dark', 'blue', 'sunset'] as const).map(bg => (
                     <button
                       key={bg}
                       onClick={() => setBgPreview(bg)}
                       className={`h-7 rounded border transition-all ${bgPreview === bg ? 'border-primary-500 ring-2 ring-primary-500/10' : 'border-slate-200 dark:border-slate-700'} ${bg === 'grid' ? 'bg-checkerboard' : bg === 'white' ? 'bg-white' : bg === 'dark' ? 'bg-slate-900' : bg === 'blue' ? 'bg-gradient-to-tr from-sky-400 to-indigo-500' : 'bg-gradient-to-tr from-amber-400 to-rose-500'}`}
-                      title={bg}
+                      title={tr(bg)}
                     />
                   ))}
                 </div>
@@ -472,21 +473,20 @@ export const BackgroundRemoval: React.FC = () => {
                 className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>下载透明 PNG 图片</span>
+                <span>{tr("下载透明 PNG 图片")}</span>
               </button>
               <button
                 onClick={handleReset}
                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>载入另一张图片</span>
+                <span>{tr("载入另一张图片")}</span>
               </button>
             </div>
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-center text-xs text-slate-400 py-12">
-            请上传图片开始高精度本地抠图！
-          </div>
+            {tr("请上传图片开始高精度本地抠图！")}</div>
         )}
       </div>
 

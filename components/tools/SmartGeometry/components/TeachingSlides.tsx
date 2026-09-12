@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../../src/i18n/render';
 import React, { useState } from 'react';
 import { useGeometryStore } from '../store/useGeometryStore';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -7,6 +8,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
 export function TeachingSlides() {
+  useLocaleRender();
   const { question } = useGeometryStore();
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 
@@ -163,7 +165,7 @@ export function TeachingSlides() {
                   className="p-2 sm:px-4 sm:py-2 flex items-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 shadow-sm"
                 >
                   <ChevronLeft size={18} />
-                  <span className="hidden sm:inline">上一步</span>
+                  <span className="hidden sm:inline">{tr("上一步")}</span>
                 </button>
                 
                 <div className="text-sm font-mono text-slate-500 font-medium">
@@ -175,7 +177,7 @@ export function TeachingSlides() {
                   disabled={currentSlideIndex === question.slides.length - 1}
                   className="p-2 sm:px-4 sm:py-2 flex items-center gap-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary-600 border border-primary-700 text-white hover:bg-primary-700 shadow-sm"
                 >
-                  <span className="hidden sm:inline">下一步</span>
+                  <span className="hidden sm:inline">{tr("下一步")}</span>
                   <ChevronRight size={18} />
                 </button>
              </div>

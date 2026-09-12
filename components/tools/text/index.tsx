@@ -1,3 +1,5 @@
+import { useDraftState } from '../shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import TurndownService from 'turndown';
 import { ArrowRightLeft, Check, Copy, FileCode, Minimize2 } from 'lucide-react';
@@ -41,7 +43,8 @@ const minifyHtml = (html: string) =>
     .trim();
 
 export const HtmlToMarkdownTool: React.FC = () => {
-  const [input, setInput] = useState(sampleHtml);
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/text/index.tsx:HtmlToMarkdownTool:input", sampleHtml);
   const { copied, copy } = useCopyToClipboard();
 
   const output = useMemo(() => {
@@ -55,15 +58,15 @@ export const HtmlToMarkdownTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="HTML 转 Markdown" description="在浏览器本地把 HTML 片段转换为 Markdown。" />
+      <CardHeader title={tr("HTML 转 Markdown")} description={tr("在浏览器本地把 HTML 片段转换为 Markdown。")} />
       <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>HTML 输入</FieldLabel>
+          <FieldLabel>{tr("HTML 输入")}</FieldLabel>
           <Textarea className="min-h-0 flex-1 resize-none font-mono" value={input} onChange={event => setInput(event.target.value)} />
         </div>
         <div className="flex min-h-0 flex-col gap-2">
           <div className="flex items-center justify-between">
-            <FieldLabel>Markdown 输出</FieldLabel>
+            <FieldLabel>{tr("Markdown 输出")}</FieldLabel>
             <Button size="sm" variant="secondary" onClick={() => copy(output)} disabled={!output}>
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
             </Button>
@@ -76,7 +79,8 @@ export const HtmlToMarkdownTool: React.FC = () => {
 };
 
 export const HtmlFormatTool: React.FC = () => {
-  const [input, setInput] = useState(sampleHtml);
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/text/index.tsx:HtmlFormatTool:input", sampleHtml);
   const [error, setError] = useState('');
   const { copied, copy } = useCopyToClipboard();
 
@@ -92,12 +96,12 @@ export const HtmlFormatTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="HTML 格式化/压缩器"
-        description="轻量格式化 HTML，或压缩基础空白字符。"
+        title={tr("HTML 格式化/压缩器")}
+        description={tr("轻量格式化 HTML，或压缩基础空白字符。")}
         actions={
           <>
-            <Button size="sm" variant="secondary" icon={<Minimize2 className="h-4 w-4" />} onClick={() => run('minify')}>压缩</Button>
-            <Button size="sm" icon={<FileCode className="h-4 w-4" />} onClick={() => run('format')}>格式化</Button>
+            <Button size="sm" variant="secondary" icon={<Minimize2 className="h-4 w-4" />} onClick={() => run('minify')}>{tr("压缩")}</Button>
+            <Button size="sm" icon={<FileCode className="h-4 w-4" />} onClick={() => run('format')}>{tr("格式化")}</Button>
           </>
         }
       />
@@ -109,7 +113,7 @@ export const HtmlFormatTool: React.FC = () => {
           </Button>
         </div>
         <Textarea className="min-h-0 flex-1 resize-none font-mono" value={input} onChange={event => setInput(event.target.value)} />
-        {error && <div className="status-error p-3 text-sm">{error}</div>}
+        {error && <div className="status-error p-3 text-sm">{tr(error)}</div>}
       </CardContent>
     </Card>
   );
@@ -178,24 +182,25 @@ const toRmbUppercase = (value: string) => {
 };
 
 export const RmbUppercaseTool: React.FC = () => {
-  const [input, setInput] = useState('123456.78');
+  useLocaleRender();
+  const [input, setInput] = useDraftState("components/tools/text/index.tsx:RmbUppercaseTool:input", '123456.78');
   const { copied, copy } = useCopyToClipboard();
   const output = useMemo(() => toRmbUppercase(input), [input]);
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="人民币大写" description="金额数字转换为中文大写金额。" />
+      <CardHeader title={tr("人民币大写")} description={tr("金额数字转换为中文大写金额。")} />
       <CardContent className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5">
         <div>
-          <FieldLabel>金额</FieldLabel>
+          <FieldLabel>{tr("金额")}</FieldLabel>
           <Input type="number" min="0" step="0.01" value={input} onChange={event => setInput(event.target.value)} />
         </div>
         <div className="tool-panel p-5">
-          <div className="mb-2 text-xs font-semibold text-slate-500">大写结果</div>
-          <div className="break-all text-xl font-semibold leading-8 text-slate-950">{output}</div>
+          <div className="mb-2 text-xs font-semibold text-slate-500">{tr("大写结果")}</div>
+          <div className="break-all text-xl font-semibold leading-8 text-slate-950"><span data-i18n-skip>{output}</span></div>
         </div>
         <Button className="self-start" icon={<ArrowRightLeft className="h-4 w-4" />} onClick={() => copy(output)}>
-          {copied ? '已复制' : '复制结果'}
+          {copied ? tr('已复制') : tr('复制结果')}
         </Button>
       </CardContent>
     </Card>

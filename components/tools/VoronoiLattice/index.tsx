@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -144,9 +145,9 @@ const SegmentedControl = <T extends string>({
   value: T;
   options: Array<{ value: T; label: string; hint?: string }>;
   onChange: (value: T) => void;
-}) => (
+}) => { useLocaleRender(); return (
   <div>
-    <FieldLabel>{label}</FieldLabel>
+    <FieldLabel>{tr(label)}</FieldLabel>
     <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
       {options.map(option => (
         <button
@@ -159,19 +160,20 @@ const SegmentedControl = <T extends string>({
           }`}
           onClick={() => onChange(option.value)}
         >
-          <span className="block truncate">{option.label}</span>
-          {option.hint && <span className="mt-0.5 block truncate text-[10px] font-medium opacity-70">{option.hint}</span>}
+          <span className="block truncate">{tr(option.label)}</span>
+          {option.hint && <span className="mt-0.5 block truncate text-[10px] font-medium opacity-70">{tr(option.hint)}</span>}
         </button>
       ))}
     </div>
   </div>
-);
+); };
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default' | 'warn' | 'good' }> = ({
   label,
   value,
   tone = 'default',
 }) => {
+  useLocaleRender();
   const toneClass = {
     default: 'text-slate-950',
     warn: 'text-amber-700',
@@ -180,20 +182,21 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default'
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="text-xs font-medium text-slate-500">{tr(label)}</div>
       <div className={`mt-1 truncate text-base font-semibold ${toneClass}`}>{value}</div>
     </div>
   );
 };
 
 const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }> = ({ report, outputSize }) => {
+  useLocaleRender();
   if (!report) {
     return (
       <div className="tool-panel flex min-h-[13rem] flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
         <FileText className="h-9 w-9 text-slate-300" />
         <div>
-          <div className="text-sm font-semibold text-slate-700">暂无生成报告</div>
-          <div className="mt-1 text-xs">完成处理后会列出采样点、杆件数、输出面数和导出风险。</div>
+          <div className="text-sm font-semibold text-slate-700">{tr("暂无生成报告")}</div>
+          <div className="mt-1 text-xs">{tr("完成处理后会列出采样点、杆件数、输出面数和导出风险。")}</div>
         </div>
       </div>
     );
@@ -206,25 +209,24 @@ const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
           <div>
             <div className="font-semibold">
-              {report.nonPrintable ? '平面预览厚度，导出仅供实验' : '已生成实验级镂空 STL'}
+              {report.nonPrintable ? tr('平面预览厚度，导出仅供实验') : tr('已生成实验级镂空 STL')}
             </div>
             <div className="mt-1 text-xs leading-5">
-              本工具生成的是表面杆件镂空效果，不执行实体布尔挖孔；打印前建议用修复工具或切片软件复检。
-            </div>
+              {tr("本工具生成的是表面杆件镂空效果，不执行实体布尔挖孔；打印前建议用修复工具或切片软件复检。")}</div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Metric label="采样点" value={formatNumber(report.seedPoints)} />
-        <Metric label="杆件" value={formatNumber(report.rods)} />
-        <Metric label="输出三角面" value={formatNumber(report.outputFaces)} />
-        <Metric label="导出大小" value={formatBytes(outputSize || report.outputBytes)} />
-        <Metric label="输入三角面" value={formatNumber(report.inputFaces)} />
-        <Metric label="输出顶点" value={formatNumber(report.outputVertices)} />
-        <Metric label="杆半径" value={formatSize(report.radius)} tone={report.nonPrintable ? 'warn' : 'default'} />
+        <Metric label={tr("采样点")} value={formatNumber(report.seedPoints)} />
+        <Metric label={tr("杆件")} value={formatNumber(report.rods)} />
+        <Metric label={tr("输出三角面")} value={formatNumber(report.outputFaces)} />
+        <Metric label={tr("导出大小")} value={formatBytes(outputSize || report.outputBytes)} />
+        <Metric label={tr("输入三角面")} value={formatNumber(report.inputFaces)} />
+        <Metric label={tr("输出顶点")} value={formatNumber(report.outputVertices)} />
+        <Metric label={tr("杆半径")} value={formatSize(report.radius)} tone={report.nonPrintable ? 'warn' : 'default'} />
         <Metric
-          label="包围盒"
+          label={tr("包围盒")}
           value={`${formatSize(report.inputBounds.size[0])} x ${formatSize(report.inputBounds.size[1])} x ${formatSize(report.inputBounds.size[2])}`}
         />
       </div>
@@ -253,6 +255,7 @@ const MeshPreview: React.FC<{
   mode: PreviewMode;
   isProcessing: boolean;
 }> = ({ original, lattice, mode, isProcessing }) => {
+  useLocaleRender();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
@@ -419,22 +422,22 @@ const MeshPreview: React.FC<{
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-center text-slate-500">
           <Boxes className="h-10 w-10 text-slate-300" />
           <div>
-            <div className="text-sm font-semibold text-slate-700">等待 STL 模型</div>
-            <div className="mt-1 text-xs">上传并生成后会显示可旋转镂空预览</div>
+            <div className="text-sm font-semibold text-slate-700">{tr("等待 STL 模型")}</div>
+            <div className="mt-1 text-xs">{tr("上传并生成后会显示可旋转镂空预览")}</div>
           </div>
         </div>
       )}
       {isProcessing && (
         <div className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-lg border border-cyan-100 bg-white/90 px-3 py-2 text-xs font-medium text-cyan-800 shadow-sm backdrop-blur">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          生成中
-        </div>
+          {tr("生成中")}</div>
       )}
     </div>
   );
 };
 
 export const VoronoiLatticeTool: React.FC = () => {
+  useLocaleRender();
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const sharedMesh = useMeshStore(state => state.sharedMesh);
@@ -561,22 +564,22 @@ export const VoronoiLatticeTool: React.FC = () => {
     <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
       <Card className="flex min-h-0 flex-col xl:w-[25rem] xl:flex-none">
         <CardHeader
-          title="STL 镂空/Voronoi"
-          description="纯浏览器本地生成表面蜂窝杆件，适合快速预览镂空风格并导出实验级 STL。"
+          title={tr("STL 镂空/Voronoi")}
+          description={tr("纯浏览器本地生成表面蜂窝杆件，适合快速预览镂空风格并导出实验级 STL。")}
         />
         <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
           {sharedMesh && (
             <div className="rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
-                <span className="truncate">💡 共享内存可载入网格模型</span>
+                <span className="truncate">{tr("💡 共享内存可载入网格模型")}</span>
               </div>
               <button
                 type="button"
                 onClick={() => importSharedMesh(sharedMesh)}
                 className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
-                title={sharedMesh.fileName}
+                title={tr(sharedMesh.fileName)}
               >
-                导入：{sharedMesh.fileName}
+                {tr("导入：")}{sharedMesh.fileName}
               </button>
             </div>
           )}
@@ -585,10 +588,10 @@ export const VoronoiLatticeTool: React.FC = () => {
             <label className="flex w-full cursor-pointer flex-col items-center gap-2 p-5 text-center">
               <Upload className="h-8 w-8 text-primary-600" />
               <span className="max-w-full truncate text-sm font-semibold text-slate-700">
-                {file ? file.name : '选择 STL 文件'}
+                {file ? file.name : tr('选择 STL 文件')}
               </span>
               <span className="text-xs text-slate-500">
-                {file ? `${formatBytes(file.size)} · 全程本地处理` : '支持 ASCII / 二进制 STL'}
+                {file ? tr(`${formatBytes(file.size)} · 全程本地处理`) : tr('支持 ASCII / 二进制 STL')}
               </span>
               <input
                 className="hidden"
@@ -602,25 +605,25 @@ export const VoronoiLatticeTool: React.FC = () => {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
             <div className="flex items-center gap-2 font-medium text-slate-800">
               {processing ? <Loader2 className="h-4 w-4 animate-spin text-primary-700" /> : <RefreshCw className="h-4 w-4 text-primary-700" />}
-              {statusText}
+              {tr(statusText)}
             </div>
           </div>
 
           <div className="grid gap-4">
             <SegmentedControl
-              label="孔数量"
+              label={tr("孔数量")}
               value={options.holeDensity}
               options={densityOptions}
               onChange={value => updateOption('holeDensity', value)}
             />
             <SegmentedControl
-              label="厚度"
+              label={tr("厚度")}
               value={options.thickness}
               options={thicknessOptions}
               onChange={value => updateOption('thickness', value)}
             />
             <SegmentedControl<PreviewMode>
-              label="预览"
+              label={tr("预览")}
               value={viewMode}
               options={viewModeOptions}
               onChange={setViewMode}
@@ -630,32 +633,30 @@ export const VoronoiLatticeTool: React.FC = () => {
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-              <span>第一版生成 Voronoi 风格表面杆件，不做实体布尔挖孔；导出结果请在打印前复检。</span>
+              <span>{tr("第一版生成 Voronoi 风格表面杆件，不做实体布尔挖孔；导出结果请在打印前复检。")}</span>
             </div>
           </div>
 
-          {error && <div className="status-error p-3 text-sm">{error}</div>}
+          {error && <div className="status-error p-3 text-sm">{tr(error)}</div>}
 
           <div className="flex flex-wrap gap-2">
             <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />}>
-              生成镂空
-            </Button>
+              {tr("生成镂空")}</Button>
             <Button
               variant="secondary"
               onClick={handleDownload}
               disabled={!stlBuffer || processing}
               icon={<Download className="h-4 w-4" />}
             >
-              下载 STL
-            </Button>
+              {tr("下载 STL")}</Button>
           </div>
         </CardContent>
       </Card>
 
       <Card className="flex min-h-0 flex-1 flex-col">
         <CardHeader
-          title="镂空预览与报告"
-          description="可旋转查看原模与镂空结果；参数变化后重新生成即可更新导出。"
+          title={tr("镂空预览与报告")}
+          description={tr("可旋转查看原模与镂空结果；参数变化后重新生成即可更新导出。")}
           actions={
             report ? (
               <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">

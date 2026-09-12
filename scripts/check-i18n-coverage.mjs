@@ -13,7 +13,7 @@ const getExactTranslationKeys = () => {
     throw new Error('Unable to locate enExact in src/i18n/messages.ts');
   }
 
-  const keys = new Set();
+  const keys = new Set(Object.keys(JSON.parse(read('src/i18n/en-extra.json'))));
   const keyPattern = /^\s*(['"])((?:\\.|(?!\1).)*?)\1\s*:/gm;
   for (const item of match[1].matchAll(keyPattern)) {
     keys.add(item[2]);
@@ -39,9 +39,10 @@ const extractQuotedValues = source => {
   const values = [];
   const propertyPattern = /\b(?:name|description):\s*(['"])((?:\\.|(?!\1).)*?)\1/g;
   const jsxPattern = /\b(?:title|description)=\s*(['"])((?:\\.|(?!\1).)*?)\1/g;
+  const translatedJsxPattern = /\b(?:title|description)=\{tr\((['"])((?:\\.|(?!\1).)*?)\1\)\}/g;
   const enumPattern = /^\s*[A-Z_]+\s*=\s*(['"])((?:\\.|(?!\1).)*?)\1/gm;
 
-  for (const pattern of [propertyPattern, jsxPattern, enumPattern]) {
+  for (const pattern of [propertyPattern, jsxPattern, translatedJsxPattern, enumPattern]) {
     for (const match of source.matchAll(pattern)) {
       if (hasHan(match[2])) {
         values.push(match[2]);
