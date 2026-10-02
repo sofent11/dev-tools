@@ -56,7 +56,7 @@ const FORGE_SCRIPT_URL = runtimeAsset('forge').url;
 
 const loadForge = async () => {
   if (!window.forge) {
-    await loadRuntimeAsset({ url: FORGE_SCRIPT_URL, kind: 'script', label: 'node-forge', version: runtimeAsset('forge').version, timeoutMs: 20000, retries: 1, cache: true, sourceLabel: 'Self-hosted / build-verified' });
+    await loadRuntimeAsset({ url: FORGE_SCRIPT_URL, kind: 'script', label: 'node-forge', version: runtimeAsset('forge').version, expectedSha256: runtimeAsset('forge').sha256, timeoutMs: 20000, retries: 1, cache: true, sourceLabel: 'Self-hosted / build-verified' });
   }
   if (!window.forge) throw new Error('node-forge runtime is unavailable');
   return window.forge;

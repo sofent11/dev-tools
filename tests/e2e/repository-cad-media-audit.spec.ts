@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
+import forge from 'node-forge';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('locale', 'zh-CN'));
@@ -117,4 +118,35 @@ test('repository data remains usable when IndexedDB is unavailable', async ({ pa
   await expect(page.getByRole('link', { name: 'fresh-result', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('数据已读取，但本地缓存不可用');
   await expect(page.getByRole('button', { name: '检查 Release', exact: true })).toBeEnabled();
+});
+
+test('NuGet certificate metadata loads from the integrity-checked local forge runtime', async ({ page }) => {
+  const keys = forge.pki.rsa.generateKeyPair(2048);
+  const certificate = forge.pki.createCertificate();
+  certificate.publicKey = keys.publicKey; certificate.serialNumber = '01';
+  certificate.validity.notBefore = new Date('2025-01-01'); certificate.validity.notAfter = new Date('2030-01-01');
+  certificate.setSubject([{ name: 'commonName', value: 'Fixture certificate' }]);
+  certificate.setIssuer([{ name: 'commonName', value: 'Fixture issuer' }]);
+  certificate.sign(keys.privateKey, forge.md.sha256.create());
+  const container = forge.pkcs7.createSignedData();
+  container.content = forge.util.createBuffer('fixture'); container.addCertificate(certificate);
+  container.addSigner({ key: keys.privateKey, certificate, digestAlgorithm: forge.pki.oids.sha256 });
+  container.sign({ detached: true });
+  const archive = new JSZip();
+  archive.file('.signature.p7s', Buffer.from(forge.asn1.toDer(container.toAsn1()).getBytes(), 'binary'));
+  archive.file('fixture.nuspec', '<package><metadata><authors>Fixture</authors><description>Local test package</description></metadata></package>');
+  const bytes = await archive.generateAsync({ type: 'nodebuffer' });
+  await page.route('https://**/*', route => route.abort());
+  await page.route('https://api.nuget.org/v3-flatcontainer/**', route => route.request().url().endsWith('/index.json')
+    ? route.fulfill({ json: { versions: ['1.0.0'] } })
+    : route.fulfill({ body: bytes, contentType: 'application/octet-stream' }));
+  await page.goto('/tools/repo-dependency-studio#nuget-signature');
+  await page.getByLabel('包名', { exact: true }).fill('fixture');
+  await page.getByRole('button', { name: '加载版本', exact: true }).click();
+  await page.getByRole('button', { name: '解析签名', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('签名文件与证书已解析；尚未验证签名有效性。');
+  await expect(page.getByText('CN=Fixture certificate', { exact: true })).toBeVisible();
+  await expect(page.getByText('CN=Fixture issuer', { exact: true })).toBeVisible();
+  await page.getByText('查看 PEM 证书', { exact: true }).click();
+  await expect(page.getByLabel('证书 1 PEM', { exact: true })).toHaveValue(/BEGIN CERTIFICATE/);
 });
