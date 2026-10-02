@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Activity, Globe, Monitor, Send, Wifi } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -20,11 +21,11 @@ const subTools: SubTool[] = [
   { id: 'device', name: '设备信息', description: '浏览器/系统参数', icon: Monitor, component: DeviceInfoTool },
 ];
 
-export const NetworkDiagnosticsStudio: React.FC = () => (
+export const NetworkDiagnosticsStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="接口请求与网络诊断工作室"
-    description="面向接口联调、长连接测试、地址解析和客户端环境探测的网络调试工作台"
+    title={tr("接口请求与网络诊断工作室")}
+    description={tr("面向接口联调、长连接测试、地址解析和客户端环境探测的网络调试工作台")}
     tools={subTools}
     defaultTab="http"
   />
-);
+); };

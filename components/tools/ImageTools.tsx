@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import {
   Archive,
   Download,
@@ -17,7 +18,7 @@ import { TabButton, Tabs } from '../ui/ToolUi';
 import { ImageCompressorPanel } from './images/ImageCompressorPanel';
 import { ImageVectorizerPanel } from './images/ImageVectorizerPanel';
 import { downloadBlob, formatBytes, getBaseName } from './images/imageToolUtils';
-import { FileDropzone, WorkflowSteps, WorkflowEmpty } from './shared/WorkflowUi';
+import { FileDropzone, WorkflowSteps, WorkflowEmpty, WorkflowNotice } from './shared/WorkflowUi';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -63,6 +64,7 @@ interface SplitResult {
   size: number;
   bounds: BoundingBox;
   originalBounds: BoundingBox;
+  renderedBounds: BoundingBox;
   format: SplitOutputFormat;
   quality: number;
 }
@@ -127,6 +129,7 @@ const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>
 
 const createSourceCanvasFromImage = (image: HTMLImageElement) => {
   const canvas = document.createElement('canvas');
+  if ((image.naturalWidth || image.width) * (image.naturalHeight || image.height) > 24000000) throw new Error('图片超过 2,400 万像素，请缩小后重试。');
   canvas.width = image.naturalWidth || image.width;
   canvas.height = image.naturalHeight || image.height;
   const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -518,9 +521,9 @@ const buildComponentGroups = (components: ConnectedComponent[], width: number, h
     const componentCenterX = getBoundCenterX(component);
     const componentCenterY = getBoundCenterY(component);
 
-    groups.forEach((group) => {
+    for (const group of groups) {
       if (!isPointInBounds(componentCenterX, componentCenterY, group.ownershipBounds)) {
-        return;
+        continue;
       }
 
       const relation = getBoundingRelationship(component, group.primary);
@@ -530,7 +533,7 @@ const buildComponentGroups = (components: ConnectedComponent[], width: number, h
         bestHorizontalGap = relation.horizontalGap;
         bestVerticalGap = relation.verticalGap;
       }
-    });
+    }
 
     if (
       bestGroup &&
@@ -620,6 +623,7 @@ const renderSplitResult = async (
     size: blob.size,
     bounds: cloneBounds(payload.bounds),
     originalBounds: cloneBounds(payload.originalBounds),
+    renderedBounds: cloneBounds(payload.bounds),
     format: payload.format,
     quality: payload.quality,
   };
@@ -660,6 +664,7 @@ const createSplitResults = async (
   const extension = getExtensionForMimeType(options.outputFormat);
   const minMeaningfulPixels = Math.max(50, Math.floor((sourceCanvas.width * sourceCanvas.height) / 60000));
 
+  try {
   for (const group of groupedComponents) {
     const bounds = clampBoundsToBounds(
       expandBounds(group.bounds, sourceCanvas.width, sourceCanvas.height, options.padding),
@@ -687,6 +692,7 @@ const createSplitResults = async (
   if (!splitResults.length) {
     throw new Error('The sheet was detected, but no valid sticker region could be exported.');
   }
+  } catch (error) { splitResults.forEach(result => URL.revokeObjectURL(result.url)); throw error; }
 
   return {
     results: splitResults,
@@ -700,11 +706,17 @@ const createSplitResults = async (
 
 
 const StickerSplitterPanel: React.FC = () => {
+  useLocaleRender();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [splitResults, setSplitResults] = useState<SplitResult[]>([]);
   const [selectedResultId, setSelectedResultId] = useState<string | null>(null);
   const [isSplitting, setIsSplitting] = useState(false);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [pendingRenders, setPendingRenders] = useState(0);
+  const [processedOptions, setProcessedOptions] = useState<SplitOptions | null>(null);
+  const sourceRequestRef = useRef(0);
+  const renderRequestsRef = useRef(new Map<string, number>());
   const [error, setError] = useState<string | null>(null);
   const [options, setOptions] = useState<SplitOptions>(DEFAULT_SPLIT_OPTIONS);
   const [backgroundColor, setBackgroundColor] = useState<RgbColor | null>(null);
@@ -714,6 +726,9 @@ const StickerSplitterPanel: React.FC = () => {
   const previewFrameRef = useRef<HTMLDivElement | null>(null);
   const splitResultsRef = useRef<SplitResult[]>([]);
 
+  const staleResults = Boolean(splitResults.length && processedOptions && JSON.stringify(options) !== JSON.stringify(processedOptions));
+  const dirtyBounds = splitResults.some(result => JSON.stringify(result.bounds) !== JSON.stringify(result.renderedBounds));
+  const exportBlocked = isSplitting || zipBusy || pendingRenders > 0 || staleResults || !!dragState || dirtyBounds;
   const selectedResult = splitResults.find((result) => result.id === selectedResultId) || null;
 
   useEffect(() => {
@@ -736,6 +751,7 @@ const StickerSplitterPanel: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      sourceRequestRef.current += 1;
       splitResultsRef.current.forEach((result) => URL.revokeObjectURL(result.url));
     };
   }, []);
@@ -784,31 +800,7 @@ const StickerSplitterPanel: React.FC = () => {
         return;
       }
 
-      void (async () => {
-        if (!sourceCanvasRef.current) {
-          return;
-        }
-
-        const updatedResult = await renderSplitResult(sourceCanvasRef.current, {
-          id: currentResult.id,
-          name: currentResult.name,
-          bounds: currentResult.bounds,
-          originalBounds: currentResult.originalBounds,
-          format: currentResult.format,
-          quality: currentResult.quality,
-        });
-
-        setSplitResults((current) => {
-          const previous = current.find((result) => result.id === updatedResult.id);
-          if (previous && previous.url !== updatedResult.url) {
-            URL.revokeObjectURL(previous.url);
-          }
-
-          const next = current.map((result) => (result.id === updatedResult.id ? updatedResult : result));
-          splitResultsRef.current = next;
-          return next;
-        });
-      })();
+      void commitBoundsUpdate(currentResult.id, currentResult.bounds);
     };
 
     window.addEventListener('pointermove', handlePointerMove, { passive: false });
@@ -828,6 +820,8 @@ const StickerSplitterPanel: React.FC = () => {
   };
 
   const resetSplitResults = () => {
+    sourceRequestRef.current += 1; renderRequestsRef.current.clear();
+    setPendingRenders(0); setProcessedOptions(null);
     splitResultsRef.current.forEach((result) => URL.revokeObjectURL(result.url));
     splitResultsRef.current = [];
     setSplitResults([]);
@@ -840,9 +834,8 @@ const StickerSplitterPanel: React.FC = () => {
   };
 
   const handleFileChange = (files: File[]) => {
-    if (!files[0]) {
-      return;
-    }
+    if (!files[0] || isSplitting || zipBusy) return;
+    if ((!files[0].type.startsWith('image/') && !/\.(jpe?g|png|webp)$/i.test(files[0].name)) || !files[0].size || files[0].size > 64 * 1024 * 1024) { setError('请选择非空图片，大小不能超过 64 MB。'); return; }
 
     resetSplitResults();
     setFile(files[0]);
@@ -856,25 +849,24 @@ const StickerSplitterPanel: React.FC = () => {
       return;
     }
 
-    const updatedResult = await renderSplitResult(sourceCanvas, {
-      id: currentResult.id,
-      name: currentResult.name,
-      bounds: nextBounds,
-      originalBounds: currentResult.originalBounds,
-      format: currentResult.format,
-      quality: currentResult.quality,
-    });
-
-    setSplitResults((current) => {
-      const previous = current.find((result) => result.id === updatedResult.id);
-      if (previous && previous.url !== updatedResult.url) {
-        URL.revokeObjectURL(previous.url);
-      }
-
-      const next = current.map((result) => (result.id === updatedResult.id ? updatedResult : result));
-      splitResultsRef.current = next;
-      return next;
-    });
+    const sourceRequest = sourceRequestRef.current;
+    const revision = (renderRequestsRef.current.get(resultId) || 0) + 1;
+    renderRequestsRef.current.set(resultId, revision);
+    setPendingRenders(count => count + 1);
+    try {
+      const updatedResult = await renderSplitResult(sourceCanvas, {
+        id: currentResult.id, name: currentResult.name, bounds: nextBounds, originalBounds: currentResult.originalBounds, format: currentResult.format, quality: currentResult.quality,
+      });
+      if (sourceRequest !== sourceRequestRef.current || renderRequestsRef.current.get(resultId) !== revision || !splitResultsRef.current.some(result => result.id === resultId)) { URL.revokeObjectURL(updatedResult.url); return; }
+      setSplitResults(current => {
+        const previous = current.find(result => result.id === resultId);
+        if (previous) URL.revokeObjectURL(previous.url);
+        const next = current.map(result => result.id === resultId ? updatedResult : result);
+        splitResultsRef.current = next;
+        return next;
+      });
+    } catch (error) { if (sourceRequest === sourceRequestRef.current) setError((error as Error).message); }
+    finally { if (sourceRequest === sourceRequestRef.current) setPendingRenders(count => Math.max(0, count - 1)); }
   };
 
   const previewBoundsUpdate = (resultId: string, nextBounds: BoundingBox) => {
@@ -895,52 +887,53 @@ const StickerSplitterPanel: React.FC = () => {
   };
 
   const handleSplit = async () => {
-    if (!file) {
-      return;
-    }
-
+    if (!file || isSplitting || zipBusy || pendingRenders) return;
+    const sourceRequest = ++sourceRequestRef.current;
+    const submittedOptions = { ...options };
     setIsSplitting(true);
     setError(null);
 
     try {
       const image = await loadImageFromFile(file);
       const sourceCanvas = createSourceCanvasFromImage(image);
+      const { results, background, sourceInfo: nextSourceInfo } = await createSplitResults(file, sourceCanvas, submittedOptions);
+      if (sourceRequest !== sourceRequestRef.current) { results.forEach(result => URL.revokeObjectURL(result.url)); return; }
       sourceCanvasRef.current = sourceCanvas;
-      const { results, background, sourceInfo: nextSourceInfo } = await createSplitResults(file, sourceCanvas, options);
+      setProcessedOptions(submittedOptions);
       replaceAllResults(results);
       setBackgroundColor(background);
       setSourceInfo(nextSourceInfo);
     } catch (nextError) {
+      if (sourceRequest !== sourceRequestRef.current) return;
       console.error(nextError);
       replaceAllResults([]);
       setBackgroundColor(null);
       setSourceInfo(null);
       setError((nextError as Error).message);
     } finally {
-      setIsSplitting(false);
+      if (sourceRequest === sourceRequestRef.current) setIsSplitting(false);
     }
   };
 
   const downloadSingle = (result: SplitResult) => {
+    if (exportBlocked) return;
     downloadBlob(result.blob, result.name);
   };
 
   const downloadZip = async () => {
-    if (!splitResults.length || !file) {
-      return;
-    }
-
-    const zip = new JSZip();
-    splitResults.forEach((result) => {
-      zip.file(result.name, result.blob);
-    });
-
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    downloadBlob(zipBlob, `${getBaseName(file.name)}_split.zip`);
+    if (!splitResults.length || !file || exportBlocked) return;
+    const sourceRequest = sourceRequestRef.current;
+    setZipBusy(true);
+    try {
+      const zip = new JSZip(); splitResults.forEach(result => zip.file(result.name, result.blob));
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      if (sourceRequest === sourceRequestRef.current) downloadBlob(zipBlob, `${getBaseName(file.name)}_split.zip`);
+    } catch (error) { if (sourceRequest === sourceRequestRef.current) setError((error as Error).message); }
+    finally { if (sourceRequest === sourceRequestRef.current) setZipBusy(false); }
   };
 
   const startDraggingBox = (result: SplitResult, event: React.PointerEvent, mode: DragMode) => {
-    if (!sourceInfo) {
+    if (!sourceInfo || isSplitting || zipBusy || pendingRenders) {
       return;
     }
 
@@ -1023,19 +1016,20 @@ const StickerSplitterPanel: React.FC = () => {
   return (
     <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
       <WorkflowSteps steps={['选择贴纸图', '识别与调整边框', '导出切片']} active={!file ? 0 : splitResults.length ? 2 : 1} />
-      <FileDropzone accept="image/*" fileName={file?.name} disabled={isSplitting} onFiles={handleFileChange} title="选择整张贴纸图" hint="适合纯色背景，贴纸之间有明显留白的图片" />
-      {!file && <WorkflowEmpty title="把整张贴纸图拆成独立素材" description="自动识别边框后仍可手动拖动或调整坐标，单张下载或打包 ZIP。" />}
+      <FileDropzone accept="image/*" fileName={file?.name} disabled={isSplitting || zipBusy} onFiles={handleFileChange} title={tr("选择整张贴纸图")} hint={tr("适合纯色背景，贴纸之间有明显留白的图片")} />
+      {staleResults && <WorkflowNotice>{tr("拆分设置已变化，请重新拆分后下载。")}</WorkflowNotice>}
+      {pendingRenders > 0 && <WorkflowNotice>{tr("正在更新裁剪图像，完成后即可下载。")}</WorkflowNotice>}
+      {!file && <WorkflowEmpty title={tr("把整张贴纸图拆成独立素材")} description={tr("自动识别边框后仍可手动拖动或调整坐标，单张下载或打包 ZIP。")} />}
 
       {file && (
         <div className="flex flex-col xl:flex-row gap-6 min-h-0">
           <div className="tool-section h-fit w-full flex-none space-y-5 p-4 xl:w-[22rem]">
             <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-              <Settings className="w-4 h-4" /> 拆分参数
-            </h3>
+              <Settings className="w-4 h-4" /> {tr("拆分参数")}</h3>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">背景容差</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("背景容差")}</label>
                 <input
                   type="range"
                   min="8"
@@ -1050,12 +1044,11 @@ const StickerSplitterPanel: React.FC = () => {
                   className="w-full"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  当前 {options.backgroundTolerance}，背景不是纯白时可适当调高
-                </p>
+                  {tr("当前")}{options.backgroundTolerance}{tr("，背景不是纯白时可适当调高")}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">最小留白</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("最小留白")}</label>
                 <input
                   type="number"
                   min="8"
@@ -1069,11 +1062,11 @@ const StickerSplitterPanel: React.FC = () => {
                   }
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
-                <p className="text-xs text-slate-500 mt-1">用于连接同一表情附近的小装饰，避免被误拆成多行多列</p>
+                <p className="text-xs text-slate-500 mt-1">{tr("用于连接同一表情附近的小装饰，避免被误拆成多行多列")}</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">裁切留边 (px)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("裁切留边 (px)")}</label>
                 <input
                   type="number"
                   min="0"
@@ -1090,7 +1083,7 @@ const StickerSplitterPanel: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">导出格式</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("导出格式")}</label>
                 <select
                   value={options.outputFormat}
                   onChange={(e) =>
@@ -1109,7 +1102,7 @@ const StickerSplitterPanel: React.FC = () => {
 
               {options.outputFormat !== 'image/png' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">导出质量</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{tr("导出质量")}</label>
                   <input
                     type="range"
                     min="0.5"
@@ -1124,40 +1117,38 @@ const StickerSplitterPanel: React.FC = () => {
                     }
                     className="w-full"
                   />
-                  <p className="text-xs text-slate-500 mt-1">当前 {Math.round(options.quality * 100)}%</p>
+                  <p className="text-xs text-slate-500 mt-1">{tr("当前")}{Math.round(options.quality * 100)}%</p>
                 </div>
               )}
             </div>
 
             <Button
               onClick={handleSplit}
-              disabled={isSplitting}
+              disabled={isSplitting || zipBusy || pendingRenders > 0}
               className="w-full"
               icon={isSplitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Scissors className="w-4 h-4" />}
             >
-              {isSplitting ? '正在拆分...' : '自动拆分表情包'}
+              {isSplitting ? tr('正在拆分...') : tr('自动拆分表情包')}
             </Button>
 
             <details className="workflow-settings">
-              <summary>拆分与边框调整说明</summary>
+              <summary>{tr("拆分与边框调整说明")}</summary>
               <div className="space-y-2 text-xs text-slate-600">
               <div className="flex items-center gap-2 text-slate-700 font-medium">
                 <Sparkles className="w-4 h-4 text-amber-500" />
-                使用建议
-              </div>
-              <p>背景越纯、表情之间的空白越明显，切出来会越准。</p>
-              <p>如果装饰小图标被拆散了，优先把“最小留白”调大一点再重试。</p>
-              <p>拆分后可直接拖动边框或拖四边控制点，手工修正每张的裁切范围。</p>
+                {tr("使用建议")}</div>
+              <p>{tr("背景越纯、表情之间的空白越明显，切出来会越准。")}</p>
+              <p>{tr("如果装饰小图标被拆散了，优先把“最小留白”调大一点再重试。")}</p>
+              <p>{tr("拆分后可直接拖动边框或拖四边控制点，手工修正每张的裁切范围。")}</p>
             </div>
 
             </details>
             {selectedResult && sourceInfo && (
               <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4 space-y-4">
                 <div>
-                  <p className="text-sm font-semibold text-primary-900">手工调整当前边框</p>
+                  <p className="text-sm font-semibold text-primary-900">{tr("手工调整当前边框")}</p>
                   <p className="text-xs text-primary-700 mt-1">
-                    已选中 {selectedResult.name}，可拖动预览框，或在这里精确调整四边坐标。
-                  </p>
+                    {tr("已选中")}{selectedResult.name}{tr("，可拖动预览框，或在这里精确调整四边坐标。")}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -1222,16 +1213,14 @@ const StickerSplitterPanel: React.FC = () => {
                       void adjustSelectedBounds(4);
                     }}
                   >
-                    四边外扩 4px
-                  </Button>
+                    {tr("四边外扩 4px")}</Button>
                   <Button
                     variant="secondary"
                     onClick={() => {
                       void adjustSelectedBounds(-4);
                     }}
                   >
-                    四边收紧 4px
-                  </Button>
+                    {tr("四边收紧 4px")}</Button>
                 </div>
 
                 <Button
@@ -1241,11 +1230,10 @@ const StickerSplitterPanel: React.FC = () => {
                     void resetSelectedBounds();
                   }}
                 >
-                  恢复自动识别边框
-                </Button>
+                  {tr("恢复自动识别边框")}</Button>
 
                 <p className="text-xs text-slate-500">
-                  当前尺寸 {selectedResult.width} × {selectedResult.height} px
+                  {tr("当前尺寸")}{selectedResult.width} × {selectedResult.height} px
                 </p>
               </div>
             )}
@@ -1263,15 +1251,16 @@ const StickerSplitterPanel: React.FC = () => {
                 </p>
               </div>
               {splitResults.length > 0 && (
-                <Button onClick={downloadZip} icon={<Archive className="w-4 h-4" />}>
-                  下载 ZIP
-                </Button>
+                <Button disabled={exportBlocked}
+                      isLoading={zipBusy}
+                      onClick={() => void downloadZip()} icon={<Archive className="w-4 h-4" />}>
+                  {tr("下载 ZIP")}</Button>
               )}
             </div>
 
             {error && (
               <div className="status-error px-4 py-3 text-sm">
-                {error}
+                {tr(error)}
               </div>
             )}
 
@@ -1279,16 +1268,16 @@ const StickerSplitterPanel: React.FC = () => {
               <div className="tool-section overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                   <div>
-                    <p className="font-medium text-slate-800">原图预览</p>
+                    <p className="font-medium text-slate-800">{tr("原图预览")}</p>
                     <p className="text-sm text-slate-500">
                       {splitResults.length > 0
-                        ? `已识别 ${splitResults.length} 个表情`
-                        : '拆分后会在原图上标出裁切范围'}
+                        ? tr(`已识别 ${splitResults.length} 个表情`)
+                        : tr('拆分后会在原图上标出裁切范围')}
                     </p>
                   </div>
                   {backgroundColor && (
                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <span>背景色</span>
+                      <span>{tr("背景色")}</span>
                       <span
                         className="w-4 h-4 rounded border border-slate-200"
                         style={{
@@ -1352,15 +1341,13 @@ const StickerSplitterPanel: React.FC = () => {
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Grid3X3 className="w-4 h-4" />
-                      已切出数量
-                    </div>
+                      {tr("已切出数量")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{splitResults.length}</p>
                   </div>
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <FileImage className="w-4 h-4" />
-                      单张默认格式
-                    </div>
+                      {tr("单张默认格式")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">
                       {getExtensionForMimeType(options.outputFormat).toUpperCase()}
                     </p>
@@ -1368,8 +1355,7 @@ const StickerSplitterPanel: React.FC = () => {
                   <div className="tool-section p-4">
                     <div className="flex items-center gap-2 text-slate-500 text-sm">
                       <Archive className="w-4 h-4" />
-                      打包下载
-                    </div>
+                      {tr("打包下载")}</div>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">ZIP</p>
                   </div>
                 </div>
@@ -1399,11 +1385,11 @@ const StickerSplitterPanel: React.FC = () => {
                       <Button
                         variant="secondary"
                         className="w-full"
+                        disabled={exportBlocked}
                         onClick={() => downloadSingle(result)}
                         icon={<Download className="w-4 h-4" />}
                       >
-                        下载单张
-                      </Button>
+                        {tr("下载单张")}</Button>
                     </div>
                   ))}
                 </div>
@@ -1419,6 +1405,7 @@ const StickerSplitterPanel: React.FC = () => {
 
 
 export const ImageTools: React.FC = () => {
+  useLocaleRender();
   const [activeTab, setActiveTab] = useState<'compress' | 'split' | 'vectorizer'>('compress');
 
   return (
@@ -1429,14 +1416,11 @@ export const ImageTools: React.FC = () => {
       />
       <Tabs>
         <TabButton active={activeTab === 'compress'} onClick={() => setActiveTab('compress')}>
-          图片压缩/转换
-        </TabButton>
+          {tr("图片压缩/转换")}</TabButton>
         <TabButton active={activeTab === 'split'} onClick={() => setActiveTab('split')}>
-          表情包拆分
-        </TabButton>
+          {tr("表情包拆分")}</TabButton>
         <TabButton active={activeTab === 'vectorizer'} onClick={() => setActiveTab('vectorizer')}>
-          图片矢量化 (Vectorizer)
-        </TabButton>
+          {tr("图片矢量化 (Vectorizer)")}</TabButton>
       </Tabs>
 
       {activeTab === 'compress' ? (

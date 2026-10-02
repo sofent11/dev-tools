@@ -2,14 +2,16 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { I18nProvider } from './provider';
+import { translateUi as tr, useLocaleRender } from './render';
 import { useI18n } from './index';
 
 let root: Root;
 let host: HTMLDivElement;
 const settle = () => new Promise(resolve => setTimeout(resolve, 40));
 const Harness = ({ label, payload = '复制' }: { label: string; payload?: string }) => {
+  useLocaleRender();
   const { toggleLocale } = useI18n();
-  return <main><button onClick={toggleLocale} aria-label={label}>{label}</button><select><option>{label}</option></select><span data-i18n-skip>{payload}</span></main>;
+  return <main><button onClick={toggleLocale} aria-label={tr(label)}>{tr(label)}</button><select><option>{tr(label)}</option></select><span data-i18n-skip>{payload}</span></main>;
 };
 
 beforeEach(() => {
@@ -21,7 +23,7 @@ beforeEach(() => {
 });
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); window.localStorage.clear(); });
 
-describe('DOM localization after interactive changes', () => {
+describe('Explicit UI localization after interactive changes', () => {
   it('translates updated reused nodes and restores the current source on a locale switch', async () => {
     await act(async () => { root.render(<I18nProvider><Harness label="复制" /></I18nProvider>); });
     await settle();

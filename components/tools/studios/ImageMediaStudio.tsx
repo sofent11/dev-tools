@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { lazy } from 'react';
 import { Crosshair, FileVideo, Grid3X3, Image, Images, LayoutTemplate, Palette, Scissors } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -15,7 +16,7 @@ const VisualCentroidTool = lazyNamed(() => import('../images/VisualCentroidTool'
 
 const subTools: SubTool[] = [
   { id: 'image', name: '图片压缩/转换', description: '压缩 / 格式转换', icon: Image, component: ImageTools },
-  { id: 'background-removal', name: '智能本地抠图', description: '本地高精度图片背景色去除与画笔边缘修正', icon: Scissors, component: BackgroundRemoval },
+  { id: 'background-removal', name: '色键抠图与精修', description: '背景色去除、画笔擦除与恢复', icon: Scissors, component: BackgroundRemoval },
   { id: 'image-base64', name: '图片转 Base64', description: '图片 Data URL', icon: Images, component: ImageToBase64Tool },
   { id: 'image-colors', name: '图片颜色提取', description: '主色与色板', icon: Palette, component: ImageColorExtractTool },
   { id: 'image-watermark', name: '图片水印', description: 'Canvas 文字水印', icon: LayoutTemplate, component: ImageWatermarkTool },
@@ -27,10 +28,11 @@ const subTools: SubTool[] = [
 ];
 
 export const ImageMediaStudio: React.FC = () => {
+  useLocaleRender();
   return (
     <TabbedToolbox
-      title="图片、动画与视频工作室"
-      description="集中处理图片压缩转换、抠图、水印、人像裁剪、动画帧提取、拼豆图纸和浏览器本地优先的视频解析"
+      title={tr("图片、动画与视频工作室")}
+      description={tr("集中处理图片压缩转换、抠图、水印、人像裁剪、动画帧提取、拼豆图纸和浏览器本地优先的视频解析")}
       tools={subTools}
       defaultTab="image"
     />

@@ -68,7 +68,7 @@ const withRuntimeTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, la
 
 const getRuntimeCache = async () => {
   if (typeof window === 'undefined' || !window.caches) return undefined;
-  return caches.open(CACHE_NAME);
+  try { return await caches.open(CACHE_NAME); } catch { return undefined; }
 };
 
 const toHex = (buffer: ArrayBuffer) =>
@@ -110,7 +110,7 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, 
 
   try {
     const cache = options.cache === false ? undefined : await getRuntimeCache();
-    const cachedResponse = await cache?.match(activeUrl);
+    const cachedResponse = await cache?.match(activeUrl).catch(() => undefined);
     if (cachedResponse) {
       const headers = new Headers(cachedResponse.headers);
       headers.set('x-devtoolbox-runtime-cache', 'hit');
@@ -119,9 +119,11 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, 
         statusText: cachedResponse.statusText,
         headers,
       });
+      try {
       const verified = await verifyResponseSha256(cachedCopy, options.expectedSha256);
       emit(options, { status: 'cached', cached: true, attempt, progress: 100, verified: Boolean(options.expectedSha256) }, activeUrl);
       return verified.response;
+      } catch { await cache?.delete?.(activeUrl).catch(() => undefined); }
     }
 
     emit(options, { status: 'loading', cached: false, attempt, progress: 0 }, activeUrl);
@@ -131,9 +133,10 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, 
     }
 
     const contentLength = Number(response.headers.get('content-length') || 0);
-    if (!response.body || contentLength <= 0) {
+    if (contentLength > 64 * 1024 * 1024) throw new Error('Runtime asset exceeds 64 MB');
+    if (!response.body) {
       const verified = await verifyResponseSha256(response, options.expectedSha256);
-      await cache?.put(activeUrl, verified.response.clone());
+      await cache?.put(activeUrl, verified.response.clone()).catch(() => undefined);
       return verified.response;
     }
 
@@ -147,7 +150,8 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, 
       if (!value) continue;
       chunks.push(value);
       loaded += value.length;
-      const progress = Math.min(100, Math.round((loaded / contentLength) * 100));
+      if (loaded > 64 * 1024 * 1024) { await reader.cancel(); throw new Error('Runtime asset exceeds 64 MB'); }
+      const progress = contentLength > 0 ? Math.min(100, Math.round((loaded / contentLength) * 100)) : 0;
       emit(options, { status: 'loading', cached: false, attempt, progress }, activeUrl);
       for (const [key, listener] of progressListeners.entries()) {
         if (activeUrl.includes(key)) listener(progress);
@@ -167,7 +171,7 @@ const fetchWithProgress = async (options: RuntimeAssetOptions, attempt: number, 
       headers: response.headers,
     });
     const verified = await verifyResponseSha256(loadedResponse, options.expectedSha256);
-    await cache?.put(activeUrl, verified.response.clone());
+    await cache?.put(activeUrl, verified.response.clone()).catch(() => undefined);
     return verified.response;
   } finally {
     window.clearTimeout(timeoutId);
@@ -199,6 +203,7 @@ const executeScriptText = (code: string, options: RuntimeAssetOptions, attempt: 
   script.async = true;
   script.crossOrigin = 'anonymous';
   script.dataset.runtimeSrc = activeUrl;
+  script.dataset.sha256 = options.expectedSha256 || '';
   script.onload = () => {
     cleanup();
     script.dataset.loaded = 'true';
@@ -219,7 +224,8 @@ const loadScriptAsset = async (options: RuntimeAssetOptions) => {
   const existing = Array.from(document.querySelectorAll<HTMLScriptElement>('script[data-runtime-src],script[data-src]'))
     .find(scriptNode => candidateUrls.includes(scriptNode.dataset.runtimeSrc || '') || candidateUrls.includes(scriptNode.dataset.src || ''));
   const existingUrl = existing?.dataset.runtimeSrc || existing?.dataset.src || options.url;
-  if (existing?.dataset.loaded === 'true' || candidateUrls.includes(existing?.dataset.src || '')) {
+  if (existing?.dataset.loaded === 'true') {
+    if ((existing.dataset.sha256 || '') !== (options.expectedSha256 || '')) throw new Error('Loaded runtime integrity policy changed; reload the page.');
     emit(options, { status: 'ready', cached: true, attempt: 0, progress: 100, verified: Boolean(options.expectedSha256) }, existingUrl);
     return;
   }
@@ -275,6 +281,7 @@ const loadRawAsset = async (options: RuntimeAssetOptions) => {
 
 export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions): Promise<T> => {
   if (options.kind === 'module') {
+    if (options.expectedSha256) throw new Error('Module integrity must be verified at build time; runtime import does not enforce SHA-256.');
     if (!moduleCache.has(options.url)) {
       const promise = (async () => {
         const attempts = Math.max(1, (options.retries ?? 0) + 1);
@@ -285,8 +292,10 @@ export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions
           for (let attempt = 1; attempt <= attempts; attempt += 1) {
             emit(options, { status: 'loading', attempt, progress: 0 }, activeUrl);
             try {
+              // Absolute URLs keep Vite's dev client from adding ?import to public runtime files.
+              const moduleUrl = new URL(activeUrl, document.baseURI).href;
               const module = await withRuntimeTimeout(
-                import(/* @vite-ignore */ activeUrl),
+                import(/* @vite-ignore */ moduleUrl),
                 options.timeoutMs ?? 15000,
                 options.label,
               );
@@ -312,14 +321,16 @@ export const loadRuntimeAsset = async <T = unknown>(options: RuntimeAssetOptions
     return loadRawAsset(options) as Promise<T>;
   }
 
-  if (!scriptCache.has(options.url)) {
+  const scriptKey = `${options.url}#${options.expectedSha256 || ''}`;
+  if (!scriptCache.has(scriptKey)) {
     const promise = loadScriptAsset(options).catch(err => {
-      scriptCache.delete(options.url);
+      scriptCache.delete(scriptKey);
       throw err;
     });
-    scriptCache.set(options.url, promise);
+    scriptCache.set(scriptKey, promise);
   }
-  await scriptCache.get(options.url);
+  await scriptCache.get(scriptKey);
+  emit(options, { status: 'ready', progress: 100, verified: Boolean(options.expectedSha256) });
   return undefined as T;
 };
 

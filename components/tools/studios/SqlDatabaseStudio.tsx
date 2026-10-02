@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Database, Server } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -10,11 +11,11 @@ const subTools: SubTool[] = [
   { id: 'sqlite-sandbox', name: 'SQLite WASM 沙箱', description: '离线 SQLite 数据库', icon: Server, component: SqliteSandboxTool },
 ];
 
-export const SqlDatabaseStudio: React.FC = () => (
+export const SqlDatabaseStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="SQL 与本地数据库工作室"
-    description="将 SQL 文本处理与浏览器本地 SQLite 沙箱集中放置，便于快速验证查询、结构与数据样例"
+    title={tr("SQL 与本地数据库工作室")}
+    description={tr("将 SQL 文本处理与浏览器本地 SQLite 沙箱集中放置，便于快速验证查询、结构与数据样例")}
     tools={subTools}
     defaultTab="sql-format"
   />
-);
+); };

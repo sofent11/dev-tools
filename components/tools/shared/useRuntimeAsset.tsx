@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useCallback, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/Button';
@@ -47,6 +48,7 @@ export const RuntimeAssetStatusPanel: React.FC<{
   onRetry?: () => void;
   compact?: boolean;
 }> = ({ state, onRetry, compact = false }) => {
+  useLocaleRender();
   if (state.status === 'idle' || state.status === 'ready') return null;
 
   const isError = state.status === 'error';
@@ -61,25 +63,24 @@ export const RuntimeAssetStatusPanel: React.FC<{
     <div className={`${isError ? 'status-error' : 'status-info'} ${compact ? 'p-2 text-xs' : 'p-3 text-sm'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="font-semibold">{title}</div>
+          <div className="font-semibold">{tr(title)}</div>
           <div className="mt-1 break-all text-xs opacity-80">
-            {state.version ? `版本 ${state.version} · ` : ''}
-            {state.attempt ? `第 ${state.attempt} 次尝试 · ` : ''}
+            {state.version ? tr(`版本 ${state.version} · `) : ''}
+            {state.attempt ? tr(`第 ${state.attempt} 次尝试 · `) : ''}
             {state.progress !== undefined ? `${state.progress}%` : ''}
           </div>
           {(state.activeUrl || state.verified !== undefined) && (
             <div className="mt-1 break-all text-xs opacity-70">
               {state.sourceLabel ? `${state.sourceLabel} · ` : ''}
-              {state.activeUrl ? `来源 ${state.activeUrl}` : ''}
-              {state.verified ? ' · SHA-256 已校验' : ''}
+              {state.activeUrl ? tr(`来源 ${state.activeUrl}`) : ''}
+              {state.verified ? tr(' · SHA-256 已校验') : ''}
             </div>
           )}
-          {state.error && <div className="mt-1 text-xs">{state.error}</div>}
+          {state.error && <div className="mt-1 text-xs">{tr(state.error)}</div>}
         </div>
         {isError && onRetry && (
           <Button size="xs" variant="secondary" onClick={onRetry} icon={<RefreshCw className="h-3.5 w-3.5" />}>
-            重试
-          </Button>
+            {tr("重试")}</Button>
         )}
       </div>
       {!isError && state.progress !== undefined && (

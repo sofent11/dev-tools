@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React from 'react';
 import { twMerge } from 'tailwind-merge';
 
@@ -53,12 +54,15 @@ export const FieldLabel: React.FC<{
   children: React.ReactNode;
   hint?: React.ReactNode;
   className?: string;
-}> = ({ children, hint, className = '' }) => (
+}> = ({ children, hint, className = '' }) => {
+  useLocaleRender();
+  return (
   <label className={twMerge('field-label', className)}>
-    <span>{children}</span>
-    {hint && <span className="text-xs font-medium text-slate-400">{hint}</span>}
+    <span>{tr(children)}</span>
+    {hint && <span className="text-xs font-medium text-slate-400">{tr(hint)}</span>}
   </label>
 );
+};
 
 export const ToolShell: React.FC<{
   children: React.ReactNode;

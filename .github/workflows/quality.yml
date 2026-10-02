@@ -25,41 +25,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Check i18n coverage
-        run: npm run check:i18n
-
-      - name: Check route map
-        run: npm run check:routes
-
-      - name: Check docs roadmap
-        run: npm run check:docs
-
-      - name: Check module boundaries
-        run: npm run check:modules
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Audit production dependencies
-        run: npm run audit:prod
-
-      - name: Build
-        run: npm run build
-
-      - name: Check bundle budget
-        run: npm run check:bundle
-
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Check visible English UI
-        run: npm run check:i18n:visible
+      - name: Verify production release
+        run: npm run verify
 
-      - name: E2E smoke tests
-        run: npm run test:e2e
+      - name: Upload browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-results
+          path: test-results/

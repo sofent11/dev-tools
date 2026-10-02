@@ -1,4 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { buildEventQr, buildWifiQr, escapeCardValue } from './shared/qrPayload';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { ArrowRightLeft, Check, Copy, QrCode, Upload } from 'lucide-react';
 import QRCode from 'qrcode';
 import jsQR from 'jsqr';
@@ -51,6 +54,7 @@ const relativeLuminance = (rgb: { r: number; g: number; b: number }) => {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 };
 
+const composite = (fg: { r: number; g: number; b: number }, bg: { r: number; g: number; b: number }, alpha: number) => ({ r: fg.r * alpha + bg.r * (1 - alpha), g: fg.g * alpha + bg.g * (1 - alpha), b: fg.b * alpha + bg.b * (1 - alpha) });
 const contrastRatio = (a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }) => {
   const lighter = Math.max(relativeLuminance(a), relativeLuminance(b));
   const darker = Math.min(relativeLuminance(a), relativeLuminance(b));
@@ -66,35 +70,37 @@ const wcagBadge = (ratio: number) => {
 
 // --- PX to REM Tool ---
 export const PxRemTool: React.FC = () => {
+  useLocaleRender();
   const [px, setPx] = useState('16');
   const [root, setRoot] = useState('16');
   const [rem, setRem] = useState('1');
   const { copied, copy } = useCopyToClipboard();
   const validRoot = Number.isFinite(Number(root)) && Number(root) > 0 && root !== '';
-  const handlePxChange = (value: string) => { setPx(value); if (value !== '' && validRoot) setRem(String(Number((Number(value) / Number(root)).toFixed(6)))); };
-  const handleRemChange = (value: string) => { setRem(value); if (value !== '' && validRoot) setPx(String(Number((Number(value) * Number(root)).toFixed(6)))); };
+  const handlePxChange = (value: string) => { setPx(value); if (value !== '' && Number.isFinite(Number(value)) && validRoot) setRem(String(Number((Number(value) / Number(root)).toFixed(6)))); };
+  const handleRemChange = (value: string) => { setRem(value); if (value !== '' && Number.isFinite(Number(value)) && validRoot) setPx(String(Number((Number(value) * Number(root)).toFixed(6)))); };
   const handleRootChange = (value: string) => { setRoot(value); if (Number(value) > 0 && px !== '') setRem(String(Number((Number(px) / Number(value)).toFixed(6)))); };
+  const validValues = px !== '' && rem !== '' && Number.isFinite(Number(px)) && Number.isFinite(Number(rem));
   const css = `font-size: ${rem}rem; /* ${px}px at ${root}px root */`;
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="PX / REM 转换器" description="编辑任意一侧，另一侧同步换算；设置页面根字号。" />
+      <CardHeader title={tr("PX / REM 转换器")} description={tr("编辑任意一侧，另一侧同步换算；设置页面根字号。")} />
       <CardContent className="flex-1 overflow-auto space-y-5">
         <div className="grid gap-5 lg:grid-cols-[18rem_1fr]">
           <section className="tool-panel p-4 space-y-4 self-start">
-            <FieldLabel hint="必须大于 0">根字号 (px)</FieldLabel>
+            <FieldLabel hint={tr("必须大于 0")}>{tr("根字号 (px)")}</FieldLabel>
             <Input type="number" min="0.01" value={root} onChange={event => handleRootChange(event.target.value)} aria-invalid={!validRoot} />
             <div className="flex flex-wrap gap-2">{[10, 16, 18, 20].map(value => <Button key={value} size="sm" variant={root === String(value) ? 'primary' : 'secondary'} onClick={() => handleRootChange(String(value))}>{value}px</Button>)}</div>
-            {!validRoot && <p role="alert" className="text-sm text-red-600">根字号需要大于 0，才能进行换算。</p>}
+            {!validRoot && <p role="alert" className="text-sm text-red-600">{tr("根字号需要大于 0，才能进行换算。")}</p>}
           </section>
           <section className="tool-panel p-5 space-y-5">
             <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] items-center">
-              <div><FieldLabel>像素 (px)</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" value={px} onChange={event => handlePxChange(event.target.value)} /></div>
+              <div><FieldLabel>{tr("像素 (px)")}</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" value={px} onChange={event => handlePxChange(event.target.value)} /></div>
               <ArrowRightLeft className="h-5 w-5 text-slate-400 mx-auto sm:mt-6" />
-              <div><FieldLabel>相对单位 (rem)</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" step="any" value={rem} onChange={event => handleRemChange(event.target.value)} /></div>
+              <div><FieldLabel>{tr("相对单位 (rem)")}</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" step="any" value={rem} onChange={event => handleRemChange(event.target.value)} /></div>
             </div>
             <div className="flex flex-wrap gap-2">{[12, 14, 16, 24, 32, 48].map(value => <button type="button" className="rounded border border-slate-200 px-3 py-1.5 text-xs hover:border-primary-500" key={value} onClick={() => handlePxChange(String(value))}>{value}px</button>)}</div>
-            <CodePanel>{validRoot && px !== '' && rem !== '' ? css : '—'}</CodePanel>
-            <Button size="sm" disabled={!validRoot || px === '' || rem === ''} onClick={() => copy(css)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制 CSS</Button>
+            <CodePanel>{validRoot && validValues ? css : '—'}</CodePanel>
+            <Button size="sm" disabled={!validRoot || !validValues} onClick={() => copy(css)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制 CSS")}</Button>
           </section>
         </div>
       </CardContent>
@@ -104,11 +110,12 @@ export const PxRemTool: React.FC = () => {
 
 // --- Color Converter Tool ---
 export const ColorConverterTool: React.FC = () => {
+  useLocaleRender();
     const [hex, setHex] = useState('#3b82f6');
     const [rgb, setRgb] = useState({ r: 59, g: 130, b: 246 });
     const [customBackground, setCustomBackground] = useState('#ffffff');
     const [alpha, setAlpha] = useState(1);
-    const [copied, setCopied] = useState(false);
+    const { copied, copy } = useCopyToClipboard();
 
     const hsl = useMemo(() => {
         const r = rgb.r / 255;
@@ -203,10 +210,10 @@ export const ColorConverterTool: React.FC = () => {
     }, [customBackground]);
 
     const contrastChecks = useMemo(() => [
-        { label: '白底文字', ratio: contrastRatio(rgb, { r: 255, g: 255, b: 255 }), bg: '#ffffff', fg: hex },
-        { label: '黑底文字', ratio: contrastRatio(rgb, { r: 0, g: 0, b: 0 }), bg: '#000000', fg: hex },
-        { label: '自定义背景', ratio: contrastRatio(rgb, customBackgroundRgb), bg: customBackground, fg: hex },
-    ], [customBackground, customBackgroundRgb, hex, rgb]);
+        { label: '白底文字', ratio: contrastRatio(composite(rgb, { r: 255, g: 255, b: 255 }, alpha), { r: 255, g: 255, b: 255 }), bg: '#ffffff', fg: hex },
+        { label: '黑底文字', ratio: contrastRatio(composite(rgb, { r: 0, g: 0, b: 0 }, alpha), { r: 0, g: 0, b: 0 }), bg: '#000000', fg: hex },
+        { label: '自定义背景', ratio: contrastRatio(composite(rgb, customBackgroundRgb, alpha), customBackgroundRgb), bg: customBackground, fg: hex },
+    ], [alpha, customBackground, customBackgroundRgb, hex, rgb]);
 
     const nearestAccessible = useMemo(() => {
         const candidates = Array.from({ length: 101 }, (_, lightness) => {
@@ -214,26 +221,22 @@ export const ColorConverterTool: React.FC = () => {
             return {
                 rgb: candidateRgb,
                 lightness,
-                ratio: contrastRatio(candidateRgb, customBackgroundRgb),
+                ratio: contrastRatio(composite(candidateRgb, customBackgroundRgb, alpha), customBackgroundRgb),
                 distance: Math.abs(lightness - hsl.l),
             };
         }).filter(candidate => candidate.ratio >= 4.5).sort((a, b) => a.distance - b.distance)[0];
         return candidates ? { ...candidates, hex: rgbToHex(candidates.rgb) } : null;
-    }, [customBackgroundRgb, hsl]);
+    }, [alpha, customBackgroundRgb, hsl]);
 
     const cssText = `${hex.toUpperCase()}\n${rgbaText}\nhsl(${hsl.h} ${hsl.s}% ${hsl.l}% / ${Math.round(alpha * 100)}%)\nhsv(${hsv.h} ${hsv.s}% ${hsv.v}%)\n--color-accent: ${hex.toUpperCase()};\ntext-[${hex.toUpperCase()}]`;
-    const copyCss = async () => {
-        await navigator.clipboard.writeText(cssText);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1500);
-    };
+    const copyCss = () => copy(cssText);
 
     return (
         <Card className="h-full flex flex-col">
             <CardHeader
-              title="颜色转换器"
-              description="HEX、RGB/RGBA、HSL、HSV 实时互转及预览。"
-              actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制颜色值</Button>}
+              title={tr("颜色转换器")}
+              description={tr("HEX、RGB/RGBA、HSL、HSV 实时互转及预览。")}
+              actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制颜色值")}</Button>}
             />
             <CardContent className="flex-1 overflow-auto space-y-8">
                  <div className="tool-panel flex flex-col sm:flex-row sm:justify-between items-center gap-4 p-4">
@@ -242,7 +245,7 @@ export const ColorConverterTool: React.FC = () => {
                     style={{ backgroundColor: rgbaText }}
                  />
                  <div className="font-mono text-sm text-slate-500">{hex.toUpperCase()} · {rgbaText}</div>
-                 <div className="flex gap-2">{['#173b33', '#d4e35b', '#ee7959', '#efe9da', '#181d23'].map(value => <button key={value} type="button" onClick={() => handleHexChange(value)} aria-label={`使用颜色 ${value}`} title={value} className="h-8 w-8 rounded-full border border-slate-200" style={{ backgroundColor: value }} />)}</div>
+                 <div className="flex gap-2">{['#173b33', '#d4e35b', '#ee7959', '#efe9da', '#181d23'].map(value => <button key={value} type="button" onClick={() => handleHexChange(value)} aria-label={tr("使用颜色 ") + (value) + ""} title={value} className="h-8 w-8 rounded-full border border-slate-200" style={{ backgroundColor: value }} />)}</div>
                  </div>
 
                  <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -309,18 +312,17 @@ export const ColorConverterTool: React.FC = () => {
                     <div className="tool-panel p-4">
                         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
-                                <h3 className="text-sm font-bold text-slate-800">WCAG 2.1 对比度分析</h3>
-                                <p className="text-xs text-slate-500">按普通文本 4.5:1、AAA 7:1 评估。</p>
+                                <h3 className="text-sm font-bold text-slate-800">{tr("WCAG 2.1 对比度分析")}</h3>
+                                <p className="text-xs text-slate-500">{tr("按普通文本 4.5:1、AAA 7:1 评估。")}</p>
                             </div>
                             <label className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-                                自定义背景
-                                <input type="color" value={customBackground} onChange={e => setCustomBackground(e.target.value)} className="h-8 w-10 rounded border border-slate-200 bg-white" />
+                                {tr("自定义背景")}<input type="color" value={customBackground} onChange={e => setCustomBackground(e.target.value)} className="h-8 w-10 rounded border border-slate-200 bg-white" />
                             </label>
                         </div>
                         <div className="grid gap-3 md:grid-cols-3">
                             {contrastChecks.map(check => (
-                                <div key={check.label} className="rounded-lg border border-slate-200 p-3" style={{ backgroundColor: check.bg, color: check.fg }}>
-                                    <div className="text-xs font-bold">{check.label}</div>
+                                <div key={tr(check.label)} className="rounded-lg border border-slate-200 p-3" style={{ backgroundColor: check.bg, color: `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})` }}>
+                                    <div className="text-xs font-bold">{tr(check.label)}</div>
                                     <div className="mt-2 text-2xl font-black">{check.ratio.toFixed(2)}:1</div>
                                     <div className="mt-1 inline-flex rounded bg-white/80 px-2 py-0.5 text-xs font-bold text-slate-900">{wcagBadge(check.ratio)}</div>
                                 </div>
@@ -328,7 +330,7 @@ export const ColorConverterTool: React.FC = () => {
                         </div>
                     </div>
                     <div className="tool-panel p-4">
-                        <h3 className="text-sm font-bold text-slate-800">合规颜色建议</h3>
+                        <h3 className="text-sm font-bold text-slate-800">{tr("合规颜色建议")}</h3>
                         {nearestAccessible ? (
                             <div className="mt-3 space-y-3">
                                 <button
@@ -342,10 +344,10 @@ export const ColorConverterTool: React.FC = () => {
                                 >
                                     {nearestAccessible.hex.toUpperCase()}
                                 </button>
-                                <p className="text-xs text-slate-500">与自定义背景对比 {nearestAccessible.ratio.toFixed(2)}:1，L 调整到 {nearestAccessible.lightness}%。</p>
+                                <p className="text-xs text-slate-500">{tr("与自定义背景对比")}{nearestAccessible.ratio.toFixed(2)}{tr(":1，L 调整到")}{nearestAccessible.lightness}%。</p>
                             </div>
                         ) : (
-                            <p className="mt-3 text-xs text-slate-500">当前色相/饱和度下未找到 AA 普通文本建议，请调整色相或背景。</p>
+                            <p className="mt-3 text-xs text-slate-500">{tr("当前色相/饱和度下未找到 AA 普通文本建议，请调整色相或背景。")}</p>
                         )}
                     </div>
                  </div>
@@ -356,9 +358,10 @@ export const ColorConverterTool: React.FC = () => {
 
 // --- QR Code Tool ---
 export const QrCodeTool: React.FC = () => {
+  useLocaleRender();
     const [tab, setTab] = useState<'generate' | 'decode'>('generate');
     const [mode, setMode] = useState<'text' | 'wifi' | 'vcard' | 'event'>('text');
-    const [text, setText] = useState('https://example.com');
+    const [text, setText] = useDraftState("components/tools/WebTools.tsx:QrCodeTool:text", 'https://example.com');
     const [wifi, setWifi] = useState({ ssid: 'MyWifi', password: 'password', encryption: 'WPA' });
     const [vcard, setVcard] = useState({ name: '张三', phone: '13800000000', email: 'hello@example.com' });
     const [event, setEvent] = useState({ title: 'Demo Event', start: '20260428T090000', end: '20260428T100000' });
@@ -370,14 +373,17 @@ export const QrCodeTool: React.FC = () => {
     const [generationError, setGenerationError] = useState('');
 
     const content = useMemo(() => {
-        if (mode === 'wifi') return `WIFI:T:${wifi.encryption};S:${wifi.ssid};P:${wifi.password};;`;
-        if (mode === 'vcard') return `BEGIN:VCARD\nVERSION:3.0\nFN:${vcard.name}\nTEL:${vcard.phone}\nEMAIL:${vcard.email}\nEND:VCARD`;
-        if (mode === 'event') return `BEGIN:VEVENT\nSUMMARY:${event.title}\nDTSTART:${event.start}\nDTEND:${event.end}\nEND:VEVENT`;
+        if (mode === 'wifi') return wifi.ssid.trim() ? buildWifiQr(wifi) : '';
+        if (mode === 'vcard') return `BEGIN:VCARD\nVERSION:3.0\nFN:${escapeCardValue(vcard.name)}\nTEL:${escapeCardValue(vcard.phone)}\nEMAIL:${escapeCardValue(vcard.email)}\nEND:VCARD`;
+        if (mode === 'event') { try { return buildEventQr(event); } catch { return ''; } }
         return text;
     }, [event, mode, text, vcard, wifi]);
 
     useEffect(() => {
         let isActive = true;
+        if (mode === 'event') {
+            try { buildEventQr(event); } catch (error) { Promise.resolve().then(() => { if (isActive) { setQrDataUrl(''); setGenerationError(tr((error as Error).message)); } }); return () => { isActive = false; }; }
+        }
         (content
             ? QRCode.toDataURL(content, { width: size, margin: 2, errorCorrectionLevel: 'M' })
             : Promise.resolve('')
@@ -391,46 +397,42 @@ export const QrCodeTool: React.FC = () => {
         return () => {
             isActive = false;
         };
-    }, [content, size]);
+    }, [content, size, event, mode]);
 
+    const decodeTask = useRef<{ image: HTMLImageElement; url: string } | null>(null);
+    useEffect(() => () => {
+        if (decodeTask.current) { decodeTask.current.image.onload = null; decodeTask.current.image.onerror = null; URL.revokeObjectURL(decodeTask.current.url); decodeTask.current = null; }
+    }, []);
     const decodeFile = (file: File) => {
-        const url = URL.createObjectURL(file);
-        const image = new Image();
+        setDecodedText(''); setDecodeError('');
+        if (decodeTask.current) { decodeTask.current.image.onload = null; decodeTask.current.image.onerror = null; URL.revokeObjectURL(decodeTask.current.url); }
+        const url = URL.createObjectURL(file); const image = new Image(); const task = { image, url }; decodeTask.current = task;
+        const finish = () => { URL.revokeObjectURL(url); if (decodeTask.current === task) decodeTask.current = null; };
         image.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = image.naturalWidth;
-            canvas.height = image.naturalHeight;
-            const context = canvas.getContext('2d', { willReadFrequently: true });
-            if (!context) {
-                setDecodeError('当前浏览器无法读取图片像素。');
-                URL.revokeObjectURL(url);
-                return;
-            }
-            context.drawImage(image, 0, 0);
-            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) {
+            if (decodeTask.current !== task) return;
+            try {
+                const width = image.naturalWidth; const height = image.naturalHeight;
+                if (!width || !height || width * height > 16000000) throw new Error(tr('图片需小于 1600 万像素。'));
+                const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+                const context = canvas.getContext('2d', { willReadFrequently: true });
+                if (!context) throw new Error(tr('当前浏览器无法读取图片像素。'));
+                context.drawImage(image, 0, 0);
+                const imageData = context.getImageData(0, 0, width, height);
+                const code = jsQR(imageData.data, width, height);
+                if (!code) throw new Error(tr('未识别到二维码，请尝试更清晰的图片。'));
                 setDecodedText(code.data);
-                setDecodeError('');
-            } else {
-                setDecodedText('');
-                setDecodeError('未识别到二维码，请尝试更清晰的图片。');
-            }
-            URL.revokeObjectURL(url);
+            } catch (error) { setDecodeError((error as Error).message); } finally { finish(); }
         };
-        image.onerror = () => {
-            setDecodeError('图片加载失败。');
-            URL.revokeObjectURL(url);
-        };
+        image.onerror = () => { if (decodeTask.current === task) setDecodeError(tr('图片加载失败。')); finish(); };
         image.src = url;
     };
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="二维码生成器" description="本地生成文本、WiFi、名片和事件二维码。" />
+            <CardHeader title={tr("二维码生成器")} description={tr("本地生成文本、WiFi、名片和事件二维码。")} />
             <div className="flex gap-1 border-b border-slate-100 px-5">
-                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'generate' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('generate')}>生成</button>
-                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>解析</button>
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'generate' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('generate')}>{tr("生成")}</button>
+                <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>{tr("解析")}</button>
             </div>
             {tab === 'generate' ? (
             <CardContent className="flex-1 grid gap-5 overflow-auto lg:grid-cols-[1fr_24rem]">
@@ -438,14 +440,14 @@ export const QrCodeTool: React.FC = () => {
                     <div className="flex flex-wrap gap-2">
                         {(['text', 'wifi', 'vcard', 'event'] as const).map(item => (
                             <Button key={item} size="sm" variant={mode === item ? 'primary' : 'secondary'} onClick={() => setMode(item)}>
-                                {item === 'text' ? '文本' : item === 'wifi' ? 'WiFi' : item === 'vcard' ? '名片' : '事件'}
+                                {item === 'text' ? tr('文本') : item === 'wifi' ? 'WiFi' : item === 'vcard' ? tr('名片') : tr('事件')}
                             </Button>
                         ))}
                     </div>
                     <div>
                         {mode === 'text' && (
                             <>
-                                <label className="block text-sm font-medium text-slate-700 mb-1">内容 (文本 / URL)</label>
+                                <label className="block text-sm font-medium text-slate-700 mb-1">{tr("内容 (文本 / URL)")}</label>
                                 <textarea
                                     value={text}
                                     onChange={e => setText(e.target.value)}
@@ -456,7 +458,7 @@ export const QrCodeTool: React.FC = () => {
                         {mode === 'wifi' && (
                             <div className="grid gap-3">
                                 <input className="p-2 border rounded-lg" placeholder="SSID" value={wifi.ssid} onChange={e => setWifi({ ...wifi, ssid: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="密码" value={wifi.password} onChange={e => setWifi({ ...wifi, password: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("密码")} value={wifi.password} onChange={e => setWifi({ ...wifi, password: e.target.value })} />
                                 <select className="p-2 border rounded-lg bg-white" value={wifi.encryption} onChange={e => setWifi({ ...wifi, encryption: e.target.value })}>
                                     <option>WPA</option>
                                     <option>WEP</option>
@@ -466,21 +468,21 @@ export const QrCodeTool: React.FC = () => {
                         )}
                         {mode === 'vcard' && (
                             <div className="grid gap-3">
-                                <input className="p-2 border rounded-lg" placeholder="姓名" value={vcard.name} onChange={e => setVcard({ ...vcard, name: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="电话" value={vcard.phone} onChange={e => setVcard({ ...vcard, phone: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="邮箱" value={vcard.email} onChange={e => setVcard({ ...vcard, email: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("姓名")} value={vcard.name} onChange={e => setVcard({ ...vcard, name: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("电话")} value={vcard.phone} onChange={e => setVcard({ ...vcard, phone: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("邮箱")} value={vcard.email} onChange={e => setVcard({ ...vcard, email: e.target.value })} />
                             </div>
                         )}
                         {mode === 'event' && (
                             <div className="grid gap-3">
-                                <input className="p-2 border rounded-lg" placeholder="标题" value={event.title} onChange={e => setEvent({ ...event, title: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="开始 YYYYMMDDTHHmmss" value={event.start} onChange={e => setEvent({ ...event, start: e.target.value })} />
-                                <input className="p-2 border rounded-lg" placeholder="结束 YYYYMMDDTHHmmss" value={event.end} onChange={e => setEvent({ ...event, end: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("标题")} value={event.title} onChange={e => setEvent({ ...event, title: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("开始 YYYYMMDDTHHmmss")} value={event.start} onChange={e => setEvent({ ...event, start: e.target.value })} />
+                                <input className="p-2 border rounded-lg" placeholder={tr("结束 YYYYMMDDTHHmmss")} value={event.end} onChange={e => setEvent({ ...event, end: e.target.value })} />
                             </div>
                         )}
                     </div>
                     <div>
-                         <label className="block text-sm font-medium text-slate-700 mb-1">尺寸 ({size}px)</label>
+                         <label className="block text-sm font-medium text-slate-700 mb-1">{tr("尺寸 (")}{size}px)</label>
                          <input
                             type="range"
                             min="100"
@@ -494,11 +496,11 @@ export const QrCodeTool: React.FC = () => {
                 </div>
                 <div className="tool-panel flex min-h-[300px] flex-col items-center justify-center gap-5 p-5 self-start lg:sticky lg:top-0">
                     {qrDataUrl ? (
-                        <><img src={qrDataUrl} alt="二维码预览" className="max-w-full bg-white rounded-lg" /><a href={qrDataUrl} download="qrcode.png" className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white">下载 PNG</a><span className="text-xs text-slate-500">{size} × {size}px · PNG</span></>
+                        <><img src={qrDataUrl} alt={tr("二维码预览")} className="max-w-full bg-white rounded-lg" /><a href={qrDataUrl} download="qrcode.png" className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white">{tr("下载 PNG")}</a><span className="text-xs text-slate-500">{size} × {size}px · PNG</span></>
                     ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                             <QrCode className="w-12 h-12 mb-2 opacity-20"/>
-                            <p role={generationError ? 'alert' : 'status'}>{generationError || '输入文本以生成'}</p>
+                            <p role={generationError ? 'alert' : 'status'}>{generationError || tr('输入文本以生成')}</p>
                         </div>
                     )}
                 </div>
@@ -507,15 +509,15 @@ export const QrCodeTool: React.FC = () => {
             <CardContent className="flex-1 grid gap-6 p-6 md:grid-cols-2">
                 <label className="tool-upload flex min-h-[300px] cursor-pointer flex-col items-center justify-center gap-3 p-6 text-center">
                     <Upload className="h-10 w-10 text-slate-400" />
-                    <div className="text-sm font-medium text-slate-700">上传二维码图片</div>
-                    <div className="text-xs text-slate-500">PNG、JPG、WebP 均可，本地 Canvas 解析</div>
+                    <div className="text-sm font-medium text-slate-700">{tr("上传二维码图片")}</div>
+                    <div className="text-xs text-slate-500">{tr("PNG、JPG、WebP 均可，本地 Canvas 解析")}</div>
                     <input type="file" accept="image/*" className="hidden" onChange={event => event.target.files?.[0] && decodeFile(event.target.files[0])} />
                 </label>
                 <div className="tool-panel flex min-h-[300px] flex-col gap-3 p-4">
-                    <div className="text-sm font-semibold text-slate-700">解析结果</div>
+                    <div className="text-sm font-semibold text-slate-700">{tr("解析结果")}</div>
                     {decodeError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{decodeError}</div>}
-                    <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder="解析出的文本会显示在这里" />
-                    <Button variant="secondary" disabled={!decodedText} onClick={() => copy(decodedText)}>{copied ? '已复制' : '复制结果'}</Button>
+                    <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder={tr("解析出的文本会显示在这里")} />
+                    <Button variant="secondary" disabled={!decodedText} onClick={() => copy(decodedText)}>{copied ? tr('已复制') : tr('复制结果')}</Button>
                 </div>
             </CardContent>
             )}
@@ -525,9 +527,10 @@ export const QrCodeTool: React.FC = () => {
 
 // --- Device Info Tool ---
 export const DeviceInfoTool: React.FC = () => {
+  useLocaleRender();
     const { copied, copy } = useCopyToClipboard();
     // Lazily initialize state to avoid setting it in effect
-    const [info, setInfo] = useState<Record<string, string>>(() => {
+    const [info, setInfo] = useState<Record<string, string>>((): Record<string, string> => {
         // Check if window is defined (for safety, though we are client-side)
         if (typeof window !== 'undefined') {
             return {
@@ -561,7 +564,7 @@ export const DeviceInfoTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="设备信息" description="屏幕与浏览器参数，窗口尺寸随调整即时更新。" actions={<Button size="sm" variant="secondary" onClick={() => copy(JSON.stringify(info, null, 2))} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制环境报告</Button>} />
+            <CardHeader title={tr("设备信息")} description={tr("屏幕与浏览器参数，窗口尺寸随调整即时更新。")} actions={<Button size="sm" variant="secondary" onClick={() => copy(JSON.stringify(info, null, 2))} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制环境报告")}</Button>} />
             <CardContent className="flex-1 overflow-auto">
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {Object.entries(info).map(([key, value]) => (

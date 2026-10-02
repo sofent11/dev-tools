@@ -1,3 +1,6 @@
+import { useCopyToClipboard } from './shared/useCopyToClipboard';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import { Check, Copy, RefreshCw } from 'lucide-react';
 import { CronExpressionParser } from 'cron-parser';
@@ -16,27 +19,28 @@ interface PermissionGroupProps {
     toggle: (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => void;
 }
 
-const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => (
+const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => { useLocaleRender(); return (
     <div className="tool-panel flex flex-col gap-3 p-4">
         <span className="font-semibold text-slate-700">{label}</span>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].read} onChange={() => toggle(role, 'read')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">读取 (4)</span>
+                <span className="text-sm">{tr("读取 (4)")}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].write} onChange={() => toggle(role, 'write')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">写入 (2)</span>
+                <span className="text-sm">{tr("写入 (2)")}</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].execute} onChange={() => toggle(role, 'execute')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">执行 (1)</span>
+                <span className="text-sm">{tr("执行 (1)")}</span>
             </label>
         </div>
     </div>
-);
+); };
 
 export const ChmodTool: React.FC = () => {
+  useLocaleRender();
   const [permissions, setPermissions] = useState({
     owner: { read: true, write: true, execute: false }, // 6
     group: { read: true, write: false, execute: false }, // 4
@@ -58,7 +62,7 @@ export const ChmodTool: React.FC = () => {
     };
   }, [permissions]);
 
-  const { copied, copy } = useCopy();
+  const { copied, copy } = useCopyToClipboard();
   const applyPreset = (value: string) => {
     const digit = (index: number) => { const n = Number(value[index]); return { read: !!(n & 4), write: !!(n & 2), execute: !!(n & 1) }; };
     setPermissions({ owner: digit(0), group: digit(1), public: digit(2) });
@@ -72,23 +76,23 @@ export const ChmodTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="Chmod 计算器" description="Linux 文件权限计算 (Octal & Symbolic)。" />
+      <CardHeader title={tr("Chmod 计算器")} description={tr("Linux 文件权限计算 (Octal & Symbolic)。")} />
       <CardContent className="flex-1 overflow-auto space-y-5">
         <div className="flex flex-wrap gap-2">
-          {[['644', '普通文件'], ['755', '可执行文件'], ['600', '私有文件'], ['700', '私有目录']].map(([value,label]) => <Button key={value} size="sm" variant={octal === value ? 'primary' : 'secondary'} onClick={() => applyPreset(value)}>{label} · {value}</Button>)}
+          {[['644', tr('普通文件')], ['755', tr('可执行文件')], ['600', tr('私有文件')], ['700', tr('私有目录')]].map(([value,label]) => <Button key={value} size="sm" variant={octal === value ? 'primary' : 'secondary'} onClick={() => applyPreset(value)}>{label} · {value}</Button>)}
         </div>
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <section className="space-y-3">
-            <h3 className="text-sm font-semibold text-slate-800">设置访问权限</h3>
-            <PermissionGroup label="所有者" role="owner" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="用户组" role="group" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="其他用户" role="public" permissions={permissions} toggle={toggle} />
+            <h3 className="text-sm font-semibold text-slate-800">{tr("设置访问权限")}</h3>
+            <PermissionGroup label={tr("所有者")} role="owner" permissions={permissions} toggle={toggle} />
+            <PermissionGroup label={tr("用户组")} role="group" permissions={permissions} toggle={toggle} />
+            <PermissionGroup label={tr("其他用户")} role="public" permissions={permissions} toggle={toggle} />
           </section>
           <section className="tool-panel p-5 space-y-5 self-start lg:sticky lg:top-0">
-            <div><span className="text-xs text-slate-500">八进制权限</span><p className="text-6xl font-mono font-semibold text-primary-700 mt-2">{octal}</p></div>
-            <div><span className="text-xs text-slate-500">符号权限</span><p className="font-mono text-xl mt-1">{symbolic}</p></div>
+            <div><span className="text-xs text-slate-500">{tr("八进制权限")}</span><p className="text-6xl font-mono font-semibold text-primary-700 mt-2">{octal}</p></div>
+            <div><span className="text-xs text-slate-500">{tr("符号权限")}</span><p className="font-mono text-xl mt-1">{symbolic}</p></div>
             <CodePanel>chmod {octal} filename</CodePanel>
-            <Button className="w-full" onClick={() => copy(`chmod ${octal} filename`)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制命令</Button>
+            <Button className="w-full" onClick={() => copy(`chmod ${octal} filename`)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制命令")}</Button>
           </section>
         </div>
       </CardContent>
@@ -104,31 +108,18 @@ const cronOptions = {
   weekday: ['*', '1-5', '0,6', '1'],
 };
 
-const useCopy = () => {
-  const [copied, setCopied] = useState(false);
-  const copy = async (value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-  return { copied, copy };
-};
-
 export const CronTool: React.FC = () => {
-  const [fields, setFields] = useState({
-    minute: '*/15',
-    hour: '*',
-    day: '*',
-    month: '*',
-    weekday: '1-5',
-  });
-  const [expression, setExpression] = useState('*/15 * * * 1-5');
-  const { copied, copy } = useCopy();
+  useLocaleRender();
+  const [expression, setExpression] = useDraftState("components/tools/DevOpsTools.tsx:CronTool:expression", '*/15 * * * 1-5');
+  const parts = expression.trim().split(/\s+/);
+  const fields = { minute: parts[0] || '*', hour: parts[1] || '*', day: parts[2] || '*', month: parts[3] || '*', weekday: parts[4] || '*' };
+  const { copied, copy } = useCopyToClipboard();
 
   const generatedExpression = `${fields.minute} ${fields.hour} ${fields.day} ${fields.month} ${fields.weekday}`;
 
   const preview = useMemo(() => {
     try {
+      if (parts.length !== 5) throw new Error(tr('请输入 5 字段 Unix Cron 表达式。'));
       const interval = CronExpressionParser.parse(expression.trim());
       return {
         dates: Array.from({ length: 5 }, () => interval.next().toDate()),
@@ -137,61 +128,60 @@ export const CronTool: React.FC = () => {
     } catch (error) {
       return { dates: [], error: (error as Error).message };
     }
-  }, [expression]);
+  }, [expression, parts.length]);
 
   const updateField = (key: keyof typeof fields, value: string) => {
     const next = { ...fields, [key]: value };
-    setFields(next);
     setExpression(`${next.minute} ${next.hour} ${next.day} ${next.month} ${next.weekday}`);
   };
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="Cron 表达式"
-        description="生成 5 字段 Unix Cron，反向解析并预览未来 5 次执行时间。"
+        title={tr("Cron 表达式")}
+        description={tr("生成 5 字段 Unix Cron，反向解析并预览未来 5 次执行时间。")}
         actions={
           <>
-            <Button size="sm" variant="secondary" onClick={() => setExpression(generatedExpression)} icon={<RefreshCw className="h-4 w-4" />}>使用表单值</Button>
-            <Button size="sm" variant="secondary" onClick={() => copy(expression)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制</Button>
+            <Button size="sm" variant="secondary" onClick={() => setExpression(generatedExpression)} icon={<RefreshCw className="h-4 w-4" />}>{tr("使用表单值")}</Button>
+            <Button size="sm" variant="secondary" onClick={() => copy(expression)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>{tr("复制")}</Button>
           </>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="tool-panel p-4 space-y-4">
-          <h3 className="text-sm font-semibold">逐项构建</h3>
+          <h3 className="text-sm font-semibold">{tr("逐项构建")}</h3>
           {([
-            ['minute', '分钟'],
-            ['hour', '小时'],
-            ['day', '日期'],
-            ['month', '月份'],
-            ['weekday', '星期'],
+            ['minute', tr('分钟')],
+            ['hour', tr('小时')],
+            ['day', tr('日期')],
+            ['month', tr('月份')],
+            ['weekday', tr('星期')],
           ] as const).map(([key, label]) => (
             <div key={key}>
-              <FieldLabel>{label}</FieldLabel>
+              <FieldLabel>{tr(label)}</FieldLabel>
               <Select value={fields[key]} onChange={event => updateField(key, event.target.value)}>
-                {cronOptions[key].map(item => <option key={item} value={item}>{item}</option>)}
+                {Array.from(new Set([...cronOptions[key], fields[key]])).map(item => <option key={item} value={item}>{item}</option>)}
               </Select>
             </div>
           ))}
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs font-semibold uppercase text-slate-500">表单生成</div>
+            <div className="text-xs font-semibold uppercase text-slate-500">{tr("表单生成")}</div>
             <code className="mt-1 block break-all text-sm font-semibold text-slate-900">{generatedExpression}</code>
           </div>
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
           <div className="flex flex-wrap gap-2">
-            {[['每分钟', '* * * * *'], ['每小时', '0 * * * *'], ['每天 09:00', '0 9 * * *'], ['工作日 09:00', '0 9 * * 1-5']].map(([label,value]) => <Button key={value} size="sm" variant={expression === value ? 'primary' : 'secondary'} onClick={() => setExpression(value)}>{label}</Button>)}
+            {[[tr('每分钟'), '* * * * *'], [tr('每小时'), '0 * * * *'], [tr('每天 09:00'), '0 9 * * *'], [tr('工作日 09:00'), '0 9 * * 1-5']].map(([label,value]) => <Button key={value} size="sm" variant={expression === value ? 'primary' : 'secondary'} onClick={() => setExpression(value)}>{label}</Button>)}
           </div>
           <div>
-            <FieldLabel hint="minute hour day month weekday">Cron 表达式</FieldLabel>
+            <FieldLabel hint="minute hour day month weekday">{tr("Cron 表达式")}</FieldLabel>
             <Input aria-invalid={!!preview.error} className="font-mono" value={expression} onChange={event => setExpression(event.target.value)} />
           </div>
           {preview.error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{preview.error}</div>
           ) : (
-            <div className="space-y-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>未来 5 次执行</span><span>{Intl.DateTimeFormat().resolvedOptions().timeZone}</span></div><CodePanel className="space-y-2">
+            <div className="space-y-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>{tr("未来 5 次执行")}</span><span>{Intl.DateTimeFormat().resolvedOptions().timeZone}</span></div><CodePanel className="space-y-2">
               {preview.dates.map((date, index) => (
                 <div key={date.toISOString()} className="flex items-center justify-between gap-3 border-b border-slate-700/40 pb-2 last:border-0 last:pb-0">
                   <span className="text-slate-400">#{index + 1}</span>
@@ -201,9 +191,9 @@ export const CronTool: React.FC = () => {
             </CodePanel></div>
           )}
           <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-            <div className="tool-panel p-3"><code>*</code><span className="ml-2">每个单位</span></div>
-            <div className="tool-panel p-3"><code>*/15</code><span className="ml-2">每 15 个单位</span></div>
-            <div className="tool-panel p-3"><code>1-5</code><span className="ml-2">范围</span></div>
+            <div className="tool-panel p-3"><code>*</code><span className="ml-2">{tr("每个单位")}</span></div>
+            <div className="tool-panel p-3"><code>*/15</code><span className="ml-2">{tr("每 15 个单位")}</span></div>
+            <div className="tool-panel p-3"><code>1-5</code><span className="ml-2">{tr("范围")}</span></div>
           </div>
         </div>
       </CardContent>

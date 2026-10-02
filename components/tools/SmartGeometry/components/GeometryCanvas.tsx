@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../../src/i18n/render';
 import React, { useRef, useState } from 'react';
 import { useGeometryStore } from '../store/useGeometryStore';
 import { useSmartSnapping } from '../hooks/useSmartSnapping';
@@ -8,6 +9,7 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 
 export function GeometryCanvas() {
+  useLocaleRender();
   const { mode, tool, question, viewport, setViewport, draftLine, setDraftLine, snappedPoint, setSnappedPoint, addPoint, updatePoint, addLine } = useGeometryStore();
   const svgRef = useRef<SVGSVGElement>(null);
   const drawingLayerRef = useRef<SVGGElement>(null);
@@ -281,9 +283,9 @@ export function GeometryCanvas() {
       {/* Interactive Floating Tooltip */}
       {snappedPoint && tool === 'line' && (
         <div className="absolute left-1/2 bottom-12 -translate-x-1/2 bg-slate-900 text-white px-4 py-2 rounded-full text-xs font-medium shadow-2xl flex items-center gap-3 pointer-events-none z-30">
-          <span className="opacity-70">工具: 画线</span>
+          <span className="opacity-70">{tr("工具: 画线")}</span>
           <div className="w-px h-3 bg-white/20"></div>
-          <span className="text-emerald-400 font-bold">已吸附 {snapTypeLabel[snappedPoint.type!]}</span>
+          <span className="text-emerald-400 font-bold">{tr("已吸附")}{snapTypeLabel[snappedPoint.type!]}</span>
         </div>
       )}
 
@@ -298,7 +300,7 @@ export function GeometryCanvas() {
               className="absolute bg-white/80 text-slate-800 px-3 py-1.5 rounded-lg shadow-sm text-sm font-bold border border-slate-200 z-10 pointer-events-none transition-transform duration-75 max-w-xs"
               style={{ left: `${x}px`, top: `${y}px`, transform: `translate(-50%, -50%) scale(${viewport.zoom})`, transformOrigin: "center center" }}
             >
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({node: _node, ...props}) => <span {...props} /> }}>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={{ p: ({node: _node, ...props}) => <span data-i18n-skip {...props} /> }}>
                 {ann.text}
               </ReactMarkdown>
             </div>

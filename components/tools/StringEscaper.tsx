@@ -1,4 +1,6 @@
-import React, { useState, useRef } from 'react';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import { useDraftState } from './shared/useDraftState';
+import React, { useEffect, useState, useRef } from 'react';
 import { ShieldAlert, FileUp, Binary } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
@@ -16,6 +18,25 @@ const safeBtoa = (str: string): string => {
   } catch {
     return '';
   }
+};
+
+const safeUrlEncode = (value: string) => { try { return encodeURIComponent(value); } catch { return ''; } };
+const decodeHtmlEntities = (value: string) => value.replace(/&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/gi, entity => {
+  const element = document.createElement('textarea');
+  element.innerHTML = entity;
+  return element.value;
+});
+const decodeCharacterEscapes = (value: string, mode: 'unicode' | 'hex') => {
+  if (mode === 'hex') {
+    if (/\\x(?![0-9a-f]{2})/i.test(value)) throw new Error('Invalid Hex escape');
+    return value.replace(/\\x([0-9a-f]{2})/gi, (_, group) => String.fromCharCode(parseInt(group, 16)));
+  }
+  if (/\\u(?![0-9a-f]{4}|\{[0-9a-f]{1,6}\})/i.test(value)) throw new Error('Invalid Unicode escape');
+  return value.replace(/\\u(?:\{([0-9a-f]{1,6})\}|([0-9a-f]{4}))/gi, (_, point, unit) => {
+    const code = parseInt(point || unit, 16);
+    if (code > 0x10ffff) throw new Error('Unicode code point out of range');
+    return point ? String.fromCodePoint(code) : String.fromCharCode(code);
+  });
 };
 
 // HTML Entities Encoder
@@ -42,6 +63,7 @@ const escapeUnicode = (str: string): string => {
 
 // Hex Escaper
 const escapeHex = (str: string): string => {
+  if (Array.from(str).some(char => char.charCodeAt(0) > 255)) return '';
   return str.split('').map(char => {
     const code = char.charCodeAt(0);
     return '\\x' + code.toString(16).padStart(2, '0');
@@ -116,17 +138,18 @@ const detectMagicMime = (bytes: Uint8Array): { mime: string; label: string } => 
 const DEFAULT_INPUT = '测试客户姓名: 张三丰, 电话: 13812345678, 邮箱: example123@gmail.com, 身份证: 110101199003072345';
 
 export const StringEscaper: React.FC = () => {
+  useLocaleRender();
   const [activeTab, setActiveTab] = useState<'cascade' | 'decoder' | 'hexViewer'>('cascade');
-  const [input, setInput] = useState('');
+  const [input, setInput] = useDraftState('components/tools/StringEscaper.tsx:StringEscaper:input', '');
   const [selectedEncoding, setSelectedEncoding] = useState<'b64' | 'url' | 'html' | 'unicode' | 'hex'>('html');
   const [maskPreview, setMaskPreview] = useState<string | null>(null);
   
   // Local values initialized dynamically to match default input
-  const [b64Val, setB64Val] = useState('');
-  const [urlVal, setUrlVal] = useState('');
-  const [htmlVal, setHtmlVal] = useState('');
-  const [unicodeVal, setUnicodeVal] = useState('');
-  const [hexVal, setHexVal] = useState('');
+  const [b64Val, setB64Val] = useState(() => safeBtoa(input));
+  const [urlVal, setUrlVal] = useState(() => safeUrlEncode(input));
+  const [htmlVal, setHtmlVal] = useState(() => escapeHtml(input));
+  const [unicodeVal, setUnicodeVal] = useState(() => escapeUnicode(input));
+  const [hexVal, setHexVal] = useState(() => escapeHex(input));
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
@@ -135,11 +158,11 @@ export const StringEscaper: React.FC = () => {
     setInput(val);
     setMaskPreview(null);
     setB64Val(safeBtoa(val));
-    setUrlVal(encodeURIComponent(val));
+    setUrlVal(safeUrlEncode(val));
     setHtmlVal(escapeHtml(val));
     setUnicodeVal(escapeUnicode(val));
     setHexVal(escapeHex(val));
-    setErrors({});
+    setErrors({ b64: Boolean(val && !safeBtoa(val)), url: Boolean(val && !safeUrlEncode(val)), hex: Boolean(val && !escapeHex(val)) });
   };
 
   // Bidirectional Cascading Change Handler
@@ -167,36 +190,22 @@ export const StringEscaper: React.FC = () => {
         decoded = decodeURIComponent(escape(window.atob(val)));
       } else if (field === 'url') {
         decoded = decodeURIComponent(val);
-      } else if (field === 'html') {
-        const doc = new DOMParser().parseFromString(val, 'text/html');
-        decoded = doc.documentElement.textContent || '';
-      } else if (field === 'unicode') {
-        decoded = val.replace(/\\u([\dA-F]{4})/gi, (_, grp) => 
-          String.fromCharCode(parseInt(grp, 16))
-        );
-      } else if (field === 'hex') {
-        decoded = val.replace(/\\x([\dA-F]{2})/gi, (_, grp) => 
-          String.fromCharCode(parseInt(grp, 16))
-        );
-      }
-
-      setInput(decoded);
-      setErrors(prev => ({ ...prev, [field]: false }));
-
-      // Sync other fields that are NOT currently being typed in
-      if (field !== 'b64') setB64Val(safeBtoa(decoded));
-      if (field !== 'url') setUrlVal(encodeURIComponent(decoded));
-      if (field !== 'html') setHtmlVal(escapeHtml(decoded));
-      if (field !== 'unicode') setUnicodeVal(escapeUnicode(decoded));
-      if (field !== 'hex') setHexVal(escapeHex(decoded));
+      } else if (field === 'html') decoded = decodeHtmlEntities(val);
+      else decoded = decodeCharacterEscapes(val, field);
+      updateInputAndSync(decoded);
+      if (field === 'b64') setB64Val(val);
+      else if (field === 'url') setUrlVal(val);
+      else if (field === 'html') setHtmlVal(val);
+      else if (field === 'unicode') setUnicodeVal(val);
+      else setHexVal(val);
     } catch {
       setErrors(prev => ({ ...prev, [field]: true }));
     }
   };
 
   // Manual Decoder States
-  const [decodeInput, setDecodeInput] = useState('');
-  const [decodeMode, setDecodeMode] = useState<DecodeMode>('base64');
+  const [decodeInput, setDecodeInput] = useDraftState('components/tools/StringEscaper.tsx:StringEscaper:decodeInput', '');
+  const [decodeMode, setDecodeMode] = useDraftState<DecodeMode>('components/tools/StringEscaper.tsx:StringEscaper:decodeMode', 'base64');
   const [decodeOutput, setDecodeOutput] = useState('');
   const [decodeError, setDecodeError] = useState('');
 
@@ -207,18 +216,8 @@ export const StringEscaper: React.FC = () => {
         setDecodeOutput(decodeURIComponent(escape(window.atob(decodeInput))));
       } else if (decodeMode === 'url') {
         setDecodeOutput(decodeURIComponent(decodeInput));
-      } else if (decodeMode === 'html') {
-        const doc = new DOMParser().parseFromString(decodeInput, 'text/html');
-        setDecodeOutput(doc.documentElement.textContent || '');
-      } else if (decodeMode === 'unicode') {
-        setDecodeOutput(decodeInput.replace(/\\u([\dA-F]{4})/gi, (_, grp) => 
-          String.fromCharCode(parseInt(grp, 16))
-        ));
-      } else if (decodeMode === 'hex') {
-        setDecodeOutput(decodeInput.replace(/\\x([\dA-F]{2})/gi, (_, grp) => 
-          String.fromCharCode(parseInt(grp, 16))
-        ));
-      }
+      } else if (decodeMode === 'html') setDecodeOutput(decodeHtmlEntities(decodeInput));
+      else setDecodeOutput(decodeCharacterEscapes(decodeInput, decodeMode));
     } catch {
       setDecodeOutput('');
       setDecodeError('解码失败，请检查输入格式是否正确。');
@@ -238,17 +237,20 @@ export const StringEscaper: React.FC = () => {
   const bytesPerPage = 256;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const hexReader = useRef<FileReader | null>(null);
+  useEffect(() => () => hexReader.current?.abort(), []);
   const loadFileBytes = (file: File) => {
-    setHexFile(file);
-    setHexPage(0);
+    if (file.size > 10 * 1024 * 1024) { notifyToast({ title: '文件过大', description: '最大支持 10 MB 文件。', tone: 'error' }); return; }
+    hexReader.current?.abort();
     const reader = new FileReader();
-    reader.onload = (e) => {
-      if (e.target?.result instanceof ArrayBuffer) {
-        const bytes = new Uint8Array(e.target.result);
-        setHexBytes(bytes);
-        setDetectedMeta(detectMagicMime(bytes));
-      }
+    hexReader.current = reader;
+    reader.onload = () => {
+      if (hexReader.current !== reader || !(reader.result instanceof ArrayBuffer)) return;
+      const bytes = new Uint8Array(reader.result);
+      setHexFile(file); setHexPage(0); setHoveredByteIndex(null);
+      setHexBytes(bytes); setDetectedMeta(detectMagicMime(bytes));
     };
+    reader.onerror = () => { if (hexReader.current === reader) notifyToast({ title: '文件读取失败', description: reader.error?.message, tone: 'error' }); };
     reader.readAsArrayBuffer(file);
   };
 
@@ -270,6 +272,7 @@ export const StringEscaper: React.FC = () => {
   };
 
   const clearHexFile = () => {
+    hexReader.current?.abort(); hexReader.current = null;
     setHexFile(null);
     setHexBytes(null);
     setDetectedMeta({ mime: '', label: '' });
@@ -390,34 +393,34 @@ export const StringEscaper: React.FC = () => {
     });
   };
 
-  const totalPages = hexBytes ? Math.ceil(hexBytes.length / bytesPerPage) : 0;
+  const totalPages = hexBytes ? Math.max(1, Math.ceil(hexBytes.length / bytesPerPage)) : 0;
 
   const encodings = [
     { label: 'Base64', value: b64Val, id: 'b64' as const },
-    { label: 'URL 编码', value: urlVal, id: 'url' as const },
-    { label: 'HTML 实体', value: htmlVal, id: 'html' as const },
+    { label: tr('URL 编码'), value: urlVal, id: 'url' as const },
+    { label: tr('HTML 实体'), value: htmlVal, id: 'html' as const },
     { label: 'Unicode \\u', value: unicodeVal, id: 'unicode' as const },
     { label: 'Hex \\x', value: hexVal, id: 'hex' as const },
   ];
   const encoding = encodings.find(item => item.id === selectedEncoding)!;
   const clearDecoder = () => { setDecodeInput(''); setDecodeOutput(''); setDecodeError(''); };
   return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
-    <div className="flex flex-wrap gap-2 border-b pb-3">{[{ id: 'cascade' as const, label: '编码与转义' }, { id: 'decoder' as const, label: '解码与还原' }, { id: 'hexViewer' as const, label: '文件字节' }].map(tab => <Button key={tab.id} size="sm" variant={activeTab === tab.id ? 'primary' : 'ghost'} onClick={() => setActiveTab(tab.id)}>{tab.label}</Button>)}</div>
+    <div className="flex flex-wrap gap-2 border-b pb-3">{[{ id: 'cascade' as const, label: tr('编码与转义') }, { id: 'decoder' as const, label: tr('解码与还原') }, { id: 'hexViewer' as const, label: tr('文件字节') }].map(tab => <Button key={tab.id} size="sm" variant={activeTab === tab.id ? 'primary' : 'ghost'} onClick={() => setActiveTab(tab.id)}>{tab.label}</Button>)}</div>
     {activeTab === 'cascade' ? <div className="space-y-4">
-      <ContentToolbar onSample={() => updateInputAndSync(DEFAULT_INPUT)} onClear={() => updateInputAndSync('')} status="双向实时同步"><label className="flex items-center gap-2 text-sm">输出编码<select aria-label="输出编码" className="rounded-lg border p-2" value={selectedEncoding} onChange={event => setSelectedEncoding(event.target.value as typeof selectedEncoding)}>{encodings.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><Button size="sm" variant="secondary" onClick={handleMask} disabled={!input} icon={<ShieldAlert className="h-4 w-4" />}>预览脱敏</Button></ContentToolbar>
-      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="原始字符串" value={input} onChange={updateInputAndSync} placeholder="输入原始文本，或编辑右侧编码进行还原。" /><ContentEditor label={`${encoding.label} 输出 · 可编辑`} value={encoding.value} onChange={value => handleFieldEdit(encoding.id, value)} output error={errors[encoding.id] ? '格式错误或解码失败，请检查当前编码。' : ''} placeholder="编辑编码结果，会还原并同步原始文本。" /></div>
-      {selectedEncoding === 'hex' && Array.from(input).some(character => character.charCodeAt(0) > 255) && <p className="text-xs text-amber-700">Hex 转义仅适用于 U+0000–U+00FF；中文请选择 Unicode 转义。</p>}
-      {maskPreview !== null && <div className="tool-panel space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">脱敏预览</span><div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => setMaskPreview(null)}>取消</Button><Button size="sm" onClick={() => updateInputAndSync(maskPreview)}>应用脱敏结果</Button></div></div><pre className="whitespace-pre-wrap break-all font-mono text-xs">{maskPreview}</pre><p className="text-xs text-slate-500">规则可能误判人名；检查预览后再应用。</p></div>}
-      <details className="tool-panel p-3"><summary className="cursor-pointer text-sm font-medium">比较全部编码 · 每个结果都可编辑</summary><div className="mt-3 grid gap-4 lg:grid-cols-2">{encodings.map(item => <ContentEditor key={item.id} label={item.label} value={item.value} onChange={value => handleFieldEdit(item.id, value)} output error={errors[item.id] ? '格式错误或解码失败。' : ''} />)}</div></details>
-      <details><summary className="cursor-pointer text-xs text-slate-500">从暂存箱载入</summary><div className="mt-2"><ScratchpadPicker label="原始文本" placeholder="从暂存箱载入..." filter={isScratchpadTextLike} onLoad={async content => updateInputAndSync(typeof content === 'string' ? content : await new Blob([content]).text())} /></div></details>
+      <ContentToolbar onSample={() => updateInputAndSync(DEFAULT_INPUT)} onClear={() => updateInputAndSync('')} status="双向实时同步"><label className="flex items-center gap-2 text-sm">{tr("输出编码")}<select aria-label={tr("输出编码")} className="rounded-lg border p-2" value={selectedEncoding} onChange={event => setSelectedEncoding(event.target.value as typeof selectedEncoding)}>{encodings.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><Button size="sm" variant="secondary" onClick={handleMask} disabled={!input} icon={<ShieldAlert className="h-4 w-4" />}>{tr("预览脱敏")}</Button></ContentToolbar>
+      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={tr("原始字符串")} value={input} onChange={updateInputAndSync} placeholder={tr("输入原始文本，或编辑右侧编码进行还原。")} /><ContentEditor label={`${encoding.label} 输出 · 可编辑`} value={encoding.value} onChange={value => handleFieldEdit(encoding.id, value)} output error={errors[encoding.id] ? '格式错误或解码失败，请检查当前编码。' : ''} placeholder={tr("编辑编码结果，会还原并同步原始文本。")} /></div>
+      {selectedEncoding === 'hex' && Array.from(input).some(character => character.charCodeAt(0) > 255) && <p className="text-xs text-amber-700">{tr("Hex 转义仅适用于 U+0000–U+00FF；中文请选择 Unicode 转义。")}</p>}
+      {maskPreview !== null && <div className="tool-panel space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">{tr("脱敏预览")}</span><div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => setMaskPreview(null)}>{tr("取消")}</Button><Button size="sm" onClick={() => updateInputAndSync(maskPreview)}>{tr("应用脱敏结果")}</Button></div></div><pre className="whitespace-pre-wrap break-all font-mono text-xs">{maskPreview}</pre><p className="text-xs text-slate-500">{tr("规则可能误判人名；检查预览后再应用。")}</p></div>}
+      <details className="tool-panel p-3"><summary className="cursor-pointer text-sm font-medium">{tr("比较全部编码 · 每个结果都可编辑")}</summary><div className="mt-3 grid gap-4 lg:grid-cols-2">{encodings.map(item => <ContentEditor key={item.id} label={item.label} value={item.value} onChange={value => handleFieldEdit(item.id, value)} output error={errors[item.id] ? '格式错误或解码失败。' : ''} />)}</div></details>
+      <details><summary className="cursor-pointer text-xs text-slate-500">{tr("从暂存箱载入")}</summary><div className="mt-2"><ScratchpadPicker label={tr("原始文本")} placeholder={tr("从暂存箱载入...")} filter={isScratchpadTextLike} onLoad={async content => updateInputAndSync(typeof content === 'string' ? content : await new Blob([content]).text())} /></div></details>
     </div> : activeTab === 'decoder' ? <div className="space-y-4">
-      <ContentToolbar onSample={() => { setDecodeMode('base64'); setDecodeInput('SGVsbG8sIOS4lueVjCE='); setDecodeOutput(''); setDecodeError(''); }} onClear={clearDecoder}><label className="flex items-center gap-2 text-sm">输入编码<select aria-label="输入编码" className="rounded-lg border p-2" value={decodeMode} onChange={event => { setDecodeMode(event.target.value as DecodeMode); setDecodeOutput(''); setDecodeError(''); }}><option value="base64">Base64</option><option value="url">URL</option><option value="html">HTML 实体</option><option value="unicode">Unicode</option><option value="hex">Hex</option></select></label><Button onClick={handleDecode} disabled={!decodeInput}>解码</Button></ContentToolbar>
-      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="待解码字符串" value={decodeInput} onChange={value => { setDecodeInput(value); setDecodeOutput(''); setDecodeError(''); }} error={decodeError} placeholder="粘贴编码内容并选择对应的输入编码。" /><ContentEditor label="还原文本" value={decodeOutput} output placeholder="解码成功后显示原始文本。" onUseResult={() => { updateInputAndSync(decodeOutput); setActiveTab('cascade'); }} /></div>
+      <ContentToolbar onSample={() => { setDecodeMode('base64'); setDecodeInput('SGVsbG8sIOS4lueVjCE='); setDecodeOutput(''); setDecodeError(''); }} onClear={clearDecoder}><label className="flex items-center gap-2 text-sm">{tr("输入编码")}<select aria-label={tr("输入编码")} className="rounded-lg border p-2" value={decodeMode} onChange={event => { setDecodeMode(event.target.value as DecodeMode); setDecodeOutput(''); setDecodeError(''); }}><option value="base64">Base64</option><option value="url">URL</option><option value="html">{tr("HTML 实体")}</option><option value="unicode">Unicode</option><option value="hex">Hex</option></select></label><Button onClick={handleDecode} disabled={!decodeInput}>{tr("解码")}</Button></ContentToolbar>
+      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={tr("待解码字符串")} value={decodeInput} onChange={value => { setDecodeInput(value); setDecodeOutput(''); setDecodeError(''); }} error={decodeError} placeholder={tr("粘贴编码内容并选择对应的输入编码。")} /><ContentEditor label={tr("还原文本")} value={decodeOutput} output placeholder={tr("解码成功后显示原始文本。")} onUseResult={() => { updateInputAndSync(decodeOutput); setActiveTab('cascade'); }} /></div>
     </div> : <div className="space-y-4">
-      {!hexBytes ? <div onDragOver={handleDragOver} onDrop={handleDrop} className="flex min-h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center"><FileUp className="mb-3 h-8 w-8 text-primary-500" /><h3 className="text-sm font-semibold">拖放文件查看字节</h3><p className="mt-2 text-xs text-slate-500">文件在浏览器本地解析。</p><Button className="mt-4" onClick={() => fileInputRef.current?.click()}>选择文件</Button><input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} /></div> : <>
-        <ContentToolbar onClear={clearHexFile} status={`${hexBytes.length.toLocaleString()} 字节 · ${detectedMeta.label}`}><Binary className="h-4 w-4 text-primary-600" /><span className="min-w-0 break-all text-sm font-medium">{hexFile?.name}</span><Button size="sm" variant="secondary" onClick={sendHexToScratchpad}>暂存 Hex</Button></ContentToolbar>
-        <div className="min-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="min-w-[760px]"><div className="mb-3 flex gap-6 border-b border-slate-700 pb-2 font-mono text-xs text-slate-400"><span className="w-20">偏移量</span><span className="w-[28rem]">十六进制字节</span><span>ASCII</span></div>{renderHexRows()}</div></div>
-        {totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs text-slate-500">{hexPage + 1} / {totalPages}</span><div className="flex gap-2"><Button size="sm" variant="secondary" disabled={hexPage === 0} onClick={() => setHexPage(page => Math.max(0, page - 1))}>上一页</Button><Button size="sm" variant="secondary" disabled={hexPage >= totalPages - 1} onClick={() => setHexPage(page => Math.min(totalPages - 1, page + 1))}>下一页</Button></div></div>}
+      {!hexBytes ? <div onDragOver={handleDragOver} onDrop={handleDrop} className="flex min-h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center"><FileUp className="mb-3 h-8 w-8 text-primary-500" /><h3 className="text-sm font-semibold">{tr("拖放文件查看字节")}</h3><p className="mt-2 text-xs text-slate-500">{tr("文件在浏览器本地解析。")}</p><Button className="mt-4" onClick={() => fileInputRef.current?.click()}>{tr("选择文件")}</Button><input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} /></div> : <>
+        <ContentToolbar onClear={clearHexFile} status={`${hexBytes.length.toLocaleString()} 字节 · ${detectedMeta.label}`}><Binary className="h-4 w-4 text-primary-600" /><span className="min-w-0 break-all text-sm font-medium">{hexFile?.name}</span><Button size="sm" variant="secondary" onClick={sendHexToScratchpad}>{tr("暂存 Hex")}</Button></ContentToolbar>
+        <div className="min-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="min-w-[760px]"><div className="mb-3 flex gap-6 border-b border-slate-700 pb-2 font-mono text-xs text-slate-400"><span className="w-20">{tr("偏移量")}</span><span className="w-[28rem]">{tr("十六进制字节")}</span><span>ASCII</span></div>{renderHexRows()}</div></div>
+        {totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs text-slate-500">{hexPage + 1} / {totalPages}</span><div className="flex gap-2"><Button size="sm" variant="secondary" disabled={hexPage === 0} onClick={() => setHexPage(page => Math.max(0, page - 1))}>{tr("上一页")}</Button><Button size="sm" variant="secondary" disabled={hexPage >= totalPages - 1} onClick={() => setHexPage(page => Math.min(totalPages - 1, page + 1))}>{tr("下一页")}</Button></div></div>}
       </>}
     </div>}
   </CardContent></Card>;

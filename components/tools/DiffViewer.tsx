@@ -1,3 +1,5 @@
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import { useDraftState } from './shared/useDraftState';
 import React, { useMemo, useState } from 'react';
 import { Card, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -88,6 +90,7 @@ function computeWordDiff(oldLine: string, newLine: string): { oldTokens: WordTok
 
   const n = oldTokens.length;
   const m = newTokens.length;
+  if (n * m > 100000) return { oldTokens: [{ type: 'removed', value: oldLine }], newTokens: [{ type: 'added', value: newLine }] };
   const dp: number[][] = Array(n + 1).fill(null).map(() => Array(m + 1).fill(0));
 
   for (let i = 1; i <= n; i++) {
@@ -227,8 +230,9 @@ const JSON_EXAMPLE_NEW = `{
 }`;
 
 export const DiffViewer: React.FC = () => {
-  const [oldText, setOldText] = useState('');
-  const [newText, setNewText] = useState('');
+  useLocaleRender();
+  const [oldText, setOldText] = useDraftState('components/tools/DiffViewer.tsx:DiffViewer:oldText', '');
+  const [newText, setNewText] = useDraftState('components/tools/DiffViewer.tsx:DiffViewer:newText', '');
   const [layoutMode, setLayoutMode] = useState<'side-by-side' | 'unified'>('unified');
   
   const [onlyChanges, setOnlyChanges] = useState(true);
@@ -253,9 +257,10 @@ export const DiffViewer: React.FC = () => {
   };
 
   // Compute aligned diff rows
-  const lines1 = useMemo(() => oldText ? oldText.split('\n') : [], [oldText]);
-  const lines2 = useMemo(() => newText ? newText.split('\n') : [], [newText]);
-  const diffChanges = useMemo(() => computeDiff(lines1, lines2), [lines1, lines2]);
+  const lines1 = useMemo(() => oldText ? oldText.split(/\r\n|\r|\n/) : [], [oldText]);
+  const lines2 = useMemo(() => newText ? newText.split(/\r\n|\r|\n/) : [], [newText]);
+  const inputTooLarge = oldText.length + newText.length > 1_000_000 || (lines1.length + 1) * (lines2.length + 1) > 2_000_000;
+  const diffChanges = useMemo(() => inputTooLarge ? [] : computeDiff(lines1, lines2), [inputTooLarge, lines1, lines2]);
   const alignedRows = useMemo(() => alignDiff(diffChanges), [diffChanges]);
   const displayRows = onlyChanges ? alignedRows.filter(row => row.type !== 'unchanged') : alignedRows;
   const totalRows = displayRows.length;
@@ -269,15 +274,16 @@ export const DiffViewer: React.FC = () => {
     <Card className="h-full flex flex-col min-h-0 bg-slate-900 border-slate-800 text-slate-100">
       <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0 p-6">
         
-        <ContentToolbar onSample={() => loadExample('js')} onClear={clearInputs} status="实时逐行比较"><Button size="sm" variant="secondary" onClick={() => { setOldText(newText); setNewText(oldText); setRenderLimit(150); }}>交换左右</Button><Button size="sm" variant="ghost" onClick={() => loadExample('json')}>JSON 示例</Button></ContentToolbar>
+        <ContentToolbar onSample={() => loadExample('js')} onClear={clearInputs} status="实时逐行比较"><Button size="sm" variant="secondary" onClick={() => { setOldText(newText); setNewText(oldText); setRenderLimit(150); }}>{tr("交换左右")}</Button><Button size="sm" variant="ghost" onClick={() => loadExample('json')}>{tr("JSON 示例")}</Button></ContentToolbar>
+        {inputTooLarge && <p role="alert" className="status-error rounded-lg p-3 text-sm">{tr("内容超出比较预算。请缩小到 1 MB 内，并减少同时比较的行数。")}</p>}
         {/* Input Textareas Pane */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-none">
           <div className="flex flex-col min-h-0">
             <div className="flex flex-wrap justify-between items-center gap-2 mb-1 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider">原始文本 (Original)</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">{tr("原始文本 (Original)")}</span>
               <div className="flex items-center gap-2">
                 <ScratchpadPicker
-                  placeholder="暂存箱载入..."
+                  placeholder={tr("暂存箱载入...")}
                   filter={isScratchpadTextLike}
                   onLoad={content => {
                     if (typeof content === 'string') {
@@ -286,26 +292,26 @@ export const DiffViewer: React.FC = () => {
                     }
                   }}
                 />
-                <span className="text-slate-500 font-mono">{lines1.length} 行 | {oldText.length} 字符</span>
+                <span className="text-slate-500 font-mono">{lines1.length}{tr("行 |")}{oldText.length}{tr("字符")}</span>
               </div>
             </div>
             <textarea
               className="min-h-44 flex-1 w-full p-3 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
-              aria-label="原始文本"
+              aria-label={tr("原始文本")}
               value={oldText}
               onChange={e => {
                 setOldText(e.target.value);
                 setRenderLimit(150);
               }}
-              placeholder="请输入或粘贴原始文本..."
+              placeholder={tr("请输入或粘贴原始文本...")}
             />
           </div>
           <div className="flex flex-col min-h-0">
             <div className="flex flex-wrap justify-between items-center gap-2 mb-1 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider">修改后文本 (Modified)</span>
+              <span className="font-bold text-slate-400 uppercase tracking-wider">{tr("修改后文本 (Modified)")}</span>
               <div className="flex items-center gap-2">
                 <ScratchpadPicker
-                  placeholder="暂存箱载入..."
+                  placeholder={tr("暂存箱载入...")}
                   filter={isScratchpadTextLike}
                   onLoad={content => {
                     if (typeof content === 'string') {
@@ -314,18 +320,18 @@ export const DiffViewer: React.FC = () => {
                     }
                   }}
                 />
-                <span className="text-slate-500 font-mono">{lines2.length} 行 | {newText.length} 字符</span>
+                <span className="text-slate-500 font-mono">{lines2.length}{tr("行 |")}{newText.length}{tr("字符")}</span>
               </div>
             </div>
             <textarea
               className="min-h-44 flex-1 w-full p-3 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
-              aria-label="修改后文本"
+              aria-label={tr("修改后文本")}
               value={newText}
               onChange={e => {
                 setNewText(e.target.value);
                 setRenderLimit(150);
               }}
-              placeholder="请输入或粘贴修改后的文本..."
+              placeholder={tr("请输入或粘贴修改后的文本...")}
             />
           </div>
         </div>
@@ -338,26 +344,26 @@ export const DiffViewer: React.FC = () => {
               className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold uppercase transition-all ${layoutMode === 'side-by-side' ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
             >
               <Split className="w-4 h-4" />
-              <span>左右对照</span>
+              <span>{tr("左右对照")}</span>
             </button>
             <button
               onClick={() => setLayoutMode('unified')}
               className={`flex items-center gap-1.5 py-1.5 px-3 rounded-lg border text-xs font-semibold uppercase transition-all ${layoutMode === 'unified' ? 'bg-primary-600 border-primary-600 text-white shadow-sm' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
             >
               <AlignLeft className="w-4 h-4" />
-              <span>统一视图</span>
+              <span>{tr("统一视图")}</span>
             </button>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={onlyChanges} onChange={event => { setOnlyChanges(event.target.checked); setRenderLimit(150); }} />仅显示改动</label>
+          <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={onlyChanges} onChange={event => { setOnlyChanges(event.target.checked); setRenderLimit(150); }} />{tr("仅显示改动")}</label>
           <div className="flex items-center gap-4 text-xs font-semibold text-slate-400">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              <span>新增 {additions} 行</span>
+              <span>{tr("新增")}{additions}{tr("行")}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
-              <span>删除 {deletions} 行</span>
+              <span>{tr("删除")}{deletions}{tr("行")}</span>
             </span>
           </div>
         </div>
@@ -526,7 +532,7 @@ export const DiffViewer: React.FC = () => {
           {totalRows === 0 && (
             <div className="flex flex-col items-center justify-center py-20 text-slate-500">
               <RefreshCw className="w-10 h-10 mb-3 animate-pulse" />
-              <p>{!oldText && !newText ? '粘贴两份文本或载入示例，逐行检查改动。' : '两份文本内容相同。取消“仅显示改动”可查看完整文本。'}</p>
+              <p>{!oldText && !newText ? tr('粘贴两份文本或载入示例，逐行检查改动。') : tr('两份文本内容相同。取消“仅显示改动”可查看完整文本。')}</p>
             </div>
           )}
 
@@ -536,9 +542,7 @@ export const DiffViewer: React.FC = () => {
               <button
                 onClick={() => setRenderLimit(prev => prev + 300)}
                 className="px-6 py-2 border border-slate-800 bg-slate-900 text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-800 active:scale-95 transition-all shadow-md"
-              >
-                展示更多差异行 (当前已加载 {renderLimit} / {totalRows} 行)
-              </button>
+              >{tr("展示更多差异行 (当前已加载")}{renderLimit} / {totalRows}{tr("行)")}</button>
             </div>
           )}
         </div>

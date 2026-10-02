@@ -1,94 +1,36 @@
-# Project Audit
+# Project reliability audit
 
-Last updated: 2026-05-31
+Updated: 2026-10-03
 
-## Current Functional Map
+The latest page-by-page feature review covers all 84 tools and their submodes. Decisions, removals, behavioral fixes, and verification limits are recorded in [docs/feature-audit.md](docs/feature-audit.md).
 
-The app is a Vite + React browser-side developer toolbox with 12 top-level studios:
+## Resolved findings
 
-- JSON and data formatting
-- Security and cryptography
-- Text editing and diffing
-- Encoding and escaping
-- HTML and Markdown preview
-- Network request and client inspection
-- Repository and dependency research
-- CSS and vector styling
-- Image and media tools
-- File and PDF processing
-- CAD and 3D tools
-- System, time, generators, and AI tools
+1. JSON Schema uses strict draft-07 validation, standard formats, heterogeneous-array inference and a bounded worker. Unsupported schemas fail explicitly.
+2. Common text inputs use bounded, session-only drafts across tool navigation. Heavy resources still unmount normally.
+3. IndexedDB writes resolve on transaction completion. Missing content rejects, archive filenames remain unique after sanitizing, and sensitive items never enter persistent storage.
+4. Interface translation occurs at React render time; the DOM observer has been removed. User data retains its language.
+5. Runtime assets are prepared from locked dependencies and shipped with license notices. Script/WASM integrity is enforced at runtime; module integrity is checked at build time.
+6. MediaPipe no longer replaces global fetch. Video Worker requests have URL checks, bounded bodies, deadlines and redirect validation; deployments support token, origin, hostname and rate-limit controls.
+7. Regex and SQLite execute in disposable workers. SQLite commits its snapshot only on successful completion. Tool failures are contained and malformed routes are handled.
+8. The app shell dynamically loads ZIP functionality and does not preload PDF/Three.js engines. A gzip budget is enforced against production output.
+9. Strict TypeScript is enabled. Regression tests cover schema semantics, transactional aborts, sensitive persistence, worker cancellation, real SQLite queries, GIF delays/pixels, PDF pages and STL wall-thickness measurements. Browser tests use a production build and deterministic locale.
+10. The generated 84-entry catalog powers sub-tool search and route documentation. Unreachable Studio wrappers and unused AI SDK/key configuration have been removed.
 
-Cross-cutting capabilities include deep-link routing, a global scratchpad drawer, dark mode, lazy-loaded studios, local-only processing for most tools, and Vercel SPA fallback.
+## Validation
 
-## Fixed In This Audit Branch
+Run `npm run verify` for the release gate. It includes typecheck, lint, translation coverage, routes, generated catalog, documentation, runtime manifest, unit tests, dependency audit, production build budget and browser regression tests. Browser coverage includes the English catalog scan.
 
-- Fixed JSON Diff path handling with structured path segments and RFC 6901 JSON Pointer escaping.
-- Hardened JSON Patch generation for special object keys and array removals.
-- Improved HTTP cURL import for `--url`, `-G`, repeated data flags, `--data-urlencode`, basic auth, escaped quotes, and form fields.
-- Scoped the HTTP Mock sandbox to the HTTP tool request flow instead of monkey-patching global `window.fetch`.
-- Added a global toast surface and routed non-critical `alert` calls into accessible non-blocking feedback.
-- Expanded scratchpad items with metadata, source labels, size display, rename support, multi-version retention, and mobile-visible actions.
-- Added WCAG 2.1 contrast analysis, HSL micro-adjustment, and accessible color suggestions to the color tool.
-- Moved JWT weak-secret auditing into a cancellable Web Worker with custom dictionary support and progress reporting.
-- Added a shared runtime asset loader and wired PDF.js through the timeout/cached loader path.
-- Fixed studio tab back/forward sync by listening to both `hashchange` and `popstate`.
-- Added Vitest unit tests, Playwright smoke tests, and CI coverage for both.
-- Restored a real typecheck quality gate with `npm run typecheck`.
-- Fixed all TypeScript errors reported by `tsc --noEmit`.
-- Added Vite and remote PDF.js module type declarations.
-- Fixed `fast-xml-parser` option casing for namespace handling.
-- Surfaced shared runtime loader state in sql.js, OpenPGP, sm-crypto, zxcvbn, and Headshot/MediaPipe panels.
-- Removed the browser-only WebGL face-swap tool because its mesh-warping result did not meet product-quality expectations and browser-local execution cannot reliably deliver photorealistic identity transfer.
-- Added runtime timeout cleanup tests, retry/cached state coverage, and unified retry affordances for major CDN-backed tools.
-- Added scratchpad degraded/error persistence handling, background failure toasts, and Drawer storage health/quota visibility.
-- Added animation batch progress/cancel flows, ZIP filename sanitization, and WebCodecs APNG/WebP unknown-frame probing.
-- Moved STL wall-thickness analysis into a Worker, added partial reports, fast/precise controls, and grid-based candidate prefiltering.
-- Added Playwright smoke coverage for mobile scratchpad, APNG/WebP capability messaging, and STL wall-thickness controls.
-- Stabilized React hook dependencies in network pinging, SQLite setup, image vectorization, and 3D material rendering.
-- Moved mock WebSocket/SSE classes out of React component bodies so React Compiler can optimize the component.
-- Hardened scratchpad SVG preview sanitization before `dangerouslySetInnerHTML`.
-- Hardened scratchpad ZIP filenames and added accessible drawer controls.
-- Added object URL cleanup for image vectorization previews.
-- Added stable vendor chunking for production builds and removed noisy chunk warnings.
-- Added a local favicon, Chinese document language, description, and theme color metadata.
-- Added GitHub Actions quality checks for typecheck, lint, and build.
-- Clarified video downloader capability boundaries: the default sopace public Worker and user-provided Workers improve CORS-limited fetches but do not bypass login, DRM, region, anti-abuse, copyright, or platform policy limits.
-- Removed remaining blocking `alert()` calls from tool components in favor of inline status and `notifyToast`, including PGP/SM crypto operations, animation batch failures, image compression, network parsing, and data tools.
-- Added explicit PGP key handoff controls so generated private keys are no longer auto-filled into decrypt/sign inputs; sensitive scratchpad outputs can now carry metadata such as `sensitive` and `originAction`.
-- Removed global `window.alert` / `window.confirm` monkey-patching from the i18n provider; tool feedback now stays explicit through toast or inline state.
-- Replaced blacklist-style HTML/SVG cleanup with allowlist sanitization for preview surfaces.
-- Added runtime asset fallback URL, active source, and optional SHA-256 verification state support, with initial adoption in PDF.js, SQL.js, and OpenPGP.
-- Hardened Headshot/MediaPipe failure recovery with a visible manual-crop mode when models fail or no face is detected.
-- Reorganized navigation around user task flows into 8 top-level categories and 12 Studio entries; old direct single-tool aliases are no longer maintained.
-- Added Browser-Based-Tools parity coverage for Hex byte decoding, Unicode inspection, visual centroid calculation, GitHub repository research, GitHub/HuggingFace folder downloads, NuGet/PyPI/Rust dependency trees, and NuGet signature/certificate inspection.
-- Added browser-side repository research guardrails: GitHub/HuggingFace tokens stay in component memory only, non-sensitive caches live in IndexedDB with clear controls, and CORS/API limit errors are surfaced inline.
-- Added focused core tests for Hex decoding, Unicode analysis, centroid/background math, repository URL/tree handling, dependency parsing, and NuGet nuspec/fingerprint helpers.
+Current dependency audit: one high-severity node-forge advisory, with no patched upstream version available. The application does not call the affected RSA PKCS#1 v1.5 signature verification API, but `audit:prod` still fails. The gate remains enabled. See the current feature review for the latest validation results; the September counts below are historical results.
 
-## Remaining Known Issues
+Verified on 2026-09-12: all release gates passed, including 59 unit tests across 15 files and 21 Chromium browser tests. The browser suite includes all 73 English tool routes. The production dependency audit reported 0 vulnerabilities. Production app-shell JavaScript measured 121.4 KB gzip, below the 240 KB budget (approximately 363 KB at the initial audit).
 
-- Several large vendor chunks remain by nature of Three.js, pdf-lib, and data tooling. They are lazy-loaded and cached, but deeper splitting can be revisited if real-user performance data shows a problem.
-- Browser-only remote CDN dependencies now share a common runtime loader compatibility path and visible panels in the highest-risk tools. Remaining work is self-hosted asset mirrors and deeper fixture-backed failure simulation.
-- Runtime loader now supports fallback URLs and optional SHA-256 verification metadata. Remaining work is adding vetted self-hosted files under `public/vendor` where license and bundle size allow.
-- Animation frame extraction supports GIF, Lottie JSON, APNG, and animated WebP. APNG/WebP rely on browser WebCodecs `ImageDecoder`, now probe unknown frame counts, and still enforce frame/pixel budgets.
-- STL wall-thickness and PBR environment controls are implemented as browser-side engineering aids. The worker now uses grid prefiltering and partial reports, but the result remains a sampling estimate rather than slicer or industrial inspection truth.
-- The task-oriented Studio IA intentionally breaks older `/tools/<single-tool>` aliases; external docs and bookmarks should use `/tools/<studio-id>#<tab-id>` links.
-- Repository and dependency tools depend on public registry APIs and browser CORS behavior. Optional proxy templates improve connectivity only; they do not bypass private resource authorization, platform limits, or service terms.
-- NuGet signature inspection parses `.signature.p7s` certificate material and fingerprints locally, but remains an inspection aid rather than a replacement for NuGet client trust policy enforcement.
+Integration with main on 2026-09-12 preserves the newly added repository, arithmancy, character inspection and image tools, plus legacy route redirects and the iPhone shortcut. The integrated release gate passed: 82 unit tests across 19 files, 23 Chromium tests including all 84 English tool routes, 0 production dependency vulnerabilities, and 129.7 KB gzip app-shell JavaScript.
 
-## Recommended Next Iterations
+## Deliberate product limits
 
-1. Improve runtime loader UI adoption:
-   Add vetted `public/vendor` mirrors and fixture-backed offline simulations for the remaining CDN-backed engines.
-
-2. Expand per-tool tests:
-   Add more fixture-backed tests for SQL formatting, SVG sanitizer, JWT worker auditing, APNG/WebP probing, video parser boundaries, PGP/SM failure states, and STL wall-thickness high-face models.
-
-3. Improve offline resilience:
-   Add local `public/vendor` mirrors for self-hostable browser assets where licenses allow.
-
-4. Harden product feature stages:
-   Add real media/STL fixture suites for APNG/WebP frame extraction and STL wall-thickness fast/precise numeric diagnostics.
-
-5. Tighten CI over time:
-   Broaden mobile viewport Playwright coverage beyond the scratchpad drawer to key Studio tabs, sensitive crypto flows, and long-running worker cancellation flows.
+- A browser session is not a durable backup; session drafts and sensitive scratchpad items are cleared on reload.
+- MediaPipe models and jewelry fonts may still require a network connection. Model failure retains manual crop mode.
+- Remote API access depends on CORS and endpoint permissions. Worker deployment authentication and distributed rate limiting require deployment configuration; application code cannot configure a separately hosted public endpoint.
+- Geometry measurements remain estimates and experimental models require manufacturing review.
+- Compatibility is validated in Chromium; broader Safari/Firefox and real-device coverage is future compatibility work, not an assertion of current support.

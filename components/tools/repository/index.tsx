@@ -24,7 +24,8 @@ import {
 import { useI18n } from '../../../src/i18n';
 import { Button } from '../../ui/Button';
 import { downloadBlob, formatBytes } from '../shared/fileUtils';
-import { loadRemoteScript } from '../shared/runtimeAssetLoader';
+import { loadRuntimeAsset } from '../shared/runtimeAssetLoader';
+import { runtimeAsset } from '../shared/runtimeAssets';
 import {
   applyCorsProxy,
   buildFileTree,
@@ -51,11 +52,11 @@ declare global {
   }
 }
 
-const FORGE_SCRIPT_URL = 'https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js';
+const FORGE_SCRIPT_URL = runtimeAsset('forge').url;
 
 const loadForge = async () => {
   if (!window.forge) {
-    await loadRemoteScript(FORGE_SCRIPT_URL, 'node-forge', 20000);
+    await loadRuntimeAsset({ url: FORGE_SCRIPT_URL, kind: 'script', label: 'node-forge', version: runtimeAsset('forge').version, timeoutMs: 20000, retries: 1, cache: true, sourceLabel: 'Self-hosted / build-verified' });
   }
   if (!window.forge) throw new Error('node-forge runtime is unavailable');
   return window.forge;
@@ -371,7 +372,7 @@ const fetchJson = async <T,>(url: string, options: RequestInit = {}) => {
   return response.json() as Promise<T>;
 };
 
-const authHeaders = (token: string, scheme: 'token' | 'bearer' = 'token') => (
+const authHeaders = (token: string, scheme: 'token' | 'bearer' = 'token'): Record<string, string> => (
   token.trim() ? { Authorization: `${scheme === 'bearer' ? 'Bearer' : 'token'} ${token.trim()}` } : {}
 );
 
@@ -453,8 +454,8 @@ export const GitHubRepoExplorerTool: React.FC = () => {
       }));
       setRepos(nextRepos);
       setResultEntity(requestedEntity);
-      await idbSet('repoCache', requestedEntity.toLowerCase(), { entity: requestedEntity, repos: nextRepos, fetchedAt: new Date().toISOString() });
-      setStatus(`${nextRepos.length} ${c.results}`);
+      const cacheSaved = await idbSet('repoCache', requestedEntity.toLowerCase(), { entity: requestedEntity, repos: nextRepos, fetchedAt: new Date().toISOString() }).then(() => true, () => false);
+      setStatus(`${nextRepos.length} ${c.results}${cacheSaved ? '' : ` · ${t('数据已读取，但本地缓存不可用')}`}`);
     } catch (error) {
       const cached = await idbGet<{ repos: RepoRow[] }>('repoCache', requestedEntity.toLowerCase()).catch(() => null);
       if (cached?.repos) {
@@ -490,8 +491,9 @@ export const GitHubRepoExplorerTool: React.FC = () => {
         }
       }
       setRepos(next);
-      await idbSet('repoCache', resultEntity.toLowerCase(), { entity: resultEntity, repos: next, fetchedAt: new Date().toISOString() });
-      setStatus(failed ? `${c.error}: ${failed} ${t('个仓库未能检查，其余结果已更新')}` : t('最新 Release 检查完成'));
+      const cacheSaved = await idbSet('repoCache', resultEntity.toLowerCase(), { entity: resultEntity, repos: next, fetchedAt: new Date().toISOString() }).then(() => true, () => false);
+      const releaseStatus = failed ? `${c.error}: ${failed} ${t('个仓库未能检查，其余结果已更新')}` : t('最新 Release 检查完成');
+      setStatus(`${releaseStatus}${cacheSaved ? '' : ` · ${t('数据已读取，但本地缓存不可用')}`}`);
     } catch (error) {
       setStatus(`${c.error}: ${(error as Error).message}`);
     } finally {
@@ -640,8 +642,8 @@ export const GitHubOrganizationResearchTool: React.FC = () => {
       }));
       setRows(nextRows);
       setHasSearched(true);
-      await idbSet('orgHistory', `${parentOrg}:${query}`.toLowerCase(), { parentOrg, query, rows: nextRows, savedAt: new Date().toISOString() });
-      setStatus(`${nextRows.length} ${c.results}`);
+      const historySaved = await idbSet('orgHistory', `${parentOrg}:${query}`.toLowerCase(), { parentOrg, query, rows: nextRows, savedAt: new Date().toISOString() }).then(() => true, () => false);
+      setStatus(`${nextRows.length} ${c.results}${historySaved ? '' : ` · ${t('数据已读取，但本地缓存不可用')}`}`);
     } catch (error) {
       setStatus((error as Error).name === 'AbortError' ? t('研究已取消') : `${c.error}: ${(error as Error).message}`);
     } finally {

@@ -1,3 +1,4 @@
+import { translateUi as tr } from '../../../src/i18n/render';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -15,6 +16,8 @@ import { FileDropzone, WorkflowSteps } from '../shared/WorkflowUi';
 interface ShapeConfig {
   id: string;
   name: string;
+  nameKey?: string;
+  nameSuffix?: string;
   type: 'cube' | 'sphere' | 'cylinder' | 'cone' | 'upload';
   posX: number;
   posY: number;
@@ -22,6 +25,7 @@ interface ShapeConfig {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  rotation?: [number, number, number, number];
   color: string;
   visible: boolean;
   uploadedGeo: THREE.BufferGeometry | null;
@@ -41,6 +45,19 @@ const PRESET_COLORS = [
   '#14b8a6', // teal
 ];
 
+export const getCsgTrianglePositions = (geometry: THREE.BufferGeometry): Float32Array => {
+  const triangles = geometry.index ? geometry.toNonIndexed() : geometry;
+  const attribute = triangles.getAttribute('position') as THREE.BufferAttribute | undefined;
+  if (!attribute || attribute.count === 0 || attribute.count % 3 !== 0) {
+    if (triangles !== geometry) triangles.dispose();
+    throw new Error('输入网格不包含完整三角面。');
+  }
+  const positions = new Float32Array(attribute.array);
+  if (triangles !== geometry) triangles.dispose();
+  if (!positions.every(Number.isFinite)) throw new Error('输入网格包含无效坐标。');
+  return positions;
+};
+
 export const CsgWorkbench: React.FC = () => {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +68,7 @@ export const CsgWorkbench: React.FC = () => {
     {
       id: 'shape-1',
       name: '基准立方体 A',
+      nameKey: '基准立方体 A',
       type: 'cube',
       posX: 0,
       posY: 0,
@@ -66,6 +84,7 @@ export const CsgWorkbench: React.FC = () => {
     {
       id: 'shape-2',
       name: '开孔球体 B',
+      nameKey: '开孔球体 B',
       type: 'sphere',
       posX: 8,
       posY: 4,
@@ -85,6 +104,10 @@ export const CsgWorkbench: React.FC = () => {
   const [toolShapeIds, setToolShapeIds] = useState<Record<string, boolean>>({ 'shape-2': true });
 
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isReadingMesh, setIsReadingMesh] = useState(false);
+  const uploadReaderRef = useRef<FileReader | null>(null);
+  const uploadRequestRef = useRef(0);
+  const uploadedGeometriesRef = useRef(new Set<THREE.BufferGeometry>());
   const [resultGeometry, setResultGeometry] = useState<THREE.BufferGeometry | null>(null);
   const [resultStats, setResultStats] = useState<{ vertices: number; triangles: number } | null>(null);
   const [opType, setOpType] = useState<'union' | 'subtract' | 'intersect' | null>(null);
@@ -106,7 +129,12 @@ export const CsgWorkbench: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      requestIdRef.current += 1;
+      uploadRequestRef.current += 1;
+      uploadReaderRef.current?.abort();
       workerRef.current?.terminate();
+      uploadedGeometriesRef.current.forEach(geometry => geometry.dispose());
+      uploadedGeometriesRef.current.clear();
     };
   }, []);
 
@@ -126,19 +154,33 @@ export const CsgWorkbench: React.FC = () => {
   const shapesRef = useRef<ShapeConfig[]>(shapes);
   useEffect(() => {
     shapesRef.current = shapes;
+    const current = new Set(shapes.flatMap(shape => shape.uploadedGeo ? [shape.uploadedGeo] : []));
+    uploadedGeometriesRef.current.forEach(geometry => { if (!current.has(geometry)) geometry.dispose(); });
+    uploadedGeometriesRef.current = current;
   }, [shapes]);
 
   // Handle STL uploading
   const handleStlUpload = (files: File[], id: string) => {
     const file = files[0];
-    if (!file) return;
-
+    if (!file || isProcessing) return;
+    if (!/\.stl$/i.test(file.name) || !file.size || file.size > 64 * 1024 * 1024) {
+      setStatusMessage({ tone: 'warning', text: '请选择非空 STL 文件，大小不能超过 64 MB。' });
+      return;
+    }
+    uploadRequestRef.current += 1;
+    const request = uploadRequestRef.current;
+    uploadReaderRef.current?.abort();
     const reader = new FileReader();
+    uploadReaderRef.current = reader;
+    setIsReadingMesh(true);
     reader.onload = (e) => {
+      if (request !== uploadRequestRef.current) return;
       const contents = e.target?.result as ArrayBuffer;
       try {
         const loader = new STLLoader();
         const geometry = loader.parse(contents);
+        const positions = getCsgTrianglePositions(geometry);
+        if (positions.length / 9 > 50000) { geometry.dispose(); throw new Error('CSG 输入累计最多 50,000 个三角面，请先降面。'); }
         geometry.computeVertexNormals();
         geometry.center();
 
@@ -153,13 +195,13 @@ export const CsgWorkbench: React.FC = () => {
           }
           return s;
         }));
-      } catch {
-        const message = '解析 STL 文件失败，请确保格式正确！';
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '解析 STL 文件失败，请确保格式正确！';
         setStatusMessage({ tone: 'warning', text: message });
         notifyToast({ title: 'STL 解析失败', description: message, tone: 'error' });
-      }
+      } finally { setIsReadingMesh(false); }
     };
-    reader.onerror = () => setStatusMessage({ tone: 'warning', text: 'STL 文件读取失败，请更换文件。' });
+    reader.onerror = () => { if (request !== uploadRequestRef.current) return; setIsReadingMesh(false); setStatusMessage({ tone: 'warning', text: 'STL 文件读取失败，请更换文件。' }); };
     reader.readAsArrayBuffer(file);
   };
 
@@ -170,6 +212,8 @@ export const CsgWorkbench: React.FC = () => {
     const newShape: ShapeConfig = {
       id: newId,
       name: `新增实体 ${shapes.length + 1}`,
+      nameKey: '新增实体',
+      nameSuffix: ` ${shapes.length + 1}`,
       type,
       posX: 5,
       posY: 5,
@@ -200,6 +244,8 @@ export const CsgWorkbench: React.FC = () => {
     const newShape: ShapeConfig = {
       id: newId,
       name: `导入 - ${shared.fileName.replace(/\.[^.]+$/, '')}`,
+      nameKey: '导入',
+      nameSuffix: ` - ${shared.fileName.replace(/\.[^.]+$/, '')}`,
       type: 'upload',
       posX: 0,
       posY: 0,
@@ -236,18 +282,21 @@ export const CsgWorkbench: React.FC = () => {
     }));
   };
 
+  const getShapeName = (shape: ShapeConfig) => shape.nameKey ? `${t(shape.nameKey)}${shape.nameSuffix || ''}` : shape.name;
+
   const renameShape = (id: string, name: string) => {
     setShapes(prev => prev.map(s => {
-      if (s.id === id) return { ...s, name };
+      if (s.id === id) return { ...s, name, nameKey: undefined, nameSuffix: undefined };
       return s;
     }));
   };
 
   // Build local geometry based on type and scale
-  const buildGeometry = useCallback((config: ShapeConfig): THREE.BufferGeometry => {
+  const buildGeometry = useCallback((config: ShapeConfig, applyRotation = true): THREE.BufferGeometry => {
     if (config.type === 'upload' && config.uploadedGeo) {
       const geo = config.uploadedGeo.clone();
       geo.scale(config.scaleX / 10, config.scaleY / 10, config.scaleZ / 10);
+      if (applyRotation && config.rotation) geo.applyQuaternion(new THREE.Quaternion(...config.rotation));
       return geo;
     }
 
@@ -269,6 +318,7 @@ export const CsgWorkbench: React.FC = () => {
     }
 
     base.scale(config.scaleX, config.scaleY, config.scaleZ);
+    if (applyRotation && config.rotation) base.applyQuaternion(new THREE.Quaternion(...config.rotation));
     base.computeVertexNormals();
     return base;
   }, []);
@@ -282,6 +332,7 @@ export const CsgWorkbench: React.FC = () => {
 
   // Execute advanced multiple Boolean CSG calculations asynchronously via Web Worker
   const executeCsg = (type: 'union' | 'subtract' | 'intersect') => {
+    if (isProcessing || isReadingMesh) return;
     const baseShape = shapes.find(s => s.id === baseShapeId);
     if (!baseShape || !baseShape.visible) {
       setStatusMessage({ tone: 'warning', text: '请确保已选定并显示基准实体。' });
@@ -303,18 +354,17 @@ export const CsgWorkbench: React.FC = () => {
     const id = requestIdRef.current + 1;
     requestIdRef.current = id;
 
+    try {
     // 1. Prepare Base Geometry position attribute
     const baseGeo = buildGeometry(baseShape);
     baseGeo.translate(baseShape.posX, baseShape.posY, baseShape.posZ);
-    const basePosAttr = baseGeo.getAttribute('position') as THREE.BufferAttribute;
-    const basePositions = (basePosAttr.array as Float32Array).slice();
+    const basePositions = getCsgTrianglePositions(baseGeo);
     baseGeo.dispose();
 
     // 2. Prepare Tools position attributes and transform parameters
     const toolsData = activeTools.map(tool => {
       const toolGeo = buildGeometry(tool);
-      const toolPosAttr = toolGeo.getAttribute('position') as THREE.BufferAttribute;
-      const toolPositions = (toolPosAttr.array as Float32Array).slice();
+      const toolPositions = getCsgTrianglePositions(toolGeo);
       toolGeo.dispose();
       return {
         positions: toolPositions,
@@ -324,6 +374,9 @@ export const CsgWorkbench: React.FC = () => {
       };
     });
 
+    if ((basePositions.length + toolsData.reduce((sum, tool) => sum + tool.positions.length, 0)) / 9 > 50000) {
+      throw new Error('CSG 输入累计最多 50,000 个三角面，请先降面。');
+    }
     const worker = getWorker();
 
     worker.onmessage = (event: MessageEvent<unknown>) => {
@@ -363,7 +416,7 @@ export const CsgWorkbench: React.FC = () => {
 
       setResultGeometry(resultGeo);
       setResultStats(data.stats || null);
-      setStatusMessage({ tone: 'success', text: '布尔运算完成；结果为浏览器端实验级网格，请导出后复检。' });
+      setStatusMessage({ tone: positions.byteLength ? 'success' : 'warning', text: positions.byteLength ? '布尔运算完成；结果为浏览器端实验级网格，请导出后复检。' : '运算结果为空；请检查交集、减法顺序与形状位置。' });
     };
 
     worker.onerror = event => {
@@ -373,6 +426,8 @@ export const CsgWorkbench: React.FC = () => {
       setStatusMessage({ tone: 'warning', text: message });
       notifyToast({ title: 'CSG Worker 执行失败', description: message, tone: 'error' });
       setOpType(null);
+      worker.terminate();
+      workerRef.current = null;
     };
 
     // Serialize and post message to worker
@@ -382,11 +437,16 @@ export const CsgWorkbench: React.FC = () => {
       base: { positions: basePositions },
       tools: toolsData
     }, [basePositions.buffer, ...toolsData.map(t => t.positions.buffer)]);
+    } catch (error) {
+      setIsProcessing(false);
+      setOpType(null);
+      setStatusMessage({ tone: 'warning', text: error instanceof Error ? error.message : '无法启动布尔运算，请重试。' });
+    }
   };
 
   // Export and download STL
   const downloadStl = () => {
-    if (!resultMeshRef.current) return;
+    if (!resultMeshRef.current || !resultGeometry?.getAttribute('position')?.count) return;
     const exporter = new STLExporter();
     const result = exporter.parse(resultMeshRef.current, { binary: true });
     
@@ -570,7 +630,11 @@ export const CsgWorkbench: React.FC = () => {
               ...s,
               posX: Number(obj.position.x.toFixed(2)),
               posY: Number(obj.position.y.toFixed(2)),
-              posZ: Number(obj.position.z.toFixed(2))
+              posZ: Number(obj.position.z.toFixed(2)),
+              scaleX: Number(Math.max(0.1, s.scaleX * obj.scale.x).toFixed(2)),
+              scaleY: Number(Math.max(0.1, s.scaleY * obj.scale.y).toFixed(2)),
+              scaleZ: Number(Math.max(0.1, s.scaleZ * obj.scale.z).toFixed(2)),
+              rotation: [obj.quaternion.x, obj.quaternion.y, obj.quaternion.z, obj.quaternion.w],
             };
           }
           return s;
@@ -656,6 +720,10 @@ export const CsgWorkbench: React.FC = () => {
     }
   }, [gizmoMode]);
 
+  useEffect(() => {
+    if (transformControlsRef.current) transformControlsRef.current.enabled = !isProcessing && !isReadingMesh;
+  }, [isProcessing, isReadingMesh]);
+
   // Synchronize 3D meshes in Scene
   useEffect(() => {
     const scene = sceneRef.current;
@@ -666,11 +734,13 @@ export const CsgWorkbench: React.FC = () => {
       if (!shapes.some(s => s.id === id) || resultGeometry) {
         scene.remove(mesh);
         mesh.geometry.dispose();
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose());
         meshesMapRef.current.delete(id);
 
         const helper = boxHelpersMapRef.current.get(id);
         if (helper) {
           scene.remove(helper);
+          helper.geometry.dispose(); helper.material.dispose();
           boxHelpersMapRef.current.delete(id);
         }
       }
@@ -678,7 +748,7 @@ export const CsgWorkbench: React.FC = () => {
 
     if (resultMeshRef.current) {
       scene.remove(resultMeshRef.current);
-      resultMeshRef.current.geometry.dispose();
+      (Array.isArray(resultMeshRef.current.material) ? resultMeshRef.current.material : [resultMeshRef.current.material]).forEach(material => material.dispose());
       resultMeshRef.current = null;
     }
 
@@ -748,10 +818,13 @@ export const CsgWorkbench: React.FC = () => {
       if (!shape.visible) {
         if (mesh) {
           scene.remove(mesh);
+          mesh.geometry.dispose();
+          (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose());
           meshesMapRef.current.delete(shape.id);
           const helper = boxHelpersMapRef.current.get(shape.id);
           if (helper) {
             scene.remove(helper);
+            helper.geometry.dispose(); helper.material.dispose();
             boxHelpersMapRef.current.delete(shape.id);
           }
         }
@@ -762,10 +835,12 @@ export const CsgWorkbench: React.FC = () => {
       if (mesh) {
         // Simple parameter updates
         mesh.position.set(shape.posX, shape.posY, shape.posZ);
+        mesh.quaternion.fromArray(shape.rotation || [0, 0, 0, 1]);
+        mesh.scale.set(1, 1, 1);
         
         // Rebuild geometry to support live scale slider modifications
         mesh.geometry.dispose();
-        mesh.geometry = buildGeometry(shape);
+        mesh.geometry = buildGeometry(shape, false);
         
         // Highlight selected mesh with standard color opacity
         const mat = mesh.material as THREE.MeshStandardMaterial;
@@ -824,7 +899,7 @@ export const CsgWorkbench: React.FC = () => {
           boxHelpersMapRef.current.delete(shape.id);
         }
       } else {
-        const geo = buildGeometry(shape);
+        const geo = buildGeometry(shape, false);
         
         let roughness = 0.4;
         let metalness = 0.2;
@@ -863,6 +938,7 @@ export const CsgWorkbench: React.FC = () => {
         });
         mesh = new THREE.Mesh(geo, mat);
         mesh.name = shape.id;
+        mesh.quaternion.fromArray(shape.rotation || [0, 0, 0, 1]);
         mesh.position.set(shape.posX, shape.posY, shape.posZ);
         mesh.castShadow = true;
         mesh.receiveShadow = true;
@@ -909,7 +985,7 @@ export const CsgWorkbench: React.FC = () => {
   const selectedDim = getSelectedShapeDimensions();
   const visibleToolCount = shapes.filter(shape => shape.id !== baseShapeId && toolShapeIds[shape.id] && shape.visible).length;
   const baseShape = shapes.find(shape => shape.id === baseShapeId);
-  const canCalculate = !isProcessing && !!baseShape?.visible && visibleToolCount > 0;
+  const canCalculate = !isProcessing && !isReadingMesh && !!baseShape?.visible && visibleToolCount > 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)] gap-4 h-auto lg:h-full min-h-[500px]">
@@ -926,10 +1002,11 @@ export const CsgWorkbench: React.FC = () => {
               <button
                 key={mode}
                 onClick={() => setGizmoMode(mode)}
+                disabled={isProcessing || isReadingMesh}
                 aria-pressed={gizmoMode === mode}
                 className={`text-[10px] font-bold px-2 py-1.5 rounded transition-all cursor-pointer capitalize ${gizmoMode === mode ? 'bg-primary-500 text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
               >
-                {mode === 'translate' ? '移动' : mode === 'rotate' ? '旋转' : '缩放'}
+                {mode === 'translate' ? tr('移动') : mode === 'rotate' ? tr('旋转') : tr('缩放')}
               </button>
             ))}
           </div>
@@ -937,17 +1014,17 @@ export const CsgWorkbench: React.FC = () => {
 
         <div className="absolute top-4 left-4 flex items-center gap-3 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-200/50 dark:border-slate-800/50 shadow-sm z-10">
           <div className="flex items-center gap-1">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">样式：</span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{tr("样式：")}</span>
             <select
               value={materialType}
               onChange={event => setMaterialType(event.target.value as MaterialType)}
               className="text-[10px] font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded px-1.5 py-0.5 text-slate-700 dark:text-slate-200 focus:outline-none"
             >
-              <option value="default">默认风格</option>
-              <option value="gold">🏆 皇家黄金</option>
-              <option value="silver">🥈 抛光白银</option>
-              <option value="jade">🍀 温润翡翠</option>
-              <option value="glass">💎 高透玻璃</option>
+              <option value="default">{tr("默认风格")}</option>
+              <option value="gold">{tr("🏆 皇家黄金")}</option>
+              <option value="silver">{tr("🥈 抛光白银")}</option>
+              <option value="jade">{tr("🍀 温润翡翠")}</option>
+              <option value="glass">{tr("💎 高透玻璃")}</option>
             </select>
           </div>
           <div className="h-4 w-px bg-slate-350 dark:bg-slate-700" />
@@ -957,7 +1034,7 @@ export const CsgWorkbench: React.FC = () => {
             className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors cursor-pointer ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
           >
             <Eye className="w-3.5 h-3.5" />
-            <span>网格线</span>
+            <span>{tr("网格线")}</span>
           </button>
         </div>
 
@@ -967,7 +1044,7 @@ export const CsgWorkbench: React.FC = () => {
             <div className="flex flex-col items-center gap-3 bg-white dark:bg-slate-900 px-6 py-4 rounded-xl border border-slate-200/50 shadow-md w-72">
               <RefreshCw className="w-8 h-8 animate-spin text-primary-600" />
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 text-center">
-                {progressText || '正在进行三维实体布尔运算...'}
+                {tr(progressText || '正在进行三维实体布尔运算...')}
               </span>
               <div className="mt-1 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                 <div
@@ -981,8 +1058,7 @@ export const CsgWorkbench: React.FC = () => {
                 onClick={cancelCsg}
                 className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50"
               >
-                取消
-              </button>
+                {tr("取消")}</button>
             </div>
           </div>
         )}
@@ -998,24 +1074,24 @@ export const CsgWorkbench: React.FC = () => {
                 ? 'border-blue-200 bg-blue-50 text-blue-800'
                 : 'border-amber-200 bg-amber-50 text-amber-800'
           }`}>
-            {statusMessage.text}
+            {tr(statusMessage.text)}
           </div>
         )}
         {!resultGeometry ? (
-          <>
+          <fieldset disabled={isProcessing || isReadingMesh} className="contents">
             {/* Shared mesh quick loader panel */}
             {sharedMesh && (
               <div className="mb-4 rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
-                  <span className="truncate">💡 共享内存可载入网格模型</span>
+                  <span className="truncate">{tr("💡 共享内存可载入网格模型")}</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => importSharedMesh(sharedMesh)}
                   className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
-                  title={sharedMesh.fileName}
+                  title={tr(sharedMesh.fileName)}
                 >
-                  导入：{sharedMesh.fileName}
+                  {tr("导入：")}{sharedMesh.fileName}
                 </button>
               </div>
             )}
@@ -1025,7 +1101,7 @@ export const CsgWorkbench: React.FC = () => {
               <div className="flex justify-between items-center">
                 <h4 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-primary-600" />
-                  <span>3D 实体场景大纲树</span>
+                  <span>{tr("3D 实体场景大纲树")}</span>
                 </h4>
                 <div className="flex gap-1">
                   {(['cube', 'sphere', 'cylinder', 'cone'] as const).map(type => (
@@ -1033,7 +1109,7 @@ export const CsgWorkbench: React.FC = () => {
                       key={type}
                       onClick={() => addShape(type)}
                       className="p-1 rounded bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 hover:text-slate-700 transition-colors cursor-pointer"
-                      title={`添加${type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}`}
+                      title={tr(`添加${type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}`)}
                     >
                       <Plus className="w-3 h-3" />
                     </button>
@@ -1052,7 +1128,7 @@ export const CsgWorkbench: React.FC = () => {
                       onClick={() => setSelectedShapeId(s.id)}
                       tabIndex={0}
                       role="group"
-                      aria-label={`${t('选择实体')} ${t(s.name)}`}
+                      aria-label={`${t('选择实体')} ${getShapeName(s)}`}
                       onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelectedShapeId(s.id); } }}
                       className={`group flex items-center justify-between gap-2 p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isSelected ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100/50 dark:bg-primary-950/20 dark:text-primary-400 dark:ring-primary-900/50' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
                     >
@@ -1060,7 +1136,7 @@ export const CsgWorkbench: React.FC = () => {
                         {/* Checkbox for tooling selecting */}
                         <input
                           type="checkbox"
-                          aria-label={`${t('工具实体')} ${t(s.name)}`}
+                          aria-label={`${t('工具实体')} ${getShapeName(s)}`}
                           checked={isBase ? false : !!toolShapeIds[s.id]}
                           disabled={isBase}
                           onChange={(e) => {
@@ -1071,7 +1147,7 @@ export const CsgWorkbench: React.FC = () => {
                             }));
                           }}
                           className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 cursor-pointer disabled:cursor-not-allowed"
-                          title={isBase ? '基准实体不可勾选' : '勾选作为布尔工具'}
+                          title={tr(isBase ? '基准实体不可勾选' : '勾选作为布尔工具')}
                         />
                         <div
                           className="w-2.5 h-2.5 rounded-full border border-white"
@@ -1079,8 +1155,8 @@ export const CsgWorkbench: React.FC = () => {
                         />
                         <input
                           type="text"
-                          aria-label="实体名称"
-                          value={s.name}
+                          aria-label={tr("实体名称")}
+                          value={getShapeName(s)}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => renameShape(s.id, e.target.value)}
                           className="bg-transparent border-none outline-none font-semibold text-slate-800 dark:text-slate-200 truncate focus:bg-white dark:focus:bg-slate-900 focus:px-1 rounded w-full"
@@ -1098,17 +1174,16 @@ export const CsgWorkbench: React.FC = () => {
                             setToolShapeIds(prev => ({ ...prev, [s.id]: false }));
                           }}
                           className={`px-1 py-0.5 rounded text-[9px] font-bold ${isBase ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800'}`}
-                          title="设为布尔基准实体"
+                          title={tr("设为布尔基准实体")}
                           aria-pressed={isBase}
                         >
-                          基准
-                        </button>
+                          {tr("基准")}</button>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleVisibility(s.id);
                           }}
-                          aria-label={`${t(s.visible ? '隐藏' : '显示')} ${t(s.name)}`}
+                          aria-label={`${t(s.visible ? '隐藏' : '显示')} ${getShapeName(s)}`}
                           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
                           {s.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -1118,7 +1193,7 @@ export const CsgWorkbench: React.FC = () => {
                             e.stopPropagation();
                             deleteShape(s.id);
                           }}
-                          aria-label={`删除 ${s.name}`}
+                          aria-label={`${t('删除')} ${getShapeName(s)}`}
                           className="p-1 rounded text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1134,10 +1209,10 @@ export const CsgWorkbench: React.FC = () => {
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2">
               <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                 <Settings className="w-3 h-3 text-slate-400" />
-                <span>选择运算</span>
+                <span>{tr("选择运算")}</span>
               </h4>
-              <p className="text-xs leading-5 text-slate-500">基准：{baseShape?.name || '未选择'} · 已选工具：{visibleToolCount}</p>
-              <p className="text-xs leading-5 text-slate-500">合并连接所有实体；相减从基准挖去工具；相交仅保留重叠部分。</p>
+              <p className="text-xs leading-5 text-slate-500">{tr("基准：")}{baseShape ? getShapeName(baseShape) : tr('未选择')}{tr("· 已选工具：")}{visibleToolCount}</p>
+              <p className="text-xs leading-5 text-slate-500">{tr("合并连接所有实体；相减从基准挖去工具；相交仅保留重叠部分。")}</p>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => executeCsg('union')}
@@ -1145,16 +1220,16 @@ export const CsgWorkbench: React.FC = () => {
                   className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>合并</span>
+                  <span>{tr("合并")}</span>
                 </button>
                 <button
                   onClick={() => executeCsg('subtract')}
                   disabled={!canCalculate}
                   className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
-                  title="从选定的基准实体中相减所有勾选的工具实体"
+                  title={tr("从选定的基准实体中相减所有勾选的工具实体")}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>相减</span>
+                  <span>{tr("相减")}</span>
                 </button>
                 <button
                   onClick={() => executeCsg('intersect')}
@@ -1162,7 +1237,7 @@ export const CsgWorkbench: React.FC = () => {
                   className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5" />
-                  <span>相交</span>
+                  <span>{tr("相交")}</span>
                 </button>
               </div>
             </div>
@@ -1170,8 +1245,8 @@ export const CsgWorkbench: React.FC = () => {
             {/* Config Panel for the selected shape */}
             {selectedShape && (
               <details className="workflow-settings mt-4">
-                <summary>实体尺寸、坐标与导入</summary>
-                <div className="space-y-4 pt-4"><p className="text-xs text-slate-500">当前实体：{selectedShape.name}</p>
+                <summary>{tr("实体尺寸、坐标与导入")}</summary>
+                <div className="space-y-4 pt-4"><p className="text-xs text-slate-500">{tr("当前实体：")}{getShapeName(selectedShape)}</p>
 
                 {/* Shape selection procedural */}
                 <div>
@@ -1182,14 +1257,14 @@ export const CsgWorkbench: React.FC = () => {
                         onClick={() => handleParamChange(selectedShape.id, 'type', type)}
                         className={`text-[10px] py-1 font-medium border rounded transition-all capitalize ${selectedShape.type === type ? 'border-primary-500 bg-primary-50/50 text-primary-600 font-semibold' : 'border-slate-200 hover:bg-slate-50 dark:border-slate-700'}`}
                       >
-                        {type === 'cube' ? '立方体' : type === 'sphere' ? '球体' : type === 'cylinder' ? '圆柱' : '圆锥'}
+                        {type === 'cube' ? tr('立方体') : type === 'sphere' ? tr('球体') : type === 'cylinder' ? tr('圆柱') : tr('圆锥')}
                       </button>
                     ))}
                   </div>
                   
                   {/* STL Custom upload */}
                   <div className="mt-2">
-                    <FileDropzone compact accept=".stl" title="导入自定义 STL 模型" fileName={selectedShape.type === 'upload' ? selectedShape.uploadedFileName : undefined} disabled={isProcessing} onFiles={files => handleStlUpload(files, selectedShape.id)} />
+                    <FileDropzone compact accept=".stl" title={tr("导入自定义 STL 模型")} fileName={selectedShape.type === 'upload' ? selectedShape.uploadedFileName : undefined} disabled={isProcessing} onFiles={files => handleStlUpload(files, selectedShape.id)} />
                   </div>
                 </div>
 
@@ -1198,20 +1273,21 @@ export const CsgWorkbench: React.FC = () => {
                   <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-1.5 flex-none">
                     <h5 className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
                       <Ruler className="w-3 h-3 text-slate-400" />
-                      <span>实体精确量测尺寸 (包围盒 mm)</span>
+                      <span>{tr("实体包围盒（模型单位）")}</span>
                     </h5>
+                    <p className="text-[10px] leading-4 text-slate-500">{tr('STL 不包含单位；尺寸按模型坐标显示，导出前请确认切片软件的单位。')}</p>
                     <div className="grid grid-cols-3 gap-2 text-[11px] text-center">
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">长度 (X)</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.x} mm</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("长度 (X)")}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.x} u</span>
                       </div>
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">宽度 (Y)</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.y} mm</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("宽度 (Y)")}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.y} u</span>
                       </div>
                       <div className="bg-white dark:bg-slate-900 p-1 rounded border border-slate-100 dark:border-slate-800">
-                        <span className="block text-[9px] text-slate-400 font-semibold">高度 (Z)</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.z} mm</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold">{tr("高度 (Z)")}</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{selectedDim.z} u</span>
                       </div>
                     </div>
                   </div>
@@ -1219,13 +1295,14 @@ export const CsgWorkbench: React.FC = () => {
 
                 {/* Position parameters */}
                 <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">空间坐标位移 (位置)</h4>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("空间坐标位移 (位置)")}</h4>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 X</span>
+                      <span className="font-medium text-slate-500">{tr("位置 X")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posX}</span>
                     </div>
                     <input
+                      aria-label={tr('位置 X')}
                       type="range" min="-30" max="30" step="0.5"
                       value={selectedShape.posX}
                       onChange={(e) => handleParamChange(selectedShape.id, 'posX', parseFloat(e.target.value))}
@@ -1234,10 +1311,11 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 Y</span>
+                      <span className="font-medium text-slate-500">{tr("位置 Y")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posY}</span>
                     </div>
                     <input
+                      aria-label={tr('位置 Y')}
                       type="range" min="-30" max="30" step="0.5"
                       value={selectedShape.posY}
                       onChange={(e) => handleParamChange(selectedShape.id, 'posY', parseFloat(e.target.value))}
@@ -1246,10 +1324,11 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">位置 Z</span>
+                      <span className="font-medium text-slate-500">{tr("位置 Z")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.posZ}</span>
                     </div>
                     <input
+                      aria-label={tr('位置 Z')}
                       type="range" min="-30" max="30" step="0.5"
                       value={selectedShape.posZ}
                       onChange={(e) => handleParamChange(selectedShape.id, 'posZ', parseFloat(e.target.value))}
@@ -1262,59 +1341,55 @@ export const CsgWorkbench: React.FC = () => {
                 {selectedShape.id !== baseShapeId && (
                   <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-bold text-slate-500 uppercase">快速对齐 (调整至基准实体)</h4>
+                      <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("快速对齐 (调整至基准实体)")}</h4>
                     </div>
                     <div className="grid grid-cols-2 gap-1.5">
                       <button
                         onClick={() => alignShape('centerAll')}
                         className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200 font-semibold"
-                        title="完全居中"
+                        title={tr("完全居中")}
                       >
-                        完全居中对齐
-                      </button>
+                        {tr("完全居中对齐")}</button>
                       <button
                         onClick={() => alignShape('top')}
                         className="text-[10px] py-1 font-medium border border-slate-200 bg-slate-50/50 hover:bg-slate-100/50 rounded-lg transition-all dark:border-slate-700 dark:hover:bg-slate-800 cursor-pointer text-slate-700 dark:text-slate-200"
-                        title="叠放上方"
+                        title={tr("叠放上方")}
                       >
-                        叠放在正上方
-                      </button>
+                        {tr("叠放在正上方")}</button>
                     </div>
                     <div className="grid grid-cols-3 gap-1">
                       <button
                         onClick={() => alignShape('right')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="右贴齐"
+                        title={tr("右贴齐")}
                       >
-                        右侧贴合
-                      </button>
+                        {tr("右侧贴合")}</button>
                       <button
                         onClick={() => alignShape('left')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="左贴齐"
+                        title={tr("左贴齐")}
                       >
-                        左侧贴合
-                      </button>
+                        {tr("左侧贴合")}</button>
                       <button
                         onClick={() => alignShape('bottom')}
                         className="text-[9px] py-0.5 font-medium bg-slate-50 hover:bg-slate-100 rounded text-slate-600 dark:bg-slate-800 dark:text-slate-300 cursor-pointer text-center"
-                        title="底贴齐"
+                        title={tr("底贴齐")}
                       >
-                        底部贴合
-                      </button>
+                        {tr("底部贴合")}</button>
                     </div>
                   </div>
                 )}
 
                 {/* Scale parameters */}
                 <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">网格比例缩放 (尺寸)</h4>
+                  <h4 className="text-[10px] font-bold text-slate-500 uppercase">{tr("网格比例缩放 (尺寸)")}</h4>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 X</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 X")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleX}</span>
                     </div>
                     <input
+                      aria-label={tr('缩放 X')}
                       type="range" min="1" max="30" step="0.5"
                       value={selectedShape.scaleX}
                       onChange={(e) => handleParamChange(selectedShape.id, 'scaleX', parseFloat(e.target.value))}
@@ -1323,10 +1398,11 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 Y</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 Y")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleY}</span>
                     </div>
                     <input
+                      aria-label={tr('缩放 Y')}
                       type="range" min="1" max="30" step="0.5"
                       value={selectedShape.scaleY}
                       onChange={(e) => handleParamChange(selectedShape.id, 'scaleY', parseFloat(e.target.value))}
@@ -1335,10 +1411,11 @@ export const CsgWorkbench: React.FC = () => {
                   </div>
                   <div>
                     <div className="flex justify-between text-[11px] mb-0.5">
-                      <span className="font-medium text-slate-500">缩放 Z</span>
+                      <span className="font-medium text-slate-500">{tr("缩放 Z")}</span>
                       <span className="font-bold text-slate-900 dark:text-slate-100">{selectedShape.scaleZ}</span>
                     </div>
                     <input
+                      aria-label={tr('缩放 Z')}
                       type="range" min="1" max="30" step="0.5"
                       value={selectedShape.scaleZ}
                       onChange={(e) => handleParamChange(selectedShape.id, 'scaleZ', parseFloat(e.target.value))}
@@ -1350,35 +1427,32 @@ export const CsgWorkbench: React.FC = () => {
               </details>
             )}
 
-          </>
+          </fieldset>
         ) : (
           /* Result Export View */
           <div className="flex flex-col h-full justify-between gap-6">
             <div className="space-y-5">
               <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50 p-4 rounded-xl">
                 <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-                  批量布尔运算成功！
-                </h4>
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full" />{tr(resultStats?.triangles ? '批量布尔运算成功！' : '运算结果为空')}</h4>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-                  网格实体已在本地融合成型；这是实验级浏览器布尔结果，导出后请继续用修复工具或切片软件复核。
-                </p>
+                  {tr(resultStats?.triangles ? '网格实体已在本地融合成型；这是实验级浏览器布尔结果，导出后请继续用修复工具或切片软件复核。' : '请返回场景检查交集、减法顺序与形状位置，再重新计算。')}</p>
               </div>
 
               {/* Bounding Box Stats */}
               <div className="bg-slate-50 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2.5">
-                <h5 className="text-xs font-bold text-slate-500 uppercase">新合成网格拓扑</h5>
+                <h5 className="text-xs font-bold text-slate-500 uppercase">{tr("新合成网格拓扑")}</h5>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">总顶点数 (Vertices)</span>
+                  <span className="text-slate-500">{tr("总顶点数 (Vertices)")}</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.vertices}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">三角面数 (Triangles)</span>
+                  <span className="text-slate-500">{tr("三角面数 (Triangles)")}</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200">{resultStats?.triangles}</span>
                 </div>
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">制造可信度</span>
-                  <span className="font-semibold text-amber-600">需导出复检</span>
+                  <span className="text-slate-500">{tr("制造可信度")}</span>
+                  <span className="font-semibold text-amber-600">{tr("需导出复检")}</span>
                 </div>
               </div>
             </div>
@@ -1387,17 +1461,18 @@ export const CsgWorkbench: React.FC = () => {
             <div className="space-y-2 pt-6">
               <button
                 onClick={downloadStl}
+                disabled={!resultStats?.triangles}
                 className="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>导出 3D STL 文件 (二进制)</span>
+                <span>{tr("导出 3D STL 文件 (二进制)")}</span>
               </button>
               <button
                 onClick={handleReset}
                 className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 cursor-pointer"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>返回场景树大纲继续设计</span>
+                <span>{tr("返回场景树大纲继续设计")}</span>
               </button>
             </div>
           </div>

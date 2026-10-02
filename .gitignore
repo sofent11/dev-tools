@@ -27,3 +27,8 @@ playwright-report
 *.sln
 *.sw?
 .omo/
+
+# Reproducible runtime assets and test output
+public/vendor/
+test-results/
+playwright-report/

@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('URL inspection retains repeated parameters and decoded values', async ({ page }) => {
-  await page.goto('/tools/network-studio#urlparser');
+  await page.goto('/tools/network-diagnostics-studio#urlparser');
   await page.getByPlaceholder('https://example.com/path?key=value').fill('https://example.com/path?tag=design&tag=code&name=Ada%20Lovelace');
   await expect(page.locator('tbody tr')).toHaveCount(3);
   await expect(page.locator('td').filter({ hasText: /^tag$/ })).toHaveCount(2);
@@ -15,7 +15,7 @@ test('URL inspection retains repeated parameters and decoded values', async ({ p
 });
 
 test('PX REM conversion validates root size and converts both directions', async ({ page }) => {
-  await page.goto('/tools/css-studio#pxrem');
+  await page.goto('/tools/frontend-style-studio#pxrem');
   const fields=page.locator('input[type="number"]');
   await fields.nth(1).fill('32');
   await expect(fields.nth(2)).toHaveValue('2');
@@ -27,7 +27,7 @@ test('PX REM conversion validates root size and converts both directions', async
 });
 
 test('Mock records preview is tabular and download keeps generated format', async ({ page }) => {
-  await page.goto('/tools/system-ai-studio#lorem');
+  await page.goto('/tools/generator-utility-studio#lorem');
   await page.getByRole('button', {name:'用户列表模板', exact:true}).click();
   await page.getByRole('button', {name:'生成数据', exact:true}).click();
   await expect(page.locator('tbody tr')).toHaveCount(20);
@@ -39,7 +39,7 @@ test('Mock records preview is tabular and download keeps generated format', asyn
 });
 
 test('time studio selects tasks and unit switch preserves represented instant', async ({ page }) => {
-  await page.goto('/tools/system-ai-studio#unix-time-studio');
+  await page.goto('/tools/time-ops-studio#unix-time-studio');
   const timestamp=page.getByPlaceholder('例如: 1780148255');
   await timestamp.fill('1700000000');
   await page.locator('select:has(option[value="ms"])').selectOption('ms');
@@ -54,12 +54,12 @@ test('time studio selects tasks and unit switch preserves represented instant', 
 });
 
 test('QR generator provides PNG export and MIME search handles no results', async ({ page }) => {
-  await page.goto('/tools/system-ai-studio#qrcode');
+  await page.goto('/tools/generator-utility-studio#qrcode');
   await expect(page.getByAltText('二维码预览')).toBeVisible();
   const pending=page.waitForEvent('download');
   await page.getByRole('link', {name:'下载 PNG', exact:true}).click();
   expect((await pending).suggestedFilename()).toBe('qrcode.png');
-  await page.goto('/tools/file-studio#mime');
+  await page.goto('/tools/file-document-studio#mime');
   await page.getByPlaceholder('.svg / json / image').fill('svg');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await expect(page.locator('td').filter({hasText:/^image\/svg\+xml$/})).toBeVisible();
@@ -69,7 +69,7 @@ test('QR generator provides PNG export and MIME search handles no results', asyn
 
 test('SVG React component controls fit mobile and export the selected language', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/tools/css-studio#svg-react');
+  await page.goto('/tools/frontend-style-studio#svg-react');
   const componentName=page.getByPlaceholder('e.g. MyIcon');
   await componentName.fill('CompactIcon');
   const bounds=await componentName.boundingBox();

@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('studio picker searches, selects a tool, and supports browser back', async ({ page }) => {
-  await page.goto('/tools/file-studio#file-info');
+  await page.goto('/tools/file-document-studio#file-info');
   await page.locator('.studio-current').click();
   await page.getByLabel('查找当前工作室的工具', { exact: true }).fill('文件名');
   await page.locator('.studio-catalog-grid button').click();
@@ -25,21 +25,21 @@ test('studio picker searches, selects a tool, and supports browser back', async 
 });
 
 test('global search opens exact pages across studios and in the same studio', async ({ page }) => {
-  await page.goto('/tools/json-studio#json');
+  await page.goto('/tools/data-format-studio#json');
   const search = page.getByPlaceholder('搜索工作室或工具...');
   await search.fill('文件名');
   await page.locator('a.catalog-page-link').click();
-  await expect(page).toHaveURL(/\/tools\/file-studio#filename$/);
+  await expect(page).toHaveURL(/\/tools\/file-document-studio#filename$/);
   await expect(page.getByLabel('路径 / URL 列表', { exact: true })).toBeVisible();
   await search.fill('MIME');
   await page.locator('a.catalog-page-link').click();
-  await expect(page).toHaveURL(/\/tools\/file-studio#mime$/);
+  await expect(page).toHaveURL(/\/tools\/file-document-studio#mime$/);
   await expect(page.getByPlaceholder('.svg / json / image')).toBeVisible();
 });
 
 test('malformed path or hash falls back to a usable page', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/tools/file-studio#%');
+  await page.goto('/tools/file-document-studio#%');
   await expect(page.getByRole('button', { name: 'PDF 转图片', exact: true })).toBeVisible();
   await page.evaluate(() => { history.pushState(null, '', '/tools/%'); dispatchEvent(new PopStateEvent('popstate')); });
   await expect(page.locator('.studio-current')).toBeVisible();
@@ -47,7 +47,7 @@ test('malformed path or hash falls back to a usable page', async ({ page }) => {
 });
 
 test('file hashes keep separate content for files with the same name and size', async ({ page }) => {
-  await page.goto('/tools/file-studio#file-info');
+  await page.goto('/tools/file-document-studio#file-info');
   await page.locator('input[type="file"]').setInputFiles([
     { name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('first') },
     { name: 'same.txt', mimeType: 'text/plain', buffer: Buffer.from('other') },
@@ -59,7 +59,7 @@ test('file hashes keep separate content for files with the same name and size', 
 });
 
 test('file Base64 output switches from resource URL to plain payload', async ({ page }) => {
-  await page.goto('/tools/encoding-studio#file-base64');
+  await page.goto('/tools/encoding-binary-studio#file-base64');
   await page.locator('input[type="file"]').setInputFiles({ name: 'sample.txt', mimeType: 'text/plain', buffer: Buffer.from('Hello') });
   await expect(page.getByLabel('编码结果', { exact: true })).toHaveValue('data:text/plain;base64,SGVsbG8=');
   await page.getByRole('button', { name: 'Base64', exact: true }).click();
@@ -67,7 +67,7 @@ test('file Base64 output switches from resource URL to plain payload', async ({ 
 });
 
 test('watermark updates the canvas and exports the current result', async ({ page }) => {
-  await page.goto('/tools/image-studio#image-watermark');
+  await page.goto('/tools/image-media-studio#image-watermark');
   await page.locator('input[type="file"]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: await imageFixture(page) });
   const downloadButton = page.getByRole('button', { name: '下载 PNG', exact: true });
   await expect(downloadButton).toBeEnabled();
@@ -82,7 +82,7 @@ test('watermark updates the canvas and exports the current result', async ({ pag
 });
 
 test('visual centroid computes transparent image centers and resets background edits', async ({ page }) => {
-  await page.goto('/tools/image-studio#visual-centroid');
+  await page.goto('/tools/image-media-studio#visual-centroid');
   await page.locator('input[type="file"]').setInputFiles({ name: 'sample.png', mimeType: 'image/png', buffer: await imageFixture(page) });
   await expect(page.getByText('39.5, 39.5', { exact: true })).toHaveCount(2);
   await page.getByText('背景预处理', { exact: true }).click();
@@ -96,7 +96,7 @@ test('visual centroid computes transparent image centers and resets background e
 test('PDF image output supports a ZIP containing every rendered page', async ({ page }) => {
   test.setTimeout(60_000);
   const pdf = await PDFDocument.create(); pdf.addPage([120, 160]); pdf.addPage([120, 160]);
-  await page.goto('/tools/file-studio#pdf');
+  await page.goto('/tools/file-document-studio#pdf');
   await page.getByRole('button', { name: 'PDF 转图片', exact: true }).click();
   await page.locator('input[type="file"]').setInputFiles({ name: 'sample.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()) });
   await page.getByRole('button', { name: '开始转换为高清图片', exact: true }).click();
@@ -111,7 +111,7 @@ test('PDF image output supports a ZIP containing every rendered page', async ({ 
 });
 
 test('file name extraction preserves local fragments and extensionless dotfiles', async ({ page }) => {
-  await page.goto('/tools/file-studio#filename');
+  await page.goto('/tools/file-document-studio#filename');
   await page.getByLabel('路径 / URL 列表', { exact: true }).fill('/folder/report#2026.pdf\n/folder/.env\nhttps://example.com/app.js?version=2#code');
   await expect(page.locator('tbody tr').nth(0).locator('td')).toHaveText(['report#2026.pdf', 'report#2026', 'pdf']);
   await expect(page.locator('tbody tr').nth(1).locator('td')).toHaveText(['.env', '.env', '-']);
@@ -119,7 +119,7 @@ test('file name extraction preserves local fragments and extensionless dotfiles'
 });
 
 test('CSG enables only valid inputs and exports a completed worker result', async ({ page }) => {
-  await page.goto('/tools/cad-3d-studio#3d-csg');
+  await page.goto('/tools/cad-geometry-studio#3d-csg');
   const operation = page.getByRole('button', { name: '相减', exact: true });
   const tool = page.locator('input[type="checkbox"]').first();
   const enabledTool = page.locator('input[type="checkbox"]:enabled').first();

@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -154,9 +155,9 @@ const SegmentedControl = <T extends string>({
   options: Array<{ value: T; label: string; hint?: string }>;
   onChange: (value: T) => void;
   disabled?: boolean;
-}) => (
+}) => { useLocaleRender(); return (
   <div>
-    <FieldLabel>{label}</FieldLabel>
+    <FieldLabel>{tr(label)}</FieldLabel>
     <div className="grid gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map(option => (
         <button
@@ -171,19 +172,20 @@ const SegmentedControl = <T extends string>({
           }`}
           onClick={() => onChange(option.value)}
         >
-          <span className="block truncate">{option.label}</span>
-          {option.hint && <span className="mt-0.5 block truncate text-[10px] font-medium opacity-70">{option.hint}</span>}
+          <span className="block truncate">{tr(option.label)}</span>
+          {option.hint && <span className="mt-0.5 block truncate text-[10px] font-medium opacity-70">{tr(option.hint)}</span>}
         </button>
       ))}
     </div>
   </div>
-);
+); };
 
 const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default' | 'warn' | 'good' }> = ({
   label,
   value,
   tone = 'default',
 }) => {
+  useLocaleRender();
   const toneClass = {
     default: 'text-slate-950',
     warn: 'text-amber-700',
@@ -192,7 +194,7 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default'
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="text-xs font-medium text-slate-500">{tr(label)}</div>
       <div className={`mt-1 truncate text-base font-semibold ${toneClass}`}>{value}</div>
     </div>
   );
@@ -205,8 +207,8 @@ const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }
       <div className="tool-panel flex min-h-[13rem] flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
         <FileText className="h-9 w-9 text-slate-300" />
         <div>
-          <div className="text-sm font-semibold text-slate-700">暂无生成报告</div>
-          <div className="mt-1 text-xs">完成处理后会列出采样点、杆件数、输出面数和导出风险。</div>
+          <div className="text-sm font-semibold text-slate-700">{tr("暂无生成报告")}</div>
+          <div className="mt-1 text-xs">{tr("完成处理后会列出采样点、杆件数、输出面数和导出风险。")}</div>
         </div>
       </div>
     );
@@ -219,25 +221,24 @@ const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }
           <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
           <div>
             <div className="font-semibold">
-              {report.nonPrintable ? '平面预览厚度，导出仅供实验' : '已生成实验级镂空 STL'}
+              {report.nonPrintable ? tr('平面预览厚度，导出仅供实验') : tr('已生成实验级镂空 STL')}
             </div>
             <div className="mt-1 text-xs leading-5">
-              本工具生成的是表面杆件镂空效果，不执行实体布尔挖孔；打印前建议用修复工具或切片软件复检。
-            </div>
+              {tr("本工具生成的是表面杆件镂空效果，不执行实体布尔挖孔；打印前建议用修复工具或切片软件复检。")}</div>
           </div>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Metric label="采样点" value={formatNumber(report.seedPoints)} />
-        <Metric label="杆件" value={formatNumber(report.rods)} />
-        <Metric label="输出三角面" value={formatNumber(report.outputFaces)} />
-        <Metric label="导出大小" value={formatBytes(outputSize || report.outputBytes)} />
-        <Metric label="输入三角面" value={formatNumber(report.inputFaces)} />
-        <Metric label="输出顶点" value={formatNumber(report.outputVertices)} />
-        <Metric label="杆半径" value={formatSize(report.radius)} tone={report.nonPrintable ? 'warn' : 'default'} />
+        <Metric label={tr("采样点")} value={formatNumber(report.seedPoints)} />
+        <Metric label={tr("杆件")} value={formatNumber(report.rods)} />
+        <Metric label={tr("输出三角面")} value={formatNumber(report.outputFaces)} />
+        <Metric label={tr("导出大小")} value={formatBytes(outputSize || report.outputBytes)} />
+        <Metric label={tr("输入三角面")} value={formatNumber(report.inputFaces)} />
+        <Metric label={tr("输出顶点")} value={formatNumber(report.outputVertices)} />
+        <Metric label={tr("杆半径")} value={formatSize(report.radius)} tone={report.nonPrintable ? 'warn' : 'default'} />
         <Metric
-          label="包围盒"
+          label={tr("包围盒")}
           value={`${formatSize(report.inputBounds.size[0])} x ${formatSize(report.inputBounds.size[1])} x ${formatSize(report.inputBounds.size[2])}`}
         />
       </div>
@@ -266,6 +267,7 @@ const MeshPreview: React.FC<{
   mode: PreviewMode;
   isProcessing: boolean;
 }> = ({ original, lattice, mode, isProcessing }) => {
+  useLocaleRender();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<Scene | null>(null);
   const rendererRef = useRef<WebGLRenderer | null>(null);
@@ -432,16 +434,15 @@ const MeshPreview: React.FC<{
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 text-center text-slate-500">
           <Boxes className="h-10 w-10 text-slate-300" />
           <div>
-            <div className="text-sm font-semibold text-slate-700">等待 STL 模型</div>
-            <div className="mt-1 text-xs">上传并生成后会显示可旋转镂空预览</div>
+            <div className="text-sm font-semibold text-slate-700">{tr("等待 STL 模型")}</div>
+            <div className="mt-1 text-xs">{tr("上传并生成后会显示可旋转镂空预览")}</div>
           </div>
         </div>
       )}
       {isProcessing && (
         <div className="absolute right-3 top-3 z-20 inline-flex items-center gap-2 rounded-lg border border-cyan-100 bg-white/90 px-3 py-2 text-xs font-medium text-cyan-800 shadow-sm backdrop-blur">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          生成中
-        </div>
+          {tr("生成中")}</div>
       )}
     </div>
   );
@@ -601,30 +602,30 @@ export const VoronoiLatticeTool: React.FC = () => {
     <div className="grid min-w-0 gap-4 xl:grid-cols-[23rem_minmax(0,1fr)] xl:items-start">
       <div className="xl:col-span-2"><WorkflowSteps steps={['选择 STL 模型', '设置镂空风格', '预览并导出']} active={report && !staleOutput ? 2 : file ? 1 : 0} /></div>
       <Card className="min-w-0">
-        <CardHeader title="STL 镂空/Voronoi" description={t('选择源模型、设置镂空风格，再生成表面杆件与实验级 STL。')} />
+        <CardHeader title={tr("STL 镂空/Voronoi")} description={t('选择源模型、设置镂空风格，再生成表面杆件与实验级 STL。')} />
         <CardContent className="space-y-4">
-          <FileDropzone accept=".stl,model/stl,application/sla" title="选择 STL 文件或拖到这里" hint="支持 ASCII / 二进制 STL，在浏览器本地处理" fileName={file?.name} disabled={processing} onFiles={files => handleFile(files[0])} />
+          <FileDropzone accept=".stl,model/stl,application/sla" title={tr("选择 STL 文件或拖到这里")} hint={tr("支持 ASCII / 二进制 STL，在浏览器本地处理")} fileName={file?.name} disabled={processing} onFiles={files => handleFile(files[0])} />
           {file && <p className="break-all text-xs text-slate-500">{file.name} · {formatBytes(file.size)}</p>}
           {sharedMesh && <div className="space-y-2 rounded-md border border-primary-100 bg-primary-50/30 p-3"><p className="text-xs leading-6 text-slate-600">{t('也可使用其他 CAD 工具已处理的共享模型。')}</p><Button variant="secondary" disabled={processing} onClick={() => importSharedMesh(sharedMesh)} className="w-full" icon={<Boxes className="h-4 w-4" />}>{t('导入共享网格')}<span className="max-w-36 truncate" title={sharedMesh.fileName}>{sharedMesh.fileName}</span></Button></div>}
-          {error && <WorkflowNotice tone="error" onDismiss={() => setError('')}>{error}</WorkflowNotice>}
+          {error && <WorkflowNotice tone="error" onDismiss={() => setError('')}>{tr(error)}</WorkflowNotice>}
           <div><FieldLabel>{t('镂空风格预设')}</FieldLabel><Select aria-label={t('镂空风格预设')} value={selectedPreset} disabled={processing} onChange={event => { const preset = latticePresets.find(item => item.id === event.target.value); if (preset) setOptions({ ...preset.options }); }}>{latticePresets.map(preset => <option key={preset.id} value={preset.id}>{t(preset.label)}</option>)}<option value="custom" disabled>{t('自定义设置')}</option></Select></div>
           <details className="rounded-md border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">{t('自定义孔数量与厚度')}</summary><div className="mt-3 space-y-4">
-            <SegmentedControl label="孔数量" value={options.holeDensity} options={densityOptions} disabled={processing} onChange={value => updateOption('holeDensity', value)} />
-            <SegmentedControl label="厚度" value={options.thickness} options={thicknessOptions} disabled={processing} onChange={value => updateOption('thickness', value)} />
+            <SegmentedControl label={tr("孔数量")} value={options.holeDensity} options={densityOptions} disabled={processing} onChange={value => updateOption('holeDensity', value)} />
+            <SegmentedControl label={tr("厚度")} value={options.thickness} options={thicknessOptions} disabled={processing} onChange={value => updateOption('thickness', value)} />
           </div></details>
           {options.thickness === 'plane' && <WorkflowNotice>{t('平面厚度仅用于视觉实验，不能视为可打印的实体模型。')}</WorkflowNotice>}
           {staleOutput && <WorkflowNotice>{t('镂空参数已变化。当前预览是上次结果，请重新生成后导出。')}</WorkflowNotice>}
-          <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />} className="w-full">{staleOutput ? t('重新生成镂空') : '生成镂空'}</Button>
-          <div role="status" className="flex items-start gap-2 rounded-md bg-slate-50 p-3 text-xs leading-6 text-slate-600">{processing && <Loader2 className="mt-1 h-4 w-4 shrink-0 animate-spin" />}<span>{statusText}</span></div>
+          <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />} className="w-full">{staleOutput ? t('重新生成镂空') : tr('生成镂空')}</Button>
+          <div role="status" className="flex items-start gap-2 rounded-md bg-slate-50 p-3 text-xs leading-6 text-slate-600">{processing && <Loader2 className="mt-1 h-4 w-4 shrink-0 animate-spin" />}<span>{tr(statusText)}</span></div>
           <p className="text-xs leading-6 text-slate-500">{t('生成表面杆件效果，不执行实体布尔挖孔；打印前请用切片软件复检。')}</p>
         </CardContent>
       </Card>
       <Card className="min-w-0">
-        <CardHeader title="镂空预览与报告" description="旋转比较原模与镂空结果；生成后检查报告并导出。" actions={<Button variant="secondary" onClick={handleDownload} disabled={!stlBuffer || processing || staleOutput} icon={<Download className="h-4 w-4" />}>下载 STL</Button>} />
+        <CardHeader title={tr("镂空预览与报告")} description={tr("旋转比较原模与镂空结果；生成后检查报告并导出。")} actions={<Button variant="secondary" onClick={handleDownload} disabled={!stlBuffer || processing || staleOutput} icon={<Download className="h-4 w-4" />}>{tr("下载 STL")}</Button>} />
         <CardContent className="space-y-4">
           {report && <p className="flex min-w-0 items-center gap-2 break-all text-xs text-slate-500"><Eye className="h-4 w-4 shrink-0" />{report.fileName}</p>}
           {staleOutput && <WorkflowNotice>{t('此预览对应上次镂空参数，导出已暂停。')}</WorkflowNotice>}
-          <SegmentedControl<PreviewMode> label="预览" value={viewMode} options={viewModeOptions} disabled={!original && !lattice} onChange={setViewMode} />
+          <SegmentedControl<PreviewMode> label={tr("预览")} value={viewMode} options={viewModeOptions} disabled={!original && !lattice} onChange={setViewMode} />
           <MeshPreview original={original} lattice={lattice} mode={viewMode} isProcessing={processing} />
           <ReportPanel report={report} outputSize={outputSize} />
         </CardContent>

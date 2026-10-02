@@ -5,8 +5,6 @@ import {
   type RuntimeAssetLoaderState,
 } from './runtimeAssetLoader';
 
-const CACHE_NAME = 'devtoolbox-runtime-assets-cache';
-
 export type RemoteRuntimeStatus = RuntimeAssetLoaderState['status'];
 export type RemoteRuntimeEvent = {
   src: string;
@@ -34,11 +32,6 @@ export interface LoadScriptOptions {
 
 export const registerCacheProgressListener = registerRuntimeAssetProgressListener;
 export const unregisterCacheProgressListener = unregisterRuntimeAssetProgressListener;
-export const installCdnCacheInterceptor = () => {
-  if (typeof window === 'undefined' || !window.caches) return;
-  void caches.open(CACHE_NAME);
-};
-
 export const loadScriptWithCache = (src: string, options: LoadScriptOptions = {}) =>
   loadRuntimeAsset<void>({
     url: src,

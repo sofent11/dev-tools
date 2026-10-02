@@ -1,0 +1,674 @@
+[
+  {
+    "studioId": "data-format-studio",
+    "id": "json",
+    "name": "JSON 格式化",
+    "description": "美化与压缩",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#json"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "json2ts",
+    "name": "JSON 转代码",
+    "description": "转 TS / Go / Java / Pydantic / Rust / SQL",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#json2ts"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "json-schema",
+    "name": "JSON Schema",
+    "description": "生成与校验 JSON Schema 规范",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#json-schema"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "xml",
+    "name": "XML 工具",
+    "description": "格式化 / JSON 转换",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#xml"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "yaml",
+    "name": "YAML ↔ JSON",
+    "description": "YAML / JSON 互转",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#yaml"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "csv",
+    "name": "CSV ↔ JSON",
+    "description": "CSV / JSON 互转",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#csv"
+  },
+  {
+    "studioId": "data-format-studio",
+    "id": "json-diff",
+    "name": "JSON 结构化对比",
+    "description": "树状增删改对比",
+    "stage": "supported",
+    "route": "/tools/data-format-studio#json-diff"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "github-repos",
+    "name": "GitHub 仓库浏览器",
+    "description": "用户/组织仓库缓存、筛选与 Release 资产检查",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#github-repos"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "github-org-research",
+    "name": "GitHub 组织关联研究",
+    "description": "基于验证域名和共享成员分析组织关联",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#github-org-research"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "repo-folder-download",
+    "name": "仓库文件夹下载",
+    "description": "GitHub 与 HuggingFace 文件夹递归选择下载",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#repo-folder-download"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "nuget-deps",
+    "name": "NuGet 依赖树",
+    "description": "递归依赖、命名空间过滤和 verified prefix 标记",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#nuget-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "pypi-deps",
+    "name": "PyPI 依赖树",
+    "description": "Python 包依赖、extras 和维护者过滤",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#pypi-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "rust-deps",
+    "name": "Rust Crate 依赖树",
+    "description": "crates.io 递归依赖和深度控制",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#rust-deps"
+  },
+  {
+    "studioId": "repo-dependency-studio",
+    "id": "nuget-signature",
+    "name": "NuGet 签名检查",
+    "description": "本地解析 nupkg 签名、证书链和指纹",
+    "stage": "supported",
+    "route": "/tools/repo-dependency-studio#nuget-signature"
+  },
+  {
+    "studioId": "sql-database-studio",
+    "id": "sql-format",
+    "name": "SQL 格式化",
+    "description": "方言格式化 / 压缩",
+    "stage": "supported",
+    "route": "/tools/sql-database-studio#sql-format"
+  },
+  {
+    "studioId": "sql-database-studio",
+    "id": "sqlite-sandbox",
+    "name": "SQLite WASM 沙箱",
+    "description": "离线 SQLite 数据库",
+    "stage": "supported",
+    "route": "/tools/sql-database-studio#sqlite-sandbox"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "case",
+    "name": "大小写转换",
+    "description": "驼峰/下划线/大写",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#case"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "text-manip",
+    "name": "文本处理",
+    "description": "去重/排序/全半角",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#text-manip"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "slug",
+    "name": "Slug 生成",
+    "description": "标题转 URL Slug",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#slug"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "stats",
+    "name": "文本统计",
+    "description": "字数/行数统计",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#stats"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "regex",
+    "name": "正则测试",
+    "description": "JS 正则表达式测试",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#regex"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "diff",
+    "name": "文本对比",
+    "description": "简易行对比与节点折叠",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#diff"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "markdown",
+    "name": "Markdown 预览",
+    "description": "Markdown 转 HTML",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#markdown"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "html-markdown",
+    "name": "HTML 转 Markdown",
+    "description": "HTML 片段转 Markdown",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#html-markdown"
+  },
+  {
+    "studioId": "text-markup-studio",
+    "id": "html-format",
+    "name": "HTML 格式化/压缩器",
+    "description": "HTML 美化与压缩",
+    "stage": "supported",
+    "route": "/tools/text-markup-studio#html-format"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "unicode-inspector",
+    "name": "Unicode 字符检查器",
+    "description": "码点、字符名、区块和 Emoji 序列分析",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#unicode-inspector"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "hex-text",
+    "name": "Hex 字节转文本",
+    "description": "按字符编码解码十六进制字节",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#hex-text"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "base64",
+    "name": "Base64 转换",
+    "description": "文本编码与解码",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#base64"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "file-base64",
+    "name": "文件转 Base64",
+    "description": "文件转 Data URL",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#file-base64"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "hex-viewer",
+    "name": "十六进制 Hex 查看器",
+    "description": "文件字节级分析与魔数检测",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#hex-viewer"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "url",
+    "name": "URL 编码",
+    "description": "URL 参数转义",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#url"
+  },
+  {
+    "studioId": "encoding-binary-studio",
+    "id": "escape",
+    "name": "HTML/Uni 转义",
+    "description": "HTML / Unicode",
+    "stage": "supported",
+    "route": "/tools/encoding-binary-studio#escape"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "http",
+    "name": "HTTP 请求",
+    "description": "简易 HTTP Client",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#http"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "websocket-sse",
+    "name": "WebSocket & SSE 沙箱",
+    "description": "实时双向长连接调试",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#websocket-sse"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "ping",
+    "name": "Ping 延迟诊断",
+    "description": "本地网络时延与抖动探针",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#ping"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "urlparser",
+    "name": "URL 解析器",
+    "description": "解析 URL 结构",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#urlparser"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "useragent",
+    "name": "User Agent",
+    "description": "UA 解析",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#useragent"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "ip",
+    "name": "IP 信息",
+    "description": "本机 IP 查询",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#ip"
+  },
+  {
+    "studioId": "network-diagnostics-studio",
+    "id": "device",
+    "name": "设备信息",
+    "description": "浏览器/系统参数",
+    "stage": "supported",
+    "route": "/tools/network-diagnostics-studio#device"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "pxrem",
+    "name": "PX/REM 转换",
+    "description": "CSS 单位计算",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#pxrem"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "color",
+    "name": "颜色转换",
+    "description": "Hex / RGB / HSL",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#color"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "css-generator",
+    "name": "CSS 可视化生成器",
+    "description": "阴影/渐变/圆角/毛玻璃",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#css-generator"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "svg-css",
+    "name": "SVG 转 CSS",
+    "description": "SVG Data URL",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#svg-css"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "svg-optimizer",
+    "name": "SVG 智能压缩",
+    "description": "SVGO 本地无损优化",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#svg-optimizer"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "html-jsx",
+    "name": "HTML 转 JSX",
+    "description": "原生 HTML 转 React JSX",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#html-jsx"
+  },
+  {
+    "studioId": "frontend-style-studio",
+    "id": "svg-react",
+    "name": "SVG 转 React",
+    "description": "SVG 转 JSX/TSX 组件",
+    "stage": "supported",
+    "route": "/tools/frontend-style-studio#svg-react"
+  },
+  {
+    "studioId": "file-document-studio",
+    "id": "pdf",
+    "name": "PDF 工具箱",
+    "description": "合并 / 转图片",
+    "stage": "supported",
+    "route": "/tools/file-document-studio#pdf"
+  },
+  {
+    "studioId": "file-document-studio",
+    "id": "file-info",
+    "name": "文件属性信息",
+    "description": "大小/类型/哈希检测",
+    "stage": "supported",
+    "route": "/tools/file-document-studio#file-info"
+  },
+  {
+    "studioId": "file-document-studio",
+    "id": "filename",
+    "name": "文件名路径提取",
+    "description": "从路径与 URL 中快速提取",
+    "stage": "supported",
+    "route": "/tools/file-document-studio#filename"
+  },
+  {
+    "studioId": "file-document-studio",
+    "id": "mime",
+    "name": "MIME 类型速查",
+    "description": "扩展名与 MIME 查询",
+    "stage": "supported",
+    "route": "/tools/file-document-studio#mime"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "image",
+    "name": "图片压缩/转换",
+    "description": "压缩 / 格式转换",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#image"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "background-removal",
+    "name": "色键抠图与精修",
+    "description": "背景色去除、画笔擦除与恢复",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#background-removal"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "image-base64",
+    "name": "图片转 Base64",
+    "description": "图片 Data URL",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#image-base64"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "image-colors",
+    "name": "图片颜色提取",
+    "description": "主色与色板",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#image-colors"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "image-watermark",
+    "name": "图片水印",
+    "description": "Canvas 文字水印",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#image-watermark"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "visual-centroid",
+    "name": "视觉质心计算器",
+    "description": "透明度阈值、包围盒中心与背景移除辅助",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#visual-centroid"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "perler-beads",
+    "name": "拼豆图纸生成",
+    "description": "图片转拼豆网格 (Worker 异步加速)",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#perler-beads"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "headshot",
+    "name": "大头照提取",
+    "description": "自动人脸/肩部裁剪",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#headshot"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "animation-frame",
+    "name": "动画帧提取",
+    "description": "动图与 Lottie 逐帧提取",
+    "stage": "supported",
+    "route": "/tools/image-media-studio#animation-frame"
+  },
+  {
+    "studioId": "image-media-studio",
+    "id": "video-download",
+    "name": "视频下载解析",
+    "description": "解析视频直链 / HLS 视频流",
+    "stage": "experimental",
+    "route": "/tools/image-media-studio#video-download"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "jwt",
+    "name": "JWT 解析",
+    "description": "载荷与时间声明",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#jwt"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "hash",
+    "name": "Hash 生成",
+    "description": "SHA1, SHA256, SHA512",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#hash"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "hmac",
+    "name": "HMAC 计算",
+    "description": "HMAC-SHA256 计算",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#hmac"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "password",
+    "name": "密码生成",
+    "description": "高强度随机密码与强度审计",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#password"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "basic-auth",
+    "name": "Basic Auth 生成器",
+    "description": "Authorization Header",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#basic-auth"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "cert-parser",
+    "name": "PEM / 证书解析",
+    "description": "证书与密钥结构、算法参数和公私钥配对",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#cert-parser"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "asymmetric-key",
+    "name": "非对称密钥转换",
+    "description": "PEM / JWK / DER 互转与参数检查",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#asymmetric-key"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "pgp-keymaster",
+    "name": "GPG / PGP 密钥中心",
+    "description": "离线 GPG 密钥对生成与加解密",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#pgp-keymaster"
+  },
+  {
+    "studioId": "security-key-studio",
+    "id": "sm-crypto",
+    "name": "国密算法套件 (SM2/3/4)",
+    "description": "中国商用国密离线加密/签名/哈希套件",
+    "stage": "supported",
+    "route": "/tools/security-key-studio#sm-crypto"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "arithmancy",
+    "name": "数字占卜",
+    "description": "生命路径、姓名数字与个人年解读",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#arithmancy"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "uuid",
+    "name": "UUID 生成",
+    "description": "随机 V4 UUIDs",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#uuid"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "random-str",
+    "name": "随机字符串",
+    "description": "随机 String / NanoID",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#random-str"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "random-number",
+    "name": "随机数生成器",
+    "description": "范围随机整数",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#random-number"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "lorem",
+    "name": "占位与 Mock 数据",
+    "description": "中英文假文及高级 JSON 结构 API 模拟数据",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#lorem"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "rmb-uppercase",
+    "name": "人民币大写",
+    "description": "金额转中文大写",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#rmb-uppercase"
+  },
+  {
+    "studioId": "generator-utility-studio",
+    "id": "qrcode",
+    "name": "二维码生成",
+    "description": "文本/WiFi/名片生成器",
+    "stage": "supported",
+    "route": "/tools/generator-utility-studio#qrcode"
+  },
+  {
+    "studioId": "time-ops-studio",
+    "id": "unix-time-studio",
+    "name": "时间与时区工作室",
+    "description": "高精度秒级/毫秒时间戳转换、多维世界时钟、Cron 执行预测与日期计算",
+    "stage": "supported",
+    "route": "/tools/time-ops-studio#unix-time-studio"
+  },
+  {
+    "studioId": "time-ops-studio",
+    "id": "cron",
+    "name": "Cron 表达式",
+    "description": "生成 / 解析 / 预览",
+    "stage": "supported",
+    "route": "/tools/time-ops-studio#cron"
+  },
+  {
+    "studioId": "time-ops-studio",
+    "id": "chmod",
+    "name": "Chmod 计算",
+    "description": "Linux 权限计算",
+    "stage": "supported",
+    "route": "/tools/time-ops-studio#chmod"
+  },
+  {
+    "studioId": "cad-geometry-studio",
+    "id": "jewelry",
+    "name": "文字首饰定制",
+    "description": "文字首饰生成器与 3D PBR 实时预览及 DXF/STL 导出",
+    "stage": "experimental",
+    "route": "/tools/cad-geometry-studio#jewelry"
+  },
+  {
+    "studioId": "cad-geometry-studio",
+    "id": "stl-repair",
+    "name": "STL 修复/降面",
+    "description": "本地清理 / 降面 / 导出及 Worker 进度反馈",
+    "stage": "experimental",
+    "route": "/tools/cad-geometry-studio#stl-repair"
+  },
+  {
+    "studioId": "cad-geometry-studio",
+    "id": "stl-voronoi",
+    "name": "STL 镂空/Voronoi",
+    "description": "本地蜂窝镂空 / STL 预览与导出",
+    "stage": "experimental",
+    "route": "/tools/cad-geometry-studio#stl-voronoi"
+  },
+  {
+    "studioId": "cad-geometry-studio",
+    "id": "3d-csg",
+    "name": "3D 实体布尔运算",
+    "description": "网页端 3D 实体交互式并集、差集、交集运算与 STL 导出",
+    "stage": "experimental",
+    "route": "/tools/cad-geometry-studio#3d-csg"
+  },
+  {
+    "studioId": "cad-geometry-studio",
+    "id": "smart-geometry",
+    "name": "小学几何练习",
+    "description": "自由作图与 JSON 步骤讲解",
+    "stage": "experimental",
+    "route": "/tools/cad-geometry-studio#smart-geometry"
+  }
+]

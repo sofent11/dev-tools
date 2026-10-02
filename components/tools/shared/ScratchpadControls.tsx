@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { ClipboardList } from 'lucide-react';
 import { Select } from '../../ui/ToolUi';
@@ -47,6 +48,7 @@ export const ScratchpadPicker: React.FC<{
   onError,
   onLoad,
 }) => {
+  useLocaleRender();
   const items = useScratchpadStore(state => state.items);
   const compatibleItems = items.filter(filter);
 
@@ -56,7 +58,7 @@ export const ScratchpadPicker: React.FC<{
     <label className="grid gap-1.5 text-xs font-medium text-slate-500">
       <span className="inline-flex items-center gap-1.5">
         <ClipboardList className="h-3.5 w-3.5" />
-        {label}
+        {tr(label)}
       </span>
       <Select
         value=""
@@ -93,8 +95,8 @@ export const ScratchpadPicker: React.FC<{
 export const ScratchpadActionBar: React.FC<{
   children?: React.ReactNode;
   className?: string;
-}> = ({ children, className = '' }) => (
+}> = ({ children, className = '' }) => { useLocaleRender(); return (
   <div className={`rounded-xl border border-slate-200 bg-slate-50 p-3 ${className}`}>
     {children}
   </div>
-);
+); };

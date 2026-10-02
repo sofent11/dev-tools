@@ -1,0 +1,80 @@
+{
+  "pdfjs": {
+    "path": "vendor/pdfjs-dist/6.3.289/pdf.min.mjs",
+    "package": "pdfjs-dist",
+    "version": "6.3.289",
+    "sha256": "f80490490320511e5df18c580b9edd6b5db8058dceebaf6f161992e0a964b9e2"
+  },
+  "pdfWorker": {
+    "path": "vendor/pdfjs-dist/6.3.289/pdf.worker.min.mjs",
+    "package": "pdfjs-dist",
+    "version": "6.3.289",
+    "sha256": "8ab0e5e30031b4a06ecfddd5ae9562f0227f830ee7ec9ed1a968b134243d2386"
+  },
+  "openpgp": {
+    "path": "vendor/openpgp/6.3.1/openpgp.min.js",
+    "package": "openpgp",
+    "version": "6.3.1",
+    "sha256": "9736f49e81790af972029cd8416a8f9e5be7c4bddfb041676ab93fcad8332f5e"
+  },
+  "forge": {
+    "path": "vendor/node-forge/1.4.0/forge.min.js",
+    "package": "node-forge",
+    "version": "1.4.0",
+    "sha256": "d9b9074e6861200d676e25dcfe97889db5e8f4150bb766d29c491ad709a51b58"
+  },
+  "zxcvbn": {
+    "path": "vendor/zxcvbn/4.4.2/zxcvbn.js",
+    "package": "zxcvbn",
+    "version": "4.4.2",
+    "sha256": "f42c651f40506acb6b662490f338dd47a5951d3312039c4ab8fe5090484f351a"
+  },
+  "lottie": {
+    "path": "vendor/lottie-web/5.13.0/lottie.min.js",
+    "package": "lottie-web",
+    "version": "5.13.0",
+    "sha256": "2eb762973aec914d981f426123040bfac9d26217239605e225ddc7cee17618ac"
+  },
+  "imageCompression": {
+    "path": "vendor/browser-image-compression/2.0.2/browser-image-compression.js",
+    "package": "browser-image-compression",
+    "version": "2.0.2",
+    "sha256": "c6713a21756570af4c230f706faac4f0187845928bd14fd5910210d1cdc6fb87"
+  },
+  "vision_wasm_internal.js": {
+    "path": "vendor/@mediapipe-tasks-vision/0.10.22-rc.20250304/vision_wasm_internal.js",
+    "package": "@mediapipe/tasks-vision",
+    "version": "0.10.22-rc.20250304",
+    "sha256": "4a97e2520ba506c680ecd6ba6acfb146888afa0e2746d57f205352bc6ebb82eb"
+  },
+  "vision_wasm_internal.wasm": {
+    "path": "vendor/@mediapipe-tasks-vision/0.10.22-rc.20250304/vision_wasm_internal.wasm",
+    "package": "@mediapipe/tasks-vision",
+    "version": "0.10.22-rc.20250304",
+    "sha256": "f00ec4731faa23b3e714d00e88d4d10e2df5c0a427d3a2b4ae6e3526fdd14ef7"
+  },
+  "vision_wasm_nosimd_internal.js": {
+    "path": "vendor/@mediapipe-tasks-vision/0.10.22-rc.20250304/vision_wasm_nosimd_internal.js",
+    "package": "@mediapipe/tasks-vision",
+    "version": "0.10.22-rc.20250304",
+    "sha256": "927def7b465c51b86e4b3060f93646aca4e27121f4b8fc0483786e407ea9cf1f"
+  },
+  "vision_wasm_nosimd_internal.wasm": {
+    "path": "vendor/@mediapipe-tasks-vision/0.10.22-rc.20250304/vision_wasm_nosimd_internal.wasm",
+    "package": "@mediapipe/tasks-vision",
+    "version": "0.10.22-rc.20250304",
+    "sha256": "3821ea9b1f7fb8c549ef2a064ef5c85750bf375c545a49fd6eea0df44a95f1f4"
+  },
+  "smCrypto": {
+    "path": "vendor/sm-crypto/0.5.7/sm-crypto.js",
+    "package": "sm-crypto",
+    "version": "0.5.7",
+    "sha256": "699b07424309999e563654efb72952ef4f70069b0b62666b1347b13d3eec8584"
+  },
+  "gifuct": {
+    "path": "vendor/gifuct-js/2.1.2/gifuct.js",
+    "package": "gifuct-js",
+    "version": "2.1.2",
+    "sha256": "59a43a11762df55e52123f28f1c91a6de89045ad8ccdf57741239703bf0559dc"
+  }
+}

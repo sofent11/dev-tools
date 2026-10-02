@@ -140,7 +140,7 @@ const setJsonChild = (container: MutableJsonContainer, segment: string | number,
   if (Array.isArray(container)) {
     container[Number(segment)] = value;
   } else {
-    container[String(segment)] = value;
+    Object.defineProperty(container, String(segment), { value, enumerable: true, writable: true, configurable: true });
   }
 };
 

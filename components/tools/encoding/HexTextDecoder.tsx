@@ -1,3 +1,5 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
+import { useDraftState } from '../shared/useDraftState';
 import React, { useMemo, useState } from 'react';
 import { useI18n } from '../../../src/i18n';
 import { Card, CardContent } from '../../ui/Card';
@@ -20,6 +22,7 @@ const copyText = {
     illegal: '包含非十六进制字符。',
     odd: 'Hex 长度必须是偶数。',
     failed: '当前字节序列无法用所选编码解码。',
+    large: '输入不能超过 1 MB。',
   },
   'en-US': {
     title: 'Hex Bytes to Text',
@@ -36,26 +39,30 @@ const copyText = {
     illegal: 'The input contains non-hex characters.',
     odd: 'Hex input must contain an even number of digits.',
     failed: 'The byte sequence cannot be decoded with the selected encoding.',
+    large: 'Input must not exceed 1 MB.',
   },
 } as const;
 
 type HexTextCopy = Record<keyof typeof copyText['zh-CN'], string>;
 
 const errorMessage = (code: string, c: HexTextCopy) => {
+  if (code === 'HEX_TOO_LARGE') return c.large;
   if (code === 'HEX_ILLEGAL_CHARACTER') return c.illegal;
   if (code === 'HEX_ODD_LENGTH') return c.odd;
   return c.failed;
 };
 
 export const HexTextDecoder: React.FC = () => {
+  useLocaleRender();
   const { locale } = useI18n();
   const c: HexTextCopy = copyText[locale];
-  const [input, setInput] = useState<string>('');
+  const [input, setInput] = useDraftState<string>('components/tools/encoding/HexTextDecoder.tsx:HexTextDecoder:input', '');
   const [encoding, setEncoding] = useState<HexTextEncoding>('utf-8');
 
   const result = useMemo(() => {
     try {
       if (!input.trim()) return { text: '', bytes: 0, hex: '', error: '' };
+      if (input.length > 1024 * 1024) throw new Error('HEX_TOO_LARGE');
       const decoded = decodeHexText(input, encoding);
       return { text: decoded.text, bytes: decoded.byteLength, hex: Array.from(decoded.bytes, byte => byte.toString(16).padStart(2, '0').toUpperCase()).join(' '), error: '' };
     } catch (error) {
@@ -66,6 +73,6 @@ export const HexTextDecoder: React.FC = () => {
   return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
     <ContentToolbar onSample={() => { setEncoding('utf-8'); setInput(c.sample); }} onClear={() => setInput('')} status={`${result.bytes.toLocaleString()} ${c.bytes}`}><label className="flex items-center gap-2 text-sm">{c.encoding}<select aria-label={c.encoding} value={encoding} onChange={event => setEncoding(event.target.value as HexTextEncoding)} className="rounded-lg border p-2">{HEX_TEXT_ENCODINGS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></ContentToolbar>
     <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={c.input} value={input} onChange={setInput} placeholder={c.hint} error={result.error ? errorMessage(result.error, c) : ''} /><ContentEditor label={c.output} value={result.text} output placeholder={c.empty} /></div>
-    {result.hex && <details className="tool-panel p-3"><summary className="cursor-pointer text-xs text-slate-500">规范化字节序列</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{result.hex}</pre></details>}
+    {result.hex && <details className="tool-panel p-3"><summary className="cursor-pointer text-xs text-slate-500">{tr("规范化字节序列")}</summary><pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{result.hex}</pre></details>}
   </CardContent></Card>;
 };

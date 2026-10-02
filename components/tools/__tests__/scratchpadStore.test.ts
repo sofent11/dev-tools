@@ -13,15 +13,17 @@ vi.stubGlobal('localStorage', {
   removeItem: vi.fn(),
 });
 
-const { saveEntity, deleteEntity } = await import('../shared/scratchpadDb');
-const { useScratchpadStore } = await import('../shared/scratchpadStore');
+const { saveEntity, getEntity } = await import('../shared/scratchpadDb');
+const { useScratchpadStore, getScratchpadItemContent } = await import('../shared/scratchpadStore');
 
 describe('scratchpad store degraded persistence', () => {
+  it('propagates missing binary content instead of exporting an empty file', async () => {
+    vi.mocked(getEntity).mockRejectedValueOnce(new Error('missing content'));
+    await expect(getScratchpadItemContent({ id: 'missing', name: 'missing.bin', type: 'binary', content: '', isBinary: true, size: 10, timestamp: 1 })).rejects.toThrow('missing content');
+  });
   beforeEach(() => {
     useScratchpadStore.setState({ items: [], storageStatus: 'ok', lastStorageError: undefined });
     vi.mocked(saveEntity).mockReset();
-    vi.mocked(deleteEntity).mockReset();
-    vi.mocked(deleteEntity).mockResolvedValue(undefined);
   });
 
   it('keeps small text items in metadata when IndexedDB save fails', async () => {
@@ -49,6 +51,11 @@ describe('scratchpad store degraded persistence', () => {
     expect(useScratchpadStore.getState().items).toHaveLength(0);
   });
 
+  it('rejects a save when metadata persistence is unavailable', async () => {
+    vi.mocked(localStorage.setItem).mockImplementationOnce(() => { throw new Error('metadata quota'); }).mockImplementationOnce(() => { throw new Error('metadata quota'); });
+    await expect(useScratchpadStore.getState().addItemAsync('note', 'text')).rejects.toThrow('metadata quota');
+  });
+
   it('preserves source, sensitive, and origin metadata', async () => {
     vi.mocked(saveEntity).mockResolvedValueOnce(undefined);
 
@@ -62,44 +69,13 @@ describe('scratchpad store degraded persistence', () => {
       originAction: 'generate-key',
     });
 
+    expect(saveEntity).not.toHaveBeenCalled();
+    expect(await getScratchpadItemContent(useScratchpadStore.getState().items[0])).toBe('secret-key');
+    expect(JSON.stringify(vi.mocked(localStorage.setItem).mock.calls.at(-1))).not.toContain('secret-key');
     expect(useScratchpadStore.getState().items[0]).toMatchObject({
       sourceTool: 'PGP',
       sensitive: true,
       originAction: 'generate-key',
     });
-    expect(useScratchpadStore.getState().items[0].expiresAt).toBeGreaterThan(Date.now());
-  });
-
-  it('prunes expired sensitive items and deletes persisted entities', () => {
-    const expiredAt = Date.now() - 1000;
-    useScratchpadStore.setState({
-      items: [
-        {
-          id: 'expired',
-          name: 'old-private.pem',
-          content: '',
-          type: 'text',
-          timestamp: expiredAt - 1000,
-          size: 10,
-          sensitive: true,
-          expiresAt: expiredAt,
-        },
-        {
-          id: 'fresh',
-          name: 'fresh.txt',
-          content: 'fresh',
-          type: 'text',
-          timestamp: Date.now(),
-          size: 5,
-        },
-      ],
-      storageStatus: 'ok',
-      lastStorageError: undefined,
-    });
-
-    useScratchpadStore.getState().pruneExpiredItems();
-
-    expect(useScratchpadStore.getState().items.map(item => item.id)).toEqual(['fresh']);
-    expect(deleteEntity).toHaveBeenCalledWith('expired');
   });
 });

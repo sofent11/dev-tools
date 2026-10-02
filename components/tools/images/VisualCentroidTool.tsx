@@ -33,6 +33,7 @@ const copyText = {
     legend: '红色 C 为视觉质心，橙色 BBOX 为包围盒中心。坐标以左上角为原点。',
     noPixels: '当前阈值下没有有效像素，请降低 Alpha 阈值或恢复原图。',
     readError: '图片读取失败，请更换文件。',
+    fileLimit: '图片上限为 16 MB 和 1600 万像素，请先缩小图片。',
   },
   'en-US': {
     title: 'Visual Centroid Calculator',
@@ -53,6 +54,7 @@ const copyText = {
     legend: 'Red C marks the visual centroid; orange BBOX marks the bounding box center. Coordinates start at the top-left.',
     noPixels: 'No visible pixels at this threshold. Lower the alpha threshold or reset the image.',
     readError: 'Could not read this image. Choose another file.',
+    fileLimit: 'Image limit: 16 MB and 16 million pixels. Resize the image first.',
   },
 } as const;
 
@@ -125,8 +127,10 @@ export const VisualCentroidTool: React.FC = () => {
     if (!file) return;
     setReading(true); setError(''); setPicking(false);
     try {
+      if (file.size > 16 * 1024 * 1024) throw new Error(c.fileLimit);
       const bitmap = await createImageBitmap(file);
       try {
+        if (bitmap.width * bitmap.height > 16_000_000) throw new Error(c.fileLimit);
         const offscreen = document.createElement('canvas');
         offscreen.width = bitmap.width; offscreen.height = bitmap.height;
         const ctx = offscreen.getContext('2d');
@@ -135,7 +139,7 @@ export const VisualCentroidTool: React.FC = () => {
         const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
         setOriginal(imageData); setWorking(imageData); setFileName(file.name);
       } finally { bitmap.close(); }
-    } catch { setError(c.readError); }
+    } catch (error) { setError(error instanceof Error && error.message === c.fileLimit ? c.fileLimit : c.readError); }
     finally { setReading(false); }
   };
 

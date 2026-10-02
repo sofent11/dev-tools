@@ -1,10 +1,14 @@
+import { findByteHighlights } from './encoding/binarySearchCore';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import { assertJsonBudget, collapseSqlWhitespace } from './text/contentCore';
+import { useCopyToClipboard } from './shared/useCopyToClipboard';
+import { useDraftState } from './shared/useDraftState';
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Check, Minimize2, Wand2, Database, Play, Download, Upload, Search, ShieldAlert, Cpu } from 'lucide-react';
-import { loadScriptWithCache } from './shared/cdnCacheManager';
-import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
+import { runWorkerTask } from './shared/workerTask';
+import type { SqliteResult } from './data/sqliteEngine';
 import { ScratchpadPicker, isScratchpadBinaryLike } from './shared/ScratchpadControls';
 import { notifyToast } from './shared/notifyToast';
-import type { RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 import { format as formatSql, supportedDialects, type SqlLanguage } from 'sql-formatter';
 import { Card, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
@@ -18,68 +22,11 @@ import {
   previewValue,
   setValueAtPath,
   type DiffNode,
-  type JsonValue,
 } from './data/jsonDiffCore';
 
 export { buildDiff, generateJsonPatch, toJsonPointer } from './data/jsonDiffCore';
 
-const SQLJS_VERSION = '1.8.0';
-const SQLJS_SCRIPT_URL = `https://cdnjs.cloudflare.com/ajax/libs/sql.js/${SQLJS_VERSION}/sql-wasm.js`;
-const SQLJS_SCRIPT_FALLBACK_URL = `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist/sql-wasm.js`;
-const SQLJS_WASM_BASE_URL = `https://cdnjs.cloudflare.com/ajax/libs/sql.js/${SQLJS_VERSION}`;
-const SQLJS_WASM_FALLBACK_BASE_URL = `https://cdn.jsdelivr.net/npm/sql.js@${SQLJS_VERSION}/dist`;
-
-const useCopy = () => {
-  const [copied, setCopied] = useState(false);
-  const copy = async (value: string) => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-  return { copied, copy };
-};
-
-type JsonSchema =
-  | { type: 'null' }
-  | { type: 'string' }
-  | { type: 'integer' | 'number' }
-  | { type: 'boolean' }
-  | { type: 'array'; items?: JsonSchema }
-  | { type: 'object'; properties: Record<string, JsonSchema>; required: string[] }
-  | Record<string, never>;
-
-type SqlValue = string | number | Uint8Array | null;
-
-interface SqlExecResult {
-  columns: string[];
-  values: SqlValue[][];
-}
-
-interface SqlDatabase {
-  exec(sql: string): SqlExecResult[];
-  export(): Uint8Array;
-  run(sql: string): void;
-}
-
-interface SqlJsStatic {
-  Database: new (data?: Uint8Array) => SqlDatabase;
-}
-
-type SqlJsInitializer = (options: { locateFile: (file: string) => string }) => Promise<SqlJsStatic>;
-
-interface SqliteColumn {
-  name: string;
-  type: string;
-}
-
-interface SqliteTable {
-  name: string;
-  sql: string;
-  columns: SqliteColumn[];
-}
-
-const getSqlJsInitializer = (): SqlJsInitializer | undefined =>
-  (window as Window & { initSqlJs?: SqlJsInitializer }).initSqlJs;
+type SqlExecResult = SqliteResult['results'][number];
 
 interface JsonDiffContextProps {
   onMergeLeft: (node: DiffNode) => void;
@@ -88,6 +35,7 @@ interface JsonDiffContextProps {
 const JsonDiffContext = React.createContext<JsonDiffContextProps | null>(null);
 
 const DiffTree: React.FC<{ node: DiffNode; depth?: number; hideSame?: boolean }> = ({ node, depth = 0, hideSame = false }) => {
+  useLocaleRender();
   const [isOpen, setIsOpen] = useState(() => node.kind !== 'same');
   const context = React.useContext(JsonDiffContext);
 
@@ -127,30 +75,25 @@ const DiffTree: React.FC<{ node: DiffNode; depth?: number; hideSame?: boolean }>
                 <button
                   onClick={() => context.onMergeLeft(node)}
                   className="px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors text-[9px] font-bold"
-                  title="将此差异项合并到左侧"
-                >
-                  ← 合并至左
-                </button>
+                  title={tr("将此差异项合并到左侧")}
+                >{tr("← 合并至左")}</button>
                 <button
                   onClick={() => context.onMergeRight(node)}
                   className="px-1.5 py-0.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors text-[9px] font-bold"
-                  title="将此差异项合并到右侧"
-                >
-                  合并至右 →
-                </button>
+                  title={tr("将此差异项合并到右侧")}
+                >{tr("合并至右 →")}</button>
               </div>
             )}
             {hasChildren && !isOpen && (
               <span className="text-xs text-slate-400 font-medium">
-                ({node.children!.length} 个属性已折叠)
-              </span>
+                ({node.children!.length}{tr("个属性已折叠)")}</span>
             )}
           </div>
         </div>
         {!node.children && (
           <div className="mt-1.5 grid gap-1.5 font-mono text-xs md:grid-cols-2 border-t border-slate-100/60 pt-1.5">
-            <div className="break-all opacity-85"><span className="font-semibold text-rose-600 mr-1">左:</span> {previewValue(node.left)}</div>
-            <div className="break-all"><span className="font-semibold text-emerald-600 mr-1">右:</span> {previewValue(node.right)}</div>
+            <div className="break-all opacity-85"><span className="font-semibold text-rose-600 mr-1">{tr("左:")}</span> {previewValue(node.left)}</div>
+            <div className="break-all"><span className="font-semibold text-emerald-600 mr-1">{tr("右:")}</span> {previewValue(node.right)}</div>
           </div>
         )}
       </div>
@@ -180,17 +123,20 @@ const sampleRight = `{
 }`;
 
 export const JsonDiffTool: React.FC = () => {
-  const [left, setLeft] = useState('');
-  const [right, setRight] = useState('');
+  useLocaleRender();
+  const [left, setLeft] = useDraftState('components/tools/DataTools.tsx:JsonDiffTool:left', '');
+  const [right, setRight] = useDraftState('components/tools/DataTools.tsx:JsonDiffTool:right', '');
   const [hideSame, setHideSame] = useState(true);
   const [beforeMerge, setBeforeMerge] = useState<{ left: string; right: string } | null>(null);
-  const patchCopy = useCopy();
+  const patchCopy = useCopyToClipboard();
 
   const result = useMemo(() => {
     try {
       if (!left.trim() || !right.trim()) return { diff: null, counts: null, leftJson: null, rightJson: null, error: '' };
+      if (left.length + right.length > 2_000_000) throw new Error('JSON diff input limit: 2 MB');
       const leftJson = JSON.parse(left);
       const rightJson = JSON.parse(right);
+      assertJsonBudget(leftJson); assertJsonBudget(rightJson);
       const diff = buildDiff(leftJson, rightJson);
       return { diff, counts: countDiffs(diff), leftJson, rightJson, error: '' };
     } catch (error) {
@@ -217,7 +163,7 @@ export const JsonDiffTool: React.FC = () => {
     } catch (e) {
       notifyToast({ title: '合并至左侧失败', description: (e as Error).message, tone: 'error' });
     }
-  }, [left, right]);
+  }, [left, right, setLeft]);
 
   const handleMergeRight = useCallback((node: DiffNode) => {
     try {
@@ -238,7 +184,7 @@ export const JsonDiffTool: React.FC = () => {
     } catch (e) {
       notifyToast({ title: '合并至右侧失败', description: (e as Error).message, tone: 'error' });
     }
-  }, [left, right]);
+  }, [left, right, setRight]);
 
   const jsonPatchText = useMemo(() => {
     if (!result.diff) return '[]';
@@ -257,21 +203,22 @@ export const JsonDiffTool: React.FC = () => {
 
   return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
     <ContentToolbar onSample={() => { setLeft(sampleLeft); setRight(sampleRight); setBeforeMerge(null); }} onClear={() => { setLeft(''); setRight(''); setBeforeMerge(null); }} status="实时结构比较">
-      <Button size="sm" variant="secondary" onClick={() => { setLeft(right); setRight(left); setBeforeMerge(null); }} disabled={!left && !right}>交换左右</Button>
-      <Button size="sm" variant="ghost" disabled={!beforeMerge} onClick={() => { if (beforeMerge) { setLeft(beforeMerge.left); setRight(beforeMerge.right); setBeforeMerge(null); } }}>撤销上次合并</Button>
-      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={hideSame} onChange={event => setHideSame(event.target.checked)} />仅显示差异</label>
+      <Button size="sm" variant="secondary" onClick={() => { setLeft(right); setRight(left); setBeforeMerge(null); }} disabled={!left && !right}>{tr("交换左右")}</Button>
+      <Button size="sm" variant="ghost" disabled={!beforeMerge} onClick={() => { if (beforeMerge) { setLeft(beforeMerge.left); setRight(beforeMerge.right); setBeforeMerge(null); } }}>{tr("撤销上次合并")}</Button>
+      <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={hideSame} onChange={event => setHideSame(event.target.checked)} />{tr("仅显示差异")}</label>
     </ContentToolbar>
-    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="原始 JSON · 左侧" value={left} onChange={value => { setLeft(value); setBeforeMerge(null); }} placeholder="粘贴原始 JSON，键顺序和空白不影响比较。" /><ContentEditor label="修改 JSON · 右侧" value={right} onChange={value => { setRight(value); setBeforeMerge(null); }} placeholder="粘贴修改后的 JSON。" /></div>
-    {result.error && <p role="alert" className="status-error p-3 text-sm">JSON 解析失败：{result.error}</p>}
-    <div className="tool-panel space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">结构化差异</h3>{result.diff && <span className="text-xs text-slate-500">{generateJsonPatch(result.diff).length} 处变更</span>}</div><JsonDiffContext.Provider value={contextValue}>{result.diff ? result.diff.kind === 'same' && hideSame ? <p className="py-8 text-center text-sm text-primary-700">两个 JSON 内容相同。</p> : <DiffTree node={result.diff} hideSame={hideSame} /> : <p className="py-8 text-center text-sm text-slate-400">载入两份 JSON 后查看差异；每个节点可合并到任一侧。</p>}</JsonDiffContext.Provider></div>
-    <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-medium">导出 JSON Patch · 左侧 → 右侧</summary><div className="mt-3 flex justify-end"><Button size="sm" variant="secondary" disabled={!result.diff} onClick={() => patchCopy.copy(jsonPatchText)}>{patchCopy.copied ? '已复制' : '复制 Patch'}</Button></div><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs">{result.diff ? jsonPatchText : '先载入有效的 JSON'}</pre></details>
+    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={tr("原始 JSON · 左侧")} value={left} onChange={value => { setLeft(value); setBeforeMerge(null); }} placeholder={tr("粘贴原始 JSON，键顺序和空白不影响比较。")} /><ContentEditor label={tr("修改 JSON · 右侧")} value={right} onChange={value => { setRight(value); setBeforeMerge(null); }} placeholder={tr("粘贴修改后的 JSON。")} /></div>
+    {result.error && <p role="alert" className="status-error p-3 text-sm">{tr("JSON 解析失败：")}{result.error}</p>}
+    <div className="tool-panel space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-semibold">{tr("结构化差异")}</h3>{result.diff && <span className="text-xs text-slate-500">{generateJsonPatch(result.diff).length}{tr("处变更")}</span>}</div><JsonDiffContext.Provider value={contextValue}>{result.diff ? result.diff.kind === 'same' && hideSame ? <p className="py-8 text-center text-sm text-primary-700">{tr("两个 JSON 内容相同。")}</p> : <DiffTree node={result.diff} hideSame={hideSame} /> : <p className="py-8 text-center text-sm text-slate-400">{tr("载入两份 JSON 后查看差异；每个节点可合并到任一侧。")}</p>}</JsonDiffContext.Provider></div>
+    <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-medium">{tr("导出 JSON Patch · 左侧 → 右侧")}</summary><div className="mt-3 flex justify-end"><Button size="sm" variant="secondary" disabled={!result.diff} onClick={() => patchCopy.copy(jsonPatchText)}>{patchCopy.copied ? tr('已复制') : tr('复制 Patch')}</Button></div><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs">{result.diff ? jsonPatchText : '先载入有效的 JSON'}</pre></details>
   </CardContent></Card>;
 };
 
 const sampleSql = `select u.id,u.name,count(o.id) as orders from users u left join orders o on o.user_id=u.id where u.created_at>='2026-01-01' group by u.id,u.name order by orders desc`;
 
 export const SqlFormatterTool: React.FC = () => {
-  const [input, setInput] = useState(sampleSql);
+  useLocaleRender();
+  const [input, setInput] = useDraftState('components/tools/DataTools.tsx:SqlFormatterTool:input', sampleSql);
   const [dialect, setDialect] = useState<SqlLanguage | 'sql'>('sql');
   const [keywordCase, setKeywordCase] = useState<'preserve' | 'upper' | 'lower'>('upper');
   const [output, setOutput] = useState('');
@@ -291,96 +238,19 @@ export const SqlFormatterTool: React.FC = () => {
   };
 
   const minify = () => {
-    setOutput(input.replace(/\s+/g, ' ').trim());
-    setError('');
+    try { setOutput(collapseSqlWhitespace(input, dialect === 'mysql' || dialect === 'mariadb')); setError(''); }
+    catch (error) { setOutput(''); setError((error as Error).message); }
   };
 
   const updateInput = (value: string) => { setInput(value); setOutput(''); setError(''); };
   return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
-    <ContentToolbar onSample={() => updateInput(sampleSql)} onClear={() => updateInput('')}><Button onClick={runFormat} disabled={!input.trim()} icon={<Wand2 className="h-4 w-4" />}>格式化</Button><Button variant="secondary" onClick={minify} disabled={!input.trim()} icon={<Minimize2 className="h-4 w-4" />}>压缩</Button><span className="text-xs text-slate-500">{dialect === 'sql' ? 'Standard SQL' : dialect}</span></ContentToolbar>
-    <ContentOptions title="数据库方言与格式选项"><label className="flex flex-col gap-2 text-sm">数据库方言<Select value={dialect} onChange={event => { setDialect(event.target.value as SqlLanguage | 'sql'); setOutput(''); }}><option value="sql">Standard SQL</option>{supportedDialects.map(item => <option key={item} value={item}>{item}</option>)}</Select></label><label className="flex flex-col gap-2 text-sm">关键字大小写<Select value={keywordCase} onChange={event => { setKeywordCase(event.target.value as typeof keywordCase); setOutput(''); }}><option value="upper">UPPER</option><option value="lower">lower</option><option value="preserve">Preserve</option></Select></label></ContentOptions>
-    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="输入 SQL" value={input} onChange={updateInput} error={error} placeholder="粘贴 SQL，选择数据库方言后格式化。" /><ContentEditor label="SQL 输出" value={output} output placeholder="格式化结果保留原始 SQL，便于核对。" onUseResult={() => updateInput(output)} /></div>
+    <ContentToolbar onSample={() => updateInput(sampleSql)} onClear={() => updateInput('')}><Button onClick={runFormat} disabled={!input.trim()} icon={<Wand2 className="h-4 w-4" />}>{tr("格式化")}</Button><Button variant="secondary" onClick={minify} disabled={!input.trim()} icon={<Minimize2 className="h-4 w-4" />}>{tr("压缩")}</Button><span className="text-xs text-slate-500">{dialect === 'sql' ? 'Standard SQL' : dialect}</span></ContentToolbar>
+    <ContentOptions title={tr("数据库方言与格式选项")}><label className="flex flex-col gap-2 text-sm">{tr("数据库方言")}<Select value={dialect} onChange={event => { setDialect(event.target.value as SqlLanguage | 'sql'); setOutput(''); }}><option value="sql">Standard SQL</option>{supportedDialects.map(item => <option key={item} value={item}>{item}</option>)}</Select></label><label className="flex flex-col gap-2 text-sm">{tr("关键字大小写")}<Select value={keywordCase} onChange={event => { setKeywordCase(event.target.value as typeof keywordCase); setOutput(''); }}><option value="upper">UPPER</option><option value="lower">lower</option><option value="preserve">Preserve</option></Select></label></ContentOptions>
+    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={tr("输入 SQL")} value={input} onChange={updateInput} error={error} placeholder={tr("粘贴 SQL，选择数据库方言后格式化。")} /><ContentEditor label={tr("SQL 输出")} value={output} output placeholder={tr("格式化结果保留原始 SQL，便于核对。")} onUseResult={() => updateInput(output)} /></div>
   </CardContent></Card>;
 };
 
 // --- JSON Schema Generator & Local Validator ---
-const generateSchema = (val: JsonValue): JsonSchema => {
-  if (val === null) return { type: 'null' };
-  if (typeof val === 'string') return { type: 'string' };
-  if (typeof val === 'number') return { type: Number.isInteger(val) ? 'integer' : 'number' };
-  if (typeof val === 'boolean') return { type: 'boolean' };
-  if (Array.isArray(val)) {
-    const items = val.length > 0 ? generateSchema(val[0]) : {};
-    return { type: 'array', items };
-  }
-  if (typeof val === 'object') {
-    const properties: Record<string, JsonSchema> = {};
-    const required: string[] = [];
-    const obj = val as Record<string, JsonValue>;
-    for (const key of Object.keys(obj)) {
-      properties[key] = generateSchema(obj[key]);
-      required.push(key);
-    }
-    return { type: 'object', properties, required };
-  }
-  return {};
-};
-
-const validateJson = (schema: JsonSchema, data: JsonValue, path = 'root'): string[] => {
-  const errors: string[] = [];
-  if (!schema || typeof schema !== 'object') return errors;
-
-  const type = schema.type;
-  if (type) {
-    if (type === 'null' && data !== null) {
-      errors.push(`[${path}] 应为 null，但实际为 ${typeof data}`);
-    } else if (type === 'string' && typeof data !== 'string') {
-      errors.push(`[${path}] 应为 string，但实际为 ${typeof data}`);
-    } else if (type === 'boolean' && typeof data !== 'boolean') {
-      errors.push(`[${path}] 应为 boolean，但实际为 ${typeof data}`);
-    } else if (type === 'number' && typeof data !== 'number') {
-      errors.push(`[${path}] 应为 number，但实际为 ${typeof data}`);
-    } else if (type === 'integer' && !Number.isInteger(data)) {
-      errors.push(`[${path}] 应为 integer，但实际为 ${typeof data === 'number' ? 'float' : typeof data}`);
-    } else if (type === 'array' && !Array.isArray(data)) {
-      errors.push(`[${path}] 应为 array，但实际为 ${typeof data}`);
-    } else if (type === 'object' && (typeof data !== 'object' || data === null || Array.isArray(data))) {
-      errors.push(`[${path}] 应为 object，但实际为 ${typeof data}`);
-    }
-  }
-
-  if (type === 'object' && data && typeof data === 'object' && !Array.isArray(data)) {
-    const props = schema.properties;
-    if (props) {
-      const dataRecord = data as Record<string, JsonValue>;
-      for (const key of Object.keys(props)) {
-        if (Object.prototype.hasOwnProperty.call(data, key)) {
-          errors.push(...validateJson(props[key], dataRecord[key], `${path}.${key}`));
-        }
-      }
-    }
-    const required = schema.required;
-    if (Array.isArray(required)) {
-      for (const reqKey of required) {
-        if (!Object.prototype.hasOwnProperty.call(data, reqKey)) {
-          errors.push(`[${path}] 缺失必需的属性: "${reqKey}"`);
-        }
-      }
-    }
-  }
-
-  if (type === 'array' && Array.isArray(data)) {
-    const itemsSchema = schema.items;
-    if (itemsSchema) {
-      data.forEach((item, index) => {
-        errors.push(...validateJson(itemsSchema, item, `${path}[${index}]`));
-      });
-    }
-  }
-
-  return errors;
-};
-
 const defaultJsonSample = `{
   "id": 1,
   "name": "Leanne Graham",
@@ -417,8 +287,9 @@ const defaultSchemaSample = `{
 }`;
 
 export const JsonSchemaTool: React.FC = () => {
-  const [jsonText, setJsonText] = useState('');
-  const [schemaText, setSchemaText] = useState('');
+  useLocaleRender();
+  const [jsonText, setJsonText] = useDraftState('components/tools/DataTools.tsx:JsonSchemaTool:jsonText', '');
+  const [schemaText, setSchemaText] = useDraftState('components/tools/DataTools.tsx:JsonSchemaTool:schemaText', '');
   const [generationError, setGenerationError] = useState('');
   
   const [validationOutput, setValidationOutput] = useState<{
@@ -427,271 +298,152 @@ export const JsonSchemaTool: React.FC = () => {
   }>({ status: 'idle', errors: [] });
 
 
-  const handleGenerateSchema = () => {
-    try {
-      const parsed = JSON.parse(jsonText);
-      const schema = generateSchema(parsed);
-      // Format generated schema nicely
-      setSchemaText(JSON.stringify(schema, null, 2));
-      setValidationOutput({ status: 'idle', errors: [] });
-      setGenerationError('');
-    } catch (err) {
-      setGenerationError((err as Error).message);
-    }
+  const schemaTask = useRef<AbortController | null>(null);
+  const [schemaBusy, setSchemaBusy] = useState(false);
+  useEffect(() => () => schemaTask.current?.abort(), []);
+  const resetStatus = () => {
+    schemaTask.current?.abort();
+    schemaTask.current = null;
+    setSchemaBusy(false);
+    setValidationOutput({ status: 'idle', errors: [] });
+    setGenerationError('');
   };
-
-  const handleValidate = () => {
+  const runSchema = async (action: 'generate' | 'validate') => {
+    schemaTask.current?.abort();
+    const controller = new AbortController();
+    schemaTask.current = controller;
+    setSchemaBusy(true);
+    setGenerationError('');
+    setValidationOutput({ status: 'idle', errors: [] });
     try {
-      const data = JSON.parse(jsonText);
-      const schema = JSON.parse(schemaText);
-      const errors = validateJson(schema, data);
-      
-      setValidationOutput({
-        status: errors.length === 0 ? 'valid' : 'invalid',
-        errors
-      });
-    } catch (err) {
-      setValidationOutput({
-        status: 'invalid',
-        errors: [`[解析错误] ${ (err as Error).message }`]
-      });
-    }
+      const result = await runWorkerTask<Record<string, unknown> | string[]>(
+        new Worker(new URL('./data/schema.worker.ts', import.meta.url), { type: 'module' }),
+        { action, json: jsonText, schema: schemaText }, { signal: controller.signal, timeoutMs: 2500 });
+      if (controller.signal.aborted || schemaTask.current !== controller) return;
+      if (action === 'generate') setSchemaText(JSON.stringify(result, null, 2));
+      else {
+        const errors = result as string[];
+        setValidationOutput({ status: errors.length ? 'invalid' : 'valid', errors });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        if (action === 'generate') setGenerationError((error as Error).message);
+        else setValidationOutput({ status: 'invalid', errors: [(error as Error).message] });
+      }
+    } finally { if (schemaTask.current === controller) setSchemaBusy(false); }
   };
-
-  const resetStatus = () => { setValidationOutput({ status: 'idle', errors: [] }); setGenerationError(''); };
+  const handleGenerateSchema = () => { void runSchema('generate'); };
+  const handleValidate = () => { void runSchema('validate'); };
   return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
-    <ContentToolbar onSample={() => { setJsonText(defaultJsonSample); setSchemaText(defaultSchemaSample); resetStatus(); }} onClear={() => { setJsonText(''); setSchemaText(''); resetStatus(); }}><Button onClick={handleGenerateSchema} disabled={!jsonText.trim()} icon={<Wand2 className="h-4 w-4" />}>从样例生成 Schema</Button><Button variant="secondary" onClick={handleValidate} disabled={!jsonText.trim() || !schemaText.trim()} icon={<Check className="h-4 w-4" />}>校验数据</Button></ContentToolbar>
-    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="JSON 数据" value={jsonText} onChange={value => { setJsonText(value); resetStatus(); }} error={generationError} placeholder="输入 JSON 样例生成 Schema，或配合已有 Schema 进行校验。" /><ContentEditor label="Schema 定义" value={schemaText} onChange={value => { setSchemaText(value); resetStatus(); }} output placeholder="从左侧样例生成，或粘贴已有 Schema。" /></div>
-    <section className="tool-panel p-4" aria-live="polite">{validationOutput.status === 'idle' ? <p className="text-sm text-slate-500">生成 Schema 后可以编辑规则，再运行校验。</p> : validationOutput.status === 'valid' ? <p className="text-sm font-medium text-emerald-700">支持的规则检查通过。</p> : <div role="alert"><p className="mb-2 text-sm font-semibold text-red-700">{validationOutput.errors.length} 项校验问题</p><ul className="max-h-52 list-disc space-y-1 overflow-auto pl-5 font-mono text-xs text-red-700">{validationOutput.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}</section>
-    <details className="text-xs text-slate-500"><summary className="cursor-pointer">本地校验支持范围</summary><p className="mt-2 leading-5">检查 type、properties、required 与 items。生成器按数组首项推断类型；其他 JSON Schema 关键字不会被校验。</p></details>
+    <ContentToolbar onSample={() => { setJsonText(defaultJsonSample); setSchemaText(defaultSchemaSample); resetStatus(); }} onClear={() => { setJsonText(''); setSchemaText(''); resetStatus(); }}><Button onClick={handleGenerateSchema} disabled={schemaBusy || !jsonText.trim()} icon={<Wand2 className="h-4 w-4" />}>{tr("从样例生成 Schema")}</Button><Button variant="secondary" onClick={handleValidate} disabled={schemaBusy || !jsonText.trim() || !schemaText.trim()} icon={<Check className="h-4 w-4" />}>{tr("校验数据")}</Button>{schemaBusy && <Button variant="ghost" onClick={resetStatus}>{tr("取消任务")}</Button>}</ContentToolbar>
+    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label={tr("JSON 数据")} value={jsonText} onChange={value => { setJsonText(value); resetStatus(); }} error={generationError} placeholder={tr("输入 JSON 样例生成 Schema，或配合已有 Schema 进行校验。")} /><ContentEditor label={tr("Schema 定义")} value={schemaText} onChange={value => { setSchemaText(value); resetStatus(); }} output placeholder={tr("从左侧样例生成，或粘贴已有 Schema。")} /></div>
+    <section className="tool-panel p-4" aria-live="polite">{schemaBusy ? <p className="text-sm text-slate-500">{tr("正在处理 Schema，修改输入会取消当前任务…")}</p> : validationOutput.status === 'idle' ? <p className="text-sm text-slate-500">{tr("生成 Schema 后可以编辑规则，再运行校验。")}</p> : validationOutput.status === 'valid' ? <p className="text-sm font-medium text-emerald-700">{tr("支持的规则检查通过。")}</p> : <div role="alert"><p className="mb-2 text-sm font-semibold text-red-700">{validationOutput.errors.length}{tr("项校验问题")}</p><ul className="max-h-52 list-disc space-y-1 overflow-auto pl-5 font-mono text-xs text-red-700">{validationOutput.errors.map((error, index) => <li key={index}>{error}</li>)}</ul></div>}</section>
+    <details className="text-xs text-slate-500"><summary className="cursor-pointer">{tr("本地校验支持范围")}</summary><p className="mt-2 leading-5">{tr("使用 AJV 校验 draft-07 Schema，包含格式、数值范围、枚举与组合规则。不支持的关键字会报错；混合数组按全部样例推断。输入上限 2 MB，单次任务最多 2.5 秒。")}</p></details>
   </CardContent></Card>;
 };
 
 // ================= SQLite WebAssembly Sandbox =================
 export const SqliteSandboxTool: React.FC = () => {
+  useLocaleRender();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>({
-    status: 'idle',
-    label: 'SQL.js',
-    source: SQLJS_SCRIPT_URL,
-    version: SQLJS_VERSION,
-  });
-  const sqlJsWasmBaseUrlRef = useRef(SQLJS_WASM_BASE_URL);
-  const [db, setDb] = useState<SqlDatabase | null>(null);
-  const [sql, setSql] = useState(
-    `-- 这是一个 WebAssembly SQLite 离线沙箱。\n-- 您可以点击左下角载入测试表，也可以在这里输入并执行任意 SQL 查询。\nSELECT * FROM users;`
-  );
-  
+  const [db, setDb] = useState<Uint8Array | null>(null);
+  const [sql, setSql] = useDraftState('components/tools/DataTools.tsx:SqliteSandboxTool:sql', 'SELECT * FROM users;');
   const [queryResult, setQueryResult] = useState<SqlExecResult[] | null>(null);
   const [queryError, setQueryError] = useState('');
   const [queryHistory, setQueryHistory] = useState<string[]>([]);
   const [queryTime, setQueryTime] = useState<number | null>(null);
   const [databaseName, setDatabaseName] = useState('演示数据库');
-  const [tables, setTables] = useState<SqliteTable[]>([]);
+  const [tables, setTables] = useState<SqliteResult['tables']>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const refreshSchema = useCallback((activeDb: SqlDatabase) => {
-    if (!activeDb) return;
+  const taskRef = useRef<AbortController | null>(null);
+  const fileReadVersion = useRef(0);
+  const execute = useCallback(async (snapshot?: Uint8Array, query?: string, nextName?: string) => {
+    taskRef.current?.abort();
+    const controller = new AbortController();
+    taskRef.current = controller;
+    const started = performance.now();
+    setIsLoading(true);
+    setQueryError('');
+    setError('');
     try {
-      const res = activeDb.exec("SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-      if (res.length > 0) {
-        const tablesList: SqliteTable[] = res[0].values.map(row => {
-          const tableName = String(row[0] ?? '');
-          const createSql = String(row[1] ?? '');
-          let cols: SqliteColumn[] = [];
-          try {
-            const colRes = activeDb.exec(`PRAGMA table_info(${tableName})`);
-            if (colRes.length > 0) {
-              cols = colRes[0].values.map(c => ({
-                name: String(c[1] ?? ''),
-                type: String(c[2] ?? '')
-              }));
-            }
-          } catch { /* ignore */ }
-          return { name: tableName, sql: createSql, columns: cols };
-        });
-        setTables(tablesList);
-      } else {
-        setTables([]);
-      }
-    } catch (e) {
-      console.error('Failed to load schema', e);
-    }
-  }, []);
-
-  const initDatabase = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError('');
-      const initSqlJs = getSqlJsInitializer();
-      if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
-      const SQL = await initSqlJs({
-        locateFile: (file: string) => `${sqlJsWasmBaseUrlRef.current}/${file}`
-      });
-      const newDb = new SQL.Database();
-      setDb(newDb);
-      
-      // Initialize demo data
-      newDb.run(`
-        CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, email TEXT, role TEXT);
-        CREATE TABLE logs (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP);
-        
-        INSERT INTO users (name, email, role) VALUES 
-          ('Alice Vance', 'alice@dev.com', 'Administrator'),
-          ('Bob Newman', 'bob@dev.com', 'Developer'),
-          ('Charlie Zheng', 'charlie@dev.com', 'Designer');
-          
-        INSERT INTO logs (user_id, action) VALUES 
-          (1, 'Login'),
-          (2, 'Git Commit'),
-          (1, 'Database Export');
-      `);
-      
-      refreshSchema(newDb);
-      const res = newDb.exec('SELECT * FROM users;');
-      setQueryResult(res);
-      setIsLoading(false);
-    } catch (err) {
-      setError('初始化 WASM 数据库失败: ' + (err as Error).message);
-      setIsLoading(false);
-    }
-  }, [refreshSchema]);
-
-  const loadSqlRuntime = useCallback(() => {
-    if (getSqlJsInitializer()) {
-      Promise.resolve().then(() => initDatabase());
-      return;
-    }
-
-    Promise.resolve().then(() => setIsLoading(true));
-    loadScriptWithCache(SQLJS_SCRIPT_URL, {
-      label: 'SQL.js',
-      version: SQLJS_VERSION,
-      fallbackUrls: [SQLJS_SCRIPT_FALLBACK_URL],
-      sourceLabel: 'CDN / fallback',
-      onStatus: event => {
-        setRuntimeState({
-          status: event.status,
-          label: event.label,
-          version: event.version,
-          source: event.src,
-          activeUrl: event.activeUrl,
-          sourceLabel: event.sourceLabel,
-          verified: event.verified,
-          attempt: event.attempt,
-          progress: event.progress,
-          error: event.message,
-        });
-        if (event.activeUrl === SQLJS_SCRIPT_FALLBACK_URL) {
-          sqlJsWasmBaseUrlRef.current = SQLJS_WASM_FALLBACK_BASE_URL;
-        }
-      },
-    })
-      .then(() => initDatabase())
-      .catch(() => {
-        setError('加载 SQLite WebAssembly 库失败，请检查网络连接。');
-        setIsLoading(false);
-      });
-  }, [initDatabase]);
-
-  useEffect(() => {
-    loadSqlRuntime();
-  }, [loadSqlRuntime]);
-
-  const handleExecute = () => {
-    if (!db) return;
-    try {
-      const started = performance.now();
-      const res = db.exec(sql);
+      const result = await runWorkerTask<SqliteResult>(
+        new Worker(new URL('./data/sqlite.worker.ts', import.meta.url), { type: 'module' }),
+        { snapshot, sql: query }, { signal: controller.signal, timeoutMs: 10000 });
+      if (controller.signal.aborted) return;
+      setDb(result.snapshot);
+      setQueryResult(result.results);
+      setTables(result.tables);
       setQueryTime(performance.now() - started);
-      setQueryHistory(history => [sql, ...history.filter(item => item !== sql)].slice(0, 6));
-      setQueryError('');
-      setQueryResult(res);
-      refreshSchema(db);
-    } catch (err) {
-      setQueryError((err as Error).message);
-      setQueryResult(null);
-    }
-  };
-
+      if (nextName) setDatabaseName(nextName);
+      if (query) setQueryHistory(history => [query, ...history.filter(item => item !== query)].slice(0, 6));
+    } catch (error) {
+      if (!controller.signal.aborted) setQueryError((error as Error).message);
+    } finally { if (taskRef.current === controller) setIsLoading(false); }
+  }, []);
+  useEffect(() => {
+    const reads = fileReadVersion;
+    const timer = setTimeout(() => { void execute(undefined, 'SELECT * FROM users;'); }, 0);
+    return () => { clearTimeout(timer); taskRef.current?.abort(); reads.current++; };
+  }, [execute]);
+  const handleExecute = () => { if (db && !isLoading && sql.trim()) void execute(db, sql); };
   const handleExport = () => {
-    if (!db) return;
+    if (!db || isLoading) return;
+    const url = URL.createObjectURL(new Blob([new Uint8Array(db)], { type: 'application/x-sqlite3' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = databaseName === '演示数据库' ? 'sandbox.sqlite' : databaseName; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+    if (file.size > 64 * 1024 * 1024) { setError('数据库大小上限为 64 MB。'); return; }
+    const version = ++fileReadVersion.current;
+    taskRef.current?.abort();
+    taskRef.current = null;
+    setIsLoading(true);
+    setError('');
     try {
-      const binaryArray = db.export();
-      const blob = new Blob([binaryArray], { type: 'application/x-sqlite3' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'sandbox.sqlite';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      notifyToast({ title: '导出数据库失败', description: (err as Error).message, tone: 'error' });
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (version === fileReadVersion.current) await execute(bytes, undefined, file.name);
+    } catch (error) {
+      if (version === fileReadVersion.current) { setError((error as Error).message); setIsLoading(false); }
     }
   };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        setIsLoading(true);
-        const initSqlJs = getSqlJsInitializer();
-        if (!initSqlJs) throw new Error('SQL.js 初始化器未加载');
-        const SQL = await initSqlJs({
-          locateFile: (file: string) => `${sqlJsWasmBaseUrlRef.current}/${file}`
-        });
-        const uInt8Array = new Uint8Array(reader.result as ArrayBuffer);
-        const newDb = new SQL.Database(uInt8Array);
-        setDb(newDb);
-        setDatabaseName(file.name);
-        setQueryError('');
-        setQueryResult(null);
-        refreshSchema(newDb);
-        setIsLoading(false);
-      } catch (err) {
-        notifyToast({ title: '加载 SQLite 文件失败', description: (err as Error).message, tone: 'error' });
-        setIsLoading(false);
-      }
-    };
-    reader.readAsArrayBuffer(file);
+  const cancelTask = () => {
+    fileReadVersion.current++;
+    taskRef.current?.abort();
+    setIsLoading(false);
+    setQueryError('任务已取消；上次完成的数据库已保留。');
   };
-
-  const loadPresetQuery = (presetSql: string) => {
-    setSql(presetSql);
-  };
-
+  const loadPresetQuery = (presetSql: string) => { setSql(presetSql); };
   return (
     <Card className="flex h-full flex-col">
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[16rem_minmax(0,1fr)]">
         <div className="lg:col-span-2">
-          <ContentToolbar status={`${databaseName} · ${tables.length} 张表`}>
+          <ContentToolbar status={<><span data-i18n-skip>{databaseName === '演示数据库' ? tr('演示数据库') : databaseName}</span> · {tables.length} {tr('张表')}</>}>
             <input type="file" accept=".sqlite,.db,.sqlite3" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
-            <Button size="sm" variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => fileInputRef.current?.click()}>导入数据库</Button>
-            <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={handleExport} disabled={!db}>导出数据库</Button>
+            <Button size="sm" variant="secondary" icon={<Upload className="h-4 w-4" />} onClick={() => fileInputRef.current?.click()}>{tr("导入数据库")}</Button>
+            <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} onClick={handleExport} disabled={!db || isLoading}>{tr("导出数据库")}</Button>
+          {isLoading ? <Button size="sm" variant="ghost" onClick={cancelTask}>{tr("取消任务")}</Button> : <Button size="sm" variant="ghost" onClick={() => { fileReadVersion.current++; void execute(undefined, 'SELECT * FROM users;', '演示数据库'); }}>{tr("载入演示库")}</Button>}
           </ContentToolbar>
-        </div>
-        <div className="lg:col-span-2">
-          <RuntimeAssetStatusPanel state={runtimeState} onRetry={loadSqlRuntime} compact />
+          <p className="mt-3 text-xs leading-5 text-slate-500">{tr("本地 SQLite Worker：任务最多 10 秒，数据库最多 64 MB，结果最多 1,000 行 / 2 MB。失败或取消会保留上次完成的数据库。")}</p>
         </div>
         {/* Left column: Schema Browser & Boilerplates */}
         <div className="flex flex-col gap-4 lg:border-r border-slate-200 dark:border-slate-800 lg:pr-4 overflow-auto">
           <div>
             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
               <Database className="w-3.5 h-3.5" />
-              <span>数据表 Schema ({tables.length})</span>
+              <span>{tr("数据表 Schema (")}{tables.length})</span>
             </h4>
             {tables.length === 0 ? (
-              <div className="text-xs text-slate-400 italic">暂无自定义表</div>
+              <div className="text-xs text-slate-400 italic">{tr("暂无自定义表")}</div>
             ) : (
               <div className="space-y-3">
                 {tables.map(t => (
                   <div key={t.name} className="tool-panel p-2.5 rounded-lg text-xs">
-                    <button type="button" className="mb-2 flex w-full items-center justify-between gap-2 text-left font-mono font-semibold text-primary-700" onClick={() => loadPresetQuery(`SELECT * FROM "${t.name.replace(/"/g, '""')}" LIMIT 100;`)}><span>{t.name}</span><span className="text-[10px]">查看数据 →</span></button>
+                    <button type="button" className="mb-2 flex w-full items-center justify-between gap-2 text-left font-mono font-semibold text-primary-700" onClick={() => loadPresetQuery(`SELECT * FROM "${t.name.replace(/"/g, '""')}" LIMIT 100;`)}><span>{t.name}</span><span className="text-[10px]">{tr("查看数据 →")}</span></button>
                     <div className="space-y-1 font-mono text-[10px] text-slate-500">
                       {t.columns.map(c => (
                         <div key={c.name} className="flex justify-between">
@@ -707,14 +459,12 @@ export const SqliteSandboxTool: React.FC = () => {
           </div>
 
           <details className="border-t border-slate-200 pt-3">
-            <summary className="mb-2 cursor-pointer text-xs font-semibold text-slate-500">快速测试 SQL</summary>
+            <summary className="mb-2 cursor-pointer text-xs font-semibold text-slate-500">{tr("快速测试 SQL")}</summary>
             <div className="space-y-2">
               <button
                 onClick={() => loadPresetQuery("SELECT * FROM users;")}
                 className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
-              >
-                查询用户表 (SELECT)
-              </button>
+              >{tr("查询用户表 (SELECT)")}</button>
               <button
                 onClick={() =>
                   loadPresetQuery(
@@ -722,9 +472,7 @@ export const SqliteSandboxTool: React.FC = () => {
                   )
                 }
                 className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
-              >
-                多表关联聚合 (JOIN)
-              </button>
+              >{tr("多表关联聚合 (JOIN)")}</button>
               <button
                 onClick={() =>
                   loadPresetQuery(
@@ -732,9 +480,7 @@ export const SqliteSandboxTool: React.FC = () => {
                   )
                 }
                 className="w-full text-left text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-primary-400 transition-all font-mono"
-              >
-                写入新记录 (INSERT)
-              </button>
+              >{tr("写入新记录 (INSERT)")}</button>
             </div>
           </details>
         </div>
@@ -744,34 +490,32 @@ export const SqliteSandboxTool: React.FC = () => {
           {isLoading && (
             <div className="p-3 bg-blue-50 text-blue-700 rounded-xl text-xs flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-              <span>正在动态载入 WebAssembly SQL.js 引擎，请稍候...</span>
+              <span>{tr("正在本地执行 SQLite 任务…")}</span>
             </div>
           )}
 
           {error && (
-            <div className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs">
+            <div role="alert" className="p-3 bg-rose-50 text-rose-700 border border-rose-200 rounded-xl text-xs">
               {error}
             </div>
           )}
 
-          {queryHistory.length > 0 && <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-medium">最近执行 · {queryHistory.length}</summary><div className="mt-2 space-y-2">{queryHistory.map((query, index) => <button key={index} type="button" className="block w-full truncate rounded border p-2 text-left font-mono text-xs text-slate-500 hover:border-primary-300" onClick={() => loadPresetQuery(query)}>{query}</button>)}</div></details>}
+          {queryHistory.length > 0 && <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-medium">{tr("最近执行 ·")}{queryHistory.length}</summary><div className="mt-2 space-y-2">{queryHistory.map((query, index) => <button key={index} type="button" className="block w-full truncate rounded border p-2 text-left font-mono text-xs text-slate-500 hover:border-primary-300" onClick={() => loadPresetQuery(query)}>{query}</button>)}</div></details>}
           {/* Terminal input */}
           <div className="flex flex-col min-h-0 flex-1 gap-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <FieldLabel hint="⌘ / Ctrl + Enter">SQL 查询终端</FieldLabel>
-              <Button size="sm" variant="ghost" onClick={() => { setSql(''); setQueryResult(null); setQueryError(''); setQueryTime(null); }}>清空查询</Button>
+              <FieldLabel hint="⌘ / Ctrl + Enter">{tr("SQL 查询终端")}</FieldLabel>
+              <Button size="sm" variant="ghost" onClick={() => { setSql(''); setQueryResult(null); setQueryError(''); setQueryTime(null); }}>{tr("清空查询")}</Button>
               <Button
                 size="sm"
                 onClick={handleExecute}
                 disabled={!db || isLoading || !sql.trim()}
                 icon={<Play className="w-4 h-4" />}
-              >
-                执行 SQL (Ctrl+Enter)
-              </Button>
+              >{tr("执行 SQL (Ctrl+Enter)")}</Button>
             </div>
             <textarea
-              aria-label="SQL 查询终端"
-              placeholder="输入 SQL，按 ⌘ / Ctrl + Enter 执行。"
+              aria-label={tr("SQL 查询终端")}
+              placeholder={tr("输入 SQL，按 ⌘ / Ctrl + Enter 执行。")}
               className="w-full min-h-44 resize-y p-3 font-mono text-xs bg-slate-950 text-emerald-400 rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500 resize-none leading-relaxed"
               value={sql}
               onChange={e => setSql(e.target.value)}
@@ -786,24 +530,19 @@ export const SqliteSandboxTool: React.FC = () => {
 
           {/* Query Results / Terminal output */}
           <div className="flex-[1.5] min-h-0 flex flex-col gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>运行结果</FieldLabel>{queryResult && <span className="text-xs text-slate-500" aria-live="polite">{queryResult.reduce((count, result) => count + result.values.length, 0)} 行 · {queryTime === null ? '就绪' : `${queryTime.toFixed(1)} ms`}</span>}</div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>{tr("运行结果")}</FieldLabel>{queryResult && <span className="text-xs text-slate-500" aria-live="polite">{queryResult.reduce((count, result) => count + result.values.length, 0)}{tr("行 ·")}{queryTime === null ? tr('就绪') : `${queryTime.toFixed(1)} ms`}</span>}</div>
             
             {queryError && (
-              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-400 text-xs font-mono">
-                🔴 SQL 语法或执行错误: {queryError}
+              <div role="alert" className="p-3.5 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-400 text-xs font-mono">{tr("🔴 SQL 语法或执行错误:")}{queryError}
               </div>
             )}
 
             {!queryError && !queryResult && (
-              <div className="flex-1 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center text-xs text-slate-400">
-                等待 SQL 查询运行...
-              </div>
+              <div className="flex-1 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 flex items-center justify-center text-xs text-slate-400">{tr("等待 SQL 查询运行...")}</div>
             )}
 
             {!queryError && queryResult && queryResult.length === 0 && (
-              <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/10 flex items-center justify-center text-xs text-slate-500">
-                语句成功执行，影响了数据但没有结果集返回。
-              </div>
+              <div className="flex-1 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/10 flex items-center justify-center text-xs text-slate-500">{tr("语句成功执行，影响了数据但没有结果集返回。")}</div>
             )}
 
             {!queryError && queryResult && queryResult.length > 0 && (
@@ -844,6 +583,10 @@ export const SqliteSandboxTool: React.FC = () => {
 // --- Binary Hex Viewer & Magic-Number File Analyzer ---
 
 export const BinaryHexViewerTool: React.FC = () => {
+  useLocaleRender();
+  const fileReader = useRef<FileReader | null>(null);
+  const loadVersion = useRef(0);
+  useEffect(() => { const version = loadVersion; return () => { version.current++; fileReader.current?.abort(); }; }, []);
   const [fileData, setFileData] = useState<Uint8Array | null>(null);
   const [fileName, setFileName] = useState('');
   const [fileSize, setFileSize] = useState(0);
@@ -852,6 +595,10 @@ export const BinaryHexViewerTool: React.FC = () => {
   const [safetyStatus, setSafetyStatus] = useState<'safe' | 'alert' | 'unknown'>('unknown');
   
   const loadScratchpadContent = async (content: string | Blob | ArrayBuffer, name: string) => {
+    const version = ++loadVersion.current;
+    fileReader.current?.abort();
+    const size = typeof content === 'string' ? content.length : content instanceof Blob ? content.size : content.byteLength;
+    if (size > 10 * 1024 * 1024) throw new Error('Binary file limit: 10 MB');
     let uint8: Uint8Array;
     if (content instanceof Blob) {
       const buffer = await content.arrayBuffer();
@@ -873,6 +620,7 @@ export const BinaryHexViewerTool: React.FC = () => {
       return;
     }
 
+    if (version !== loadVersion.current) return;
     setFileName(name);
     setFileSize(uint8.length);
     setSelectedIdx(null);
@@ -905,20 +653,17 @@ export const BinaryHexViewerTool: React.FC = () => {
       return;
     }
 
-    setFileName(file.name);
-    setFileSize(file.size);
-    setSelectedIdx(null);
-    setCurrentPage(0);
-
+    const version = ++loadVersion.current;
+    fileReader.current?.abort();
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const arrayBuffer = event.target?.result as ArrayBuffer;
-      const uint8 = new Uint8Array(arrayBuffer);
-      setFileData(uint8);
-      
-      // Compute magic header
-      detectMagicHeader(uint8, file.name);
+    fileReader.current = reader;
+    reader.onload = () => {
+      if (version !== loadVersion.current || !(reader.result instanceof ArrayBuffer)) return;
+      const uint8 = new Uint8Array(reader.result);
+      setFileName(file.name); setFileSize(uint8.length); setSelectedIdx(null); setCurrentPage(0);
+      setFileData(uint8); detectMagicHeader(uint8, file.name);
     };
+    reader.onerror = () => { if (version === loadVersion.current) notifyToast({ title: '文件读取失败', description: reader.error?.message, tone: 'error' }); };
     reader.readAsArrayBuffer(file);
   };
 
@@ -991,52 +736,7 @@ export const BinaryHexViewerTool: React.FC = () => {
       return;
     }
 
-    const query = searchQuery.trim();
-    const isHexSearch = /^[0-9a-fA-F\s]+$/.test(query) && query.replace(/\s/g, '').length % 2 === 0;
-    const newMatches = new Set<number>();
-
-    if (isHexSearch) {
-      // Hex block match
-      const cleanHex = query.replace(/\s/g, '').toUpperCase();
-      const hexBytes: number[] = [];
-      for (let i = 0; i < cleanHex.length; i += 2) {
-        hexBytes.push(parseInt(cleanHex.substring(i, i + 2), 16));
-      }
-
-      // Scan file
-      for (let idx = 0; idx <= fileData.length - hexBytes.length; idx++) {
-        let isMatch = true;
-        for (let j = 0; j < hexBytes.length; j++) {
-          if (fileData[idx + j] !== hexBytes[j]) {
-            isMatch = false;
-            break;
-          }
-        }
-        if (isMatch) {
-          for (let j = 0; j < hexBytes.length; j++) {
-            newMatches.add(idx + j);
-          }
-        }
-      }
-    } else {
-      // Normal string match
-      const charArr = Array.from(query).map(c => c.charCodeAt(0));
-      for (let idx = 0; idx <= fileData.length - charArr.length; idx++) {
-        let isMatch = true;
-        for (let j = 0; j < charArr.length; j++) {
-          if (fileData[idx + j] !== charArr[j]) {
-            isMatch = false;
-            break;
-          }
-        }
-        if (isMatch) {
-          for (let j = 0; j < charArr.length; j++) {
-            newMatches.add(idx + j);
-          }
-        }
-      }
-    }
-
+    const newMatches = findByteHighlights(fileData, searchQuery);
     Promise.resolve().then(() => setMatches(newMatches));
   }, [searchQuery, fileData]);
 
@@ -1071,14 +771,14 @@ export const BinaryHexViewerTool: React.FC = () => {
     <Card className="h-full flex flex-col">
       <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0">
         
-        <ContentToolbar onSample={() => processFile(new File([new TextEncoder().encode('Atelier · Binary workspace\n0123456789\nHello, world!')], 'sample.txt', { type: 'text/plain' }))} onClear={() => { setFileData(null); setFileName(''); setFileSize(0); setSelectedIdx(null); setSearchQuery(''); setOffsetInput(''); setOffsetError(''); }} status={fileData ? `${fileSize.toLocaleString()} 字节` : '本地解析 · 最大 10MB'} />
+        <ContentToolbar onSample={() => processFile(new File([new TextEncoder().encode('Atelier · Binary workspace\n0123456789\nHello, world!')], 'sample.txt', { type: 'text/plain' }))} onClear={() => { loadVersion.current++; fileReader.current?.abort(); setFileData(null); setFileName(''); setFileSize(0); setSelectedIdx(null); setSearchQuery(''); setOffsetInput(''); setOffsetError(''); }} status={fileData ? `${fileSize.toLocaleString()} 字节` : '本地解析 · 最大 10MB'} />
         {/* Top bar: Upload zone and details */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start flex-none">
           <div onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) processFile(file); }} className="p-4 border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 rounded-2xl flex flex-col items-center justify-center gap-3">
             <Upload className="w-8 h-8 text-primary-500" />
             <div className="text-center">
-              <span className="text-[11px] font-bold text-slate-500 block">拖放或选择二进制文件</span>
-              <span className="text-[9px] text-slate-400 block mt-0.5">支持任意格式，最高 10MB</span>
+              <span className="text-[11px] font-bold text-slate-500 block">{tr("拖放或选择二进制文件")}</span>
+              <span className="text-[9px] text-slate-400 block mt-0.5">{tr("支持任意格式，最高 10MB")}</span>
             </div>
             <div className="flex flex-col gap-1.5 w-full items-center">
               <label className="relative cursor-pointer w-full">
@@ -1087,13 +787,11 @@ export const BinaryHexViewerTool: React.FC = () => {
                   onChange={handleFileUpload} 
                   className="hidden" 
                 />
-                <span className="bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm block text-center">
-                  选取本地文件
-                </span>
+                <span className="bg-primary-600 hover:bg-primary-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-xl transition-all shadow-sm block text-center">{tr("选取本地文件")}</span>
               </label>
               <ScratchpadPicker
-                label="暂存箱文件"
-                placeholder="📂 从暂存箱载入文件..."
+                label={tr("暂存箱文件")}
+                placeholder={tr("📂 从暂存箱载入文件...")}
                 filter={item => isScratchpadBinaryLike(item) || item.type === 'text'}
                 onLoad={(content, item) => loadScratchpadContent(content, item.name)}
               />
@@ -1103,42 +801,37 @@ export const BinaryHexViewerTool: React.FC = () => {
           {fileData ? (
             <div className="p-4 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-2xl space-y-2 lg:col-span-2 text-xs">
               <div className="flex justify-between items-center border-b pb-2 border-slate-100 dark:border-slate-900">
-                <span className="font-bold text-slate-700 dark:text-slate-300">当前文件:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{tr("当前文件:")}</span>
                 <span className="font-mono text-slate-600 dark:text-slate-400 break-all pl-4 text-right">{fileName}</span>
               </div>
               <div className="flex justify-between border-b pb-2 border-slate-100 dark:border-slate-900">
-                <span className="font-bold text-slate-700 dark:text-slate-300">文件大小:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{tr("文件大小:")}</span>
                 <span className="font-mono text-slate-600 dark:text-slate-400">
                   {fileSize < 1024 ? `${fileSize} Bytes` : fileSize < 1024 * 1024 ? `${(fileSize / 1024).toFixed(2)} KB` : `${(fileSize / (1024 * 1024)).toFixed(2)} MB`}
                 </span>
               </div>
               <div className="flex justify-between border-b pb-2 border-slate-100 dark:border-slate-900">
-                <span className="font-bold text-slate-700 dark:text-slate-300">底层签名类型 (魔数检测):</span>
-                <span className="font-bold text-primary-500">{magicName}</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{tr("底层签名类型 (魔数检测):")}</span>
+                <span className="font-bold text-primary-500">{tr(magicName)}</span>
               </div>
               
               {/* Threat warning card */}
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700 dark:text-slate-300">签名与后缀:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{tr("签名与后缀:")}</span>
                 {safetyStatus === 'safe' ? (
-                  <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
-                    签名与后缀一致
-                  </span>
+                  <span className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded text-[10px] font-bold">{tr("签名与后缀一致")}</span>
                 ) : safetyStatus === 'alert' ? (
                   <span className="bg-rose-500/10 text-rose-500 border border-rose-500/20 px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 ">
-                    <ShieldAlert className="w-3.5 h-3.5" /> 签名与后缀不一致
-                  </span>
+                    <ShieldAlert className="w-3.5 h-3.5" />{tr("签名与后缀不一致")}</span>
                 ) : (
-                  <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-bold">
-                    未分析后缀匹配度
-                  </span>
+                  <span className="bg-slate-500/10 text-slate-400 border border-slate-500/20 px-2 py-0.5 rounded text-[10px] font-bold">{tr("未分析后缀匹配度")}</span>
                 )}
               </div>
             </div>
           ) : (
             <div className="lg:col-span-2 border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/20 flex flex-col items-center justify-center p-6 text-slate-400 text-xs gap-2">
               <Cpu className="w-8 h-8 stroke-1 animate-pulse" />
-              <span>载入二进制文件后自动开展魔数头及十六进制比对</span>
+              <span>{tr("载入二进制文件后自动开展魔数头及十六进制比对")}</span>
             </div>
           )}
         </div>
@@ -1146,19 +839,19 @@ export const BinaryHexViewerTool: React.FC = () => {
         {fileData && (
           <div className="flex-1 flex flex-col gap-3 min-h-0">
             <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
-              <label className="flex items-center gap-2 text-xs">跳转偏移<input aria-label="跳转偏移" className="w-32 rounded border px-2 py-1.5 font-mono" placeholder="0 或 0x100" value={offsetInput} onChange={event => { setOffsetInput(event.target.value); setOffsetError(''); }} /></label>
-              <Button size="sm" variant="secondary" onClick={() => { const offset = Number(offsetInput); if (!offsetInput.trim() || !Number.isInteger(offset) || offset < 0 || offset >= fileData.length) { setOffsetError('偏移量超出文件范围。'); return; } setSelectedIdx(offset); setCurrentPage(Math.floor(offset / pageSize)); }}>跳转</Button>
-              {matches.size > 0 && <Button size="sm" variant="secondary" onClick={() => { const indexes = Array.from(matches).sort((a, b) => a - b); const next = indexes.find(index => index > (selectedIdx ?? -1)) ?? indexes[0]; setSelectedIdx(next); setCurrentPage(Math.floor(next / pageSize)); }}>下一个匹配字节</Button>}
-              {searchQuery && <span className="text-xs text-slate-500">{matches.size} 字节匹配</span>}
-              {offsetError && <span role="alert" className="text-xs text-red-600">{offsetError}</span>}
+              <label className="flex items-center gap-2 text-xs">{tr("跳转偏移")}<input aria-label={tr("跳转偏移")} className="w-32 rounded border px-2 py-1.5 font-mono" placeholder={tr("0 或 0x100")} value={offsetInput} onChange={event => { setOffsetInput(event.target.value); setOffsetError(''); }} /></label>
+              <Button size="sm" variant="secondary" onClick={() => { const offset = Number(offsetInput); if (!offsetInput.trim() || !Number.isInteger(offset) || offset < 0 || offset >= fileData.length) { setOffsetError('偏移量超出文件范围。'); return; } setSelectedIdx(offset); setCurrentPage(Math.floor(offset / pageSize)); }}>{tr("跳转")}</Button>
+              {matches.size > 0 && <Button size="sm" variant="secondary" onClick={() => { const indexes = Array.from(matches).sort((a, b) => a - b); const next = indexes.find(index => index > (selectedIdx ?? -1)) ?? indexes[0]; setSelectedIdx(next); setCurrentPage(Math.floor(next / pageSize)); }}>{tr("下一个匹配字节")}</Button>}
+              {searchQuery && <span className="text-xs text-slate-500">{matches.size}{tr("高亮字节 · 最多 5,000")}</span>}
+              {offsetError && <span role="alert" className="text-xs text-red-600">{tr(offsetError)}</span>}
             </div>
             {/* Search and Navigation Bar */}
             <div className="p-3 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-3 text-xs flex-none">
               <div className="relative w-full md:w-80">
                 <input 
                   type="text"
-                  aria-label="搜索文件字节"
-                  placeholder="搜索 ASCII(如 PNG) 或 HEX(如 89 50)"
+                  aria-label={tr("搜索文件字节")} maxLength={1024}
+                  placeholder={tr("UTF-8 文本或 HEX；text: 强制文本")}
                   className="w-full pl-8 pr-3 py-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-[10px] focus:outline-none focus:ring-1 focus:ring-primary-500"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
@@ -1175,11 +868,9 @@ export const BinaryHexViewerTool: React.FC = () => {
                     setSelectedIdx(null);
                   }}
                   className="px-2.5 py-1 border rounded-lg bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 hover:bg-slate-50 disabled:opacity-40 text-[10px] font-bold"
-                >
-                  上一页
-                </button>
+                >{tr("上一页")}</button>
                 <span className="font-mono font-bold text-[10px] text-slate-500">
-                  PAGE {currentPage + 1} / {totalPages} (字节范围: {currentPage * pageSize} - {Math.min(fileData.length, (currentPage + 1) * pageSize) - 1})
+                  PAGE {currentPage + 1} / {totalPages}{tr("(字节范围:")}{currentPage * pageSize} - {Math.min(fileData.length, (currentPage + 1) * pageSize) - 1})
                 </span>
                 <button
                   disabled={currentPage === totalPages - 1}
@@ -1188,15 +879,11 @@ export const BinaryHexViewerTool: React.FC = () => {
                     setSelectedIdx(null);
                   }}
                   className="px-2.5 py-1 border rounded-lg bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-850 hover:bg-slate-50 disabled:opacity-40 text-[10px] font-bold"
-                >
-                  下一页
-                </button>
+                >{tr("下一页")}</button>
               </div>
 
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleDownload} icon={<Download className="w-3.5 h-3.5" />}>
-                  下载该文件
-                </Button>
+                <Button size="sm" onClick={handleDownload} icon={<Download className="w-3.5 h-3.5" />}>{tr("下载该文件")}</Button>
               </div>
             </div>
 
@@ -1299,15 +986,15 @@ export const BinaryHexViewerTool: React.FC = () => {
 
                 {selectedIdx !== null && fileData && (
                   <div className="p-3 bg-slate-900 rounded-xl border border-slate-850 space-y-1.5 animate-in fade-in duration-200 mt-4">
-                    <span className="text-[10px] font-bold text-slate-500 block uppercase">选定字节明细</span>
+                    <span className="text-[10px] font-bold text-slate-500 block uppercase">{tr("选定字节明细")}</span>
                     <div className="grid grid-cols-2 text-[10px] gap-y-1">
-                      <span className="text-slate-500">位置 (Index):</span>
+                      <span className="text-slate-500">{tr("位置 (Index):")}</span>
                       <span className="text-slate-300 font-bold">{selectedIdx}</span>
-                      <span className="text-slate-500">十六进制:</span>
+                      <span className="text-slate-500">{tr("十六进制:")}</span>
                       <span className="text-primary-400 font-bold">0x{fileData[selectedIdx].toString(16).toUpperCase()}</span>
-                      <span className="text-slate-500">二进制:</span>
+                      <span className="text-slate-500">{tr("二进制:")}</span>
                       <span className="text-slate-300 font-mono">{fileData[selectedIdx].toString(2).padStart(8, '0')}</span>
-                      <span className="text-slate-500">十进制 (DEC):</span>
+                      <span className="text-slate-500">{tr("十进制 (DEC):")}</span>
                       <span className="text-slate-300">{fileData[selectedIdx]}</span>
                     </div>
                   </div>

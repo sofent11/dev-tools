@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Copy, Download, Image as ImageIcon } from 'lucide-react';
 import { CardContent } from '../../ui/Card';
 import { Button } from '../../ui/Button';
@@ -12,6 +13,10 @@ import { runMarchingEdges } from './vectorizerCore';
 import { FileDropzone } from '../shared/WorkflowUi';
 
 export const ImageVectorizerPanel: React.FC = () => {
+  useLocaleRender();
+  const [error, setError] = useState('');
+  const generationRef = useRef(0);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [threshold, setThreshold] = useState(128);
@@ -28,6 +33,9 @@ export const ImageVectorizerPanel: React.FC = () => {
 
   const handleFileChange = (files: File[]) => {
     const selected = files[0]; if (!selected) return;
+    if (selected.size > 16 * 1024 * 1024) { setError('图片文件上限为 16 MB。'); return; }
+    generationRef.current += 1;
+    setError('');
     setFile(selected); setPreviewUrl(URL.createObjectURL(selected)); setSvgPath('');
   };
 
@@ -41,9 +49,8 @@ export const ImageVectorizerPanel: React.FC = () => {
   );
 
   const handleCopyCode = async () => {
-    await navigator.clipboard.writeText(safeSvgContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    try { await navigator.clipboard.writeText(safeSvgContent); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch (error) { notifyToast({ title: '复制失败', description: (error as Error).message, tone: 'error' }); }
   };
 
   const handleDownloadSvg = () => {
@@ -76,9 +83,12 @@ export const ImageVectorizerPanel: React.FC = () => {
   const handleVectorize = useCallback(() => {
     if (!previewUrl) return;
     setIsProcessing(true);
-
+    const generation = ++generationRef.current;
     const img = new Image();
+    imageRef.current = img;
     img.onload = () => {
+      if (generation !== generationRef.current) return;
+      try {
       const maxSide = 600;
       let w = img.naturalWidth || img.width;
       let h = img.naturalHeight || img.height;
@@ -107,8 +117,10 @@ export const ImageVectorizerPanel: React.FC = () => {
       ctx.drawImage(img, 0, 0, w, h);
       const path = runMarchingEdges(canvas, threshold, invert, simplifyTolerance);
       setSvgPath(path);
-      setIsProcessing(false);
+      } catch (error) { setSvgPath(''); setError((error as Error).message); }
+      finally { setIsProcessing(false); }
     };
+    img.onerror = () => { if (generation === generationRef.current) { setIsProcessing(false); setSvgPath(''); setError('图片加载失败'); } };
     img.src = previewUrl;
   }, [invert, previewUrl, simplifyTolerance, threshold]);
 
@@ -120,22 +132,24 @@ export const ImageVectorizerPanel: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      generationRef.current += 1;
+      if (imageRef.current) { imageRef.current.onload = null; imageRef.current.onerror = null; }
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
 
   return (
     <CardContent className="flex-1 flex flex-col lg:flex-row gap-6 overflow-auto p-6 min-h-0 text-slate-700 dark:text-slate-200">
-      <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4">
+      <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4">{error && <p role="alert" className="status-warning p-3 text-xs">{error}</p>}
         {!previewUrl ? (
-          <FileDropzone accept="image/*" onFiles={handleFileChange} title="选择位图或拖到这里" hint="单色轮廓提取，支持 PNG / JPG / WebP" />
+          <FileDropzone accept="image/*" onFiles={handleFileChange} title={tr("选择位图或拖到这里")} hint={tr("单色轮廓提取，支持 PNG / JPG / WebP")} />
         ) : (
           <div className="flex flex-col gap-4">
             <div className="p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-3 text-xs">
               <ImageIcon className="w-8 h-8 text-primary-500 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{file?.name}</p>
-                <p className="text-[10px] text-slate-500">尺寸: {svgWidth} x {svgHeight} px</p>
+                <p className="text-[10px] text-slate-500">{tr("尺寸:")}{svgWidth} x {svgHeight} px</p>
               </div>
               <button
                 onClick={() => {
@@ -144,15 +158,13 @@ export const ImageVectorizerPanel: React.FC = () => {
                   setSvgPath('');
                 }}
                 className="text-[10px] text-rose-500 font-bold hover:underline"
-              >
-                移除
-              </button>
+              >{tr("移除")}</button>
             </div>
 
-            <div className="workflow-segmented"><button type="button" onClick={() => { setThreshold(90); setSimplifyTolerance(.5); }}>细线</button><button type="button" onClick={() => { setThreshold(160); setSimplifyTolerance(1); }}>实心轮廓</button></div>
+            <div className="workflow-segmented"><button type="button" onClick={() => { setThreshold(90); setSimplifyTolerance(.5); }}>{tr("细线")}</button><button type="button" onClick={() => { setThreshold(160); setSimplifyTolerance(1); }}>{tr("实心轮廓")}</button></div>
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
-                <span>二值化阈值 (Threshold)</span>
+                <span>{tr("二值化阈值 (Threshold)")}</span>
                 <span className="font-mono text-primary-500">{threshold}</span>
               </div>
               <input 
@@ -160,12 +172,12 @@ export const ImageVectorizerPanel: React.FC = () => {
                 onChange={e => setThreshold(Number(e.target.value))}
                 className="w-full accent-primary-500"
               />
-              <p className="text-[9px] text-slate-500">数值越低提取线条越细，数值越高填充面积越大。</p>
+              <p className="text-[9px] text-slate-500">{tr("数值越低提取线条越细，数值越高填充面积越大。")}</p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
-                <span>平滑化程度 (Simplify)</span>
+                <span>{tr("平滑化程度 (Simplify)")}</span>
                 <span className="font-mono text-primary-500">{simplifyTolerance}px</span>
               </div>
               <input 
@@ -173,7 +185,7 @@ export const ImageVectorizerPanel: React.FC = () => {
                 onChange={e => setSimplifyTolerance(Number(e.target.value))}
                 className="w-full accent-primary-500"
               />
-              <p className="text-[9px] text-slate-500">过滤锯齿边缘波动，数值越高线条越平滑。</p>
+              <p className="text-[9px] text-slate-500">{tr("过滤锯齿边缘波动，数值越高线条越平滑。")}</p>
             </div>
 
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 text-xs">
@@ -182,12 +194,12 @@ export const ImageVectorizerPanel: React.FC = () => {
                   type="checkbox" checked={invert} onChange={e => setInvert(e.target.checked)}
                   className="rounded text-primary-500 focus:ring-primary-400"
                 />
-                <span>反转颜色区域 (Inverting)</span>
+                <span>{tr("反转颜色区域 (Inverting)")}</span>
               </label>
 
               <div className="grid grid-cols-2 gap-2 text-[10px]">
                 <div className="space-y-1">
-                  <span className="text-slate-500 block">前景填充颜色</span>
+                  <span className="text-slate-500 block">{tr("前景填充颜色")}</span>
                   <div className="flex items-center gap-1.5">
                     <input 
                       type="color" value={fillColor.startsWith('#') ? fillColor : '#000000'} 
@@ -202,27 +214,23 @@ export const ImageVectorizerPanel: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <span className="text-slate-500 block">背景背景颜色</span>
+                  <span className="text-slate-500 block">{tr("背景颜色")}</span>
                   <select 
                     value={bgColor} onChange={e => setBgColor(e.target.value)}
                     className="w-full border rounded px-1 py-0.5 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-[10px]"
                   >
-                    <option value="transparent">透明背景</option>
-                    <option value="#ffffff">白色白色</option>
-                    <option value="#f8fafc">浅灰背景</option>
-                    <option value="#0f172a">深蓝背景</option>
+                    <option value="transparent">{tr("透明背景")}</option>
+                    <option value="#ffffff">{tr("白色")}</option>
+                    <option value="#f8fafc">{tr("浅灰背景")}</option>
+                    <option value="#0f172a">{tr("深蓝背景")}</option>
                   </select>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <Button onClick={handleDownloadSvg} icon={<Download className="w-4 h-4"/>}>
-                下载 SVG
-              </Button>
-              <Button variant="secondary" onClick={sendSvgToScratchpad}>
-                送入暂存箱
-              </Button>
+              <Button onClick={handleDownloadSvg} icon={<Download className="w-4 h-4"/>}>{tr("下载 SVG")}</Button>
+              <Button variant="secondary" onClick={sendSvgToScratchpad}>{tr("送入暂存箱")}</Button>
             </div>
           </div>
         )}
@@ -232,16 +240,16 @@ export const ImageVectorizerPanel: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              {showCode ? 'SVG 矢量源码' : '轮廓 SVG 预览'}
+              {showCode ? tr('SVG 矢量源码') : tr('轮廓 SVG 预览')}
             </span>
-            {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">矢量化计算中...</span>}
+            {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">{tr("矢量化计算中...")}</span>}
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setShowCode(!showCode)}
               className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
             >
-              {showCode ? '图形预览' : '查看源码'}
+              {showCode ? tr('图形预览') : tr('查看源码')}
             </button>
             {svgPath && (
               <button
@@ -249,7 +257,7 @@ export const ImageVectorizerPanel: React.FC = () => {
                 className="text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 border rounded px-2.5 py-1 bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 flex items-center gap-1"
               >
                 {copied ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                <span>复制代码</span>
+                <span>{tr("复制代码")}</span>
               </button>
             )}
           </div>
@@ -259,7 +267,7 @@ export const ImageVectorizerPanel: React.FC = () => {
           {!previewUrl ? (
             <div className="text-slate-400 text-center text-xs">
               <ImageIcon className="w-12 h-12 text-slate-300 dark:text-slate-800 mx-auto mb-3" />
-              <span>上传位图图像，在此实时生成并预览单色轮廓路径。</span>
+              <span>{tr("上传位图图像，在此实时生成并预览单色轮廓路径。")}</span>
             </div>
           ) : showCode ? (
             <pre className="w-full h-full p-4 rounded-xl border border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-950 font-mono text-[10px] text-slate-700 dark:text-slate-300 overflow-auto whitespace-pre leading-relaxed">
@@ -277,7 +285,7 @@ export const ImageVectorizerPanel: React.FC = () => {
             />
           ) : (
             <div className="text-slate-400 text-center text-xs animate-pulse">
-              <span>正在追踪位图边缘...</span>
+              <span>{tr("正在追踪位图边缘...")}</span>
             </div>
           )}
         </div>

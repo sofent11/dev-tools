@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { Binary, Fingerprint, QrCode, WalletCards, Wand2 } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -9,7 +10,10 @@ const LoremIpsumTool = lazyNamed(() => import('../generators'), 'LoremIpsumTool'
 const RmbUppercaseTool = lazyNamed(() => import('../text'), 'RmbUppercaseTool');
 const QrCodeTool = lazyNamed(() => import('../WebTools'), 'QrCodeTool');
 
+const ArithmancyTool = lazyNamed(() => import('../arithmancy'), 'ArithmancyTool');
+
 const subTools: SubTool[] = [
+  { id: 'arithmancy', name: '数字占卜', description: '生命路径、姓名数字与个人年解读', icon: Fingerprint, component: ArithmancyTool },
   { id: 'uuid', name: 'UUID 生成', description: '随机 V4 UUIDs', icon: Fingerprint, component: UuidTool },
   { id: 'random-str', name: '随机字符串', description: '随机 String / NanoID', icon: Fingerprint, component: RandomStringTool },
   { id: 'random-number', name: '随机数生成器', description: '范围随机整数', icon: Binary, component: RandomNumberTool },
@@ -18,11 +22,11 @@ const subTools: SubTool[] = [
   { id: 'qrcode', name: '二维码生成', description: '文本/WiFi/名片生成器', icon: QrCode, component: QrCodeTool },
 ];
 
-export const GeneratorUtilityStudio: React.FC = () => (
+export const GeneratorUtilityStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="生成器与实用计算工作室"
-    description="把随机标识、Mock 数据、占位文本、金额表达和二维码这些轻量生成任务集中管理"
+    title={tr("生成器与实用计算工作室")}
+    description={tr("把随机标识、Mock 数据、占位文本、金额表达和二维码这些轻量生成任务集中管理")}
     tools={subTools}
     defaultTab="uuid"
   />
-);
+); };

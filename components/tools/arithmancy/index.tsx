@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import { Check, Copy, Hash, Sparkles } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
@@ -67,56 +68,57 @@ const NumberTile: React.FC<{
   value: ArithmancyNumber | null;
   subtitle?: string;
   tone?: Tone;
-}> = ({ title, value, subtitle, tone = 'slate' }) => (
+}> = ({ title, value, subtitle, tone = 'slate' }) => { useLocaleRender(); return (
   <div className={`tool-panel min-h-[8.25rem] rounded-lg border p-4 ${toneStyles[tone]}`}>
     <div className="mb-3 flex items-center justify-between gap-3">
-      <div className="text-xs font-semibold uppercase tracking-wide opacity-75">{title}</div>
+      <div className="text-xs font-semibold uppercase tracking-wide opacity-75">{tr(title)}</div>
       {value === 11 || value === 22 || value === 33 ? (
         <span className="rounded-full border border-current/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide opacity-80">
-          大师数字
-        </span>
+          {tr("大师数字")}</span>
       ) : null}
     </div>
     <div className="font-mono text-4xl font-black leading-none tracking-normal">{value || '-'}</div>
     {subtitle && <div className="mt-3 text-xs font-medium leading-5 opacity-80">{subtitle}</div>}
   </div>
-);
+); };
 
 const MeaningPanel: React.FC<{
   title: string;
   value: ArithmancyNumber;
   translate: (value: string) => string;
 }> = ({ title, value, translate }) => {
+  useLocaleRender();
   const lines = summarizeMeaning(value, translate);
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-slate-100">
         <Sparkles className="h-4 w-4 text-amber-500" />
-        <span>{title}</span>
+        <span>{tr(title)}</span>
       </div>
       <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">
         {summarizeKeywords(value, translate)}
       </div>
       <div className="mt-3 grid gap-2 text-sm leading-6 text-slate-700 dark:text-slate-300 md:grid-cols-3">
-        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate('优势')}：</span>{lines[0]}</p>
-        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate('挑战')}：</span>{lines[1]}</p>
-        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate('建议')}：</span>{lines[2]}</p>
+        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate(tr('优势'))}：</span>{lines[0]}</p>
+        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate(tr('挑战'))}：</span>{lines[1]}</p>
+        <p><span className="font-semibold text-slate-950 dark:text-slate-100">{translate(tr('建议'))}：</span>{lines[2]}</p>
       </div>
     </div>
   );
 };
 
-const TrailRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+const TrailRow: React.FC<{ label: string; value: string }> = ({ label, value }) => { useLocaleRender(); return (
   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-    <div className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{label}</div>
+    <div className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{tr(label)}</div>
     <div className="break-words font-mono text-xs leading-5 text-slate-800 dark:text-slate-200">{value}</div>
   </div>
-);
+); };
 
 const hasLatinLetters = (reading: NameReading) => reading.expression.letters.length > 0;
 
 export const ArithmancyTool: React.FC = () => {
+  useLocaleRender();
   const { t } = useI18n();
   const { copied, copy } = useCopyToClipboard();
   const [birthDate, setBirthDate] = useState('1980-07-31');
@@ -205,15 +207,15 @@ export const ArithmancyTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="数字占卜台"
-        description="基于生日、姓名拼音和关键词计算生命路径、姓名数字、个人年与关系主题。"
+        title={tr("数字占卜台")}
+        description={tr("基于生日、姓名拼音和关键词计算生命路径、姓名数字、个人年与关系主题。")}
         actions={
           <Button
             size="sm"
             onClick={() => copy(report)}
             icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           >
-            {copied ? '已复制' : '复制报告'}
+            {copied ? tr('已复制') : tr('复制报告')}
           </Button>
         }
       />
@@ -223,23 +225,23 @@ export const ArithmancyTool: React.FC = () => {
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
               <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-slate-100">
                 <Hash className="h-4 w-4 text-sky-500" />
-                <span>输入信息</span>
+                <span>{tr("输入信息")}</span>
               </div>
               <div className="space-y-4">
                 <div>
-                  <FieldLabel>出生日期</FieldLabel>
+                  <FieldLabel>{tr("出生日期")}</FieldLabel>
                   <Input type="date" value={birthDate} onChange={event => setBirthDate(event.target.value)} />
                 </div>
                 <div>
-                  <FieldLabel hint="中文姓名请用拼音或英文输入。">姓名或拼音</FieldLabel>
+                  <FieldLabel hint={tr("中文姓名请用拼音或英文输入。")}>{tr("姓名或拼音")}</FieldLabel>
                   <Input
                     value={name}
                     onChange={event => setName(event.target.value)}
                     placeholder="Harry Potter"
                   />
                 </div>
-                <details><summary className="cursor-pointer text-xs font-semibold text-slate-600">问题、年份与关系分析</summary><div className="space-y-4 mt-4"><div>
-                  <FieldLabel>问题关键词</FieldLabel>
+                <details><summary className="cursor-pointer text-xs font-semibold text-slate-600">{tr("问题、年份与关系分析")}</summary><div className="space-y-4 mt-4"><div>
+                  <FieldLabel>{tr("问题关键词")}</FieldLabel>
                   <Input
                     value={keyword}
                     onChange={event => setKeyword(event.target.value)}
@@ -247,7 +249,7 @@ export const ArithmancyTool: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <FieldLabel>目标年份</FieldLabel>
+                  <FieldLabel>{tr("目标年份")}</FieldLabel>
                   <Input
                     type="number"
                     min="1"
@@ -257,7 +259,7 @@ export const ArithmancyTool: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <FieldLabel hint="用于计算关系主题数字。">兼容对象姓名</FieldLabel>
+                  <FieldLabel hint={tr("用于计算关系主题数字。")}>{tr("兼容对象姓名")}</FieldLabel>
                   <Input
                     value={partnerName}
                     onChange={event => setPartnerName(event.target.value)}
@@ -269,13 +271,11 @@ export const ArithmancyTool: React.FC = () => {
 
             {ignoredCharacters.length > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
-                检测到非拉丁字符，已忽略；中文姓名请先转写为拼音。
-              </div>
+                {tr("检测到非拉丁字符，已忽略；中文姓名请先转写为拼音。")}</div>
             )}
 
             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-              数字占卜用于娱乐与自我反思，不作为科学预测。
-            </div>
+              {tr("数字占卜用于娱乐与自我反思，不作为科学预测。")}</div>
           </div>
         </div>
 

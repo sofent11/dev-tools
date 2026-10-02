@@ -151,3 +151,16 @@ describe('runtime asset loader', () => {
     })).rejects.toThrow('资源完整性校验失败');
   });
 });
+
+describe('runtime degradation and integrity reporting', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); __runtimeAssetLoaderTestUtils.clearCaches(); });
+  it('loads from the network when browser cache access is denied', async () => {
+    vi.stubGlobal('caches', { open: vi.fn().mockRejectedValue(new Error('blocked')) });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('available')));
+    const response = await loadRuntimeAsset<Response>({ url:'https://example.com/asset', kind:'asset', label:'Fixture', retries:0 });
+    expect(await response.text()).toBe('available');
+  });
+  it('rejects module integrity promises that dynamic import cannot enforce', async () => {
+    await expect(loadRuntimeAsset({url:'https://example.com/module.js',kind:'module',label:'Module',expectedSha256:'a'.repeat(64)})).rejects.toThrow('runtime import does not enforce');
+  });
+});

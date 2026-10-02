@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import { GeometryResult } from './utils/geometry';
+import { getDesignBounds } from './utils/designBounds';
 
 /**
  * Converts an SVG path data string (the `d` attribute) into a THREE.ShapePath
@@ -239,6 +240,7 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
 
     try {
       const group = new THREE.Group();
+      const { centerX, centerY } = getDesignBounds(geometry!.polygons);
 
       // Materials
       const textPreset = MATERIAL_PRESETS[materialType];
@@ -279,7 +281,7 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
         bevelThickness: 0.05 * unitsPerMm,
       };
       const textGeo = new THREE.ExtrudeGeometry(textShapes, textSettings);
-      textGeo.center(); // centers in X, Y, Z
+      textGeo.translate(-centerX, -centerY, -textDepth / 2);
       textGeo.scale(1, -1, -1); // Invert Y and Z directly on the geometry vertices
       
       const textMesh = new THREE.Mesh(textGeo, textMaterial);
@@ -298,7 +300,7 @@ export const ThreeStage: React.FC<ThreeStageProps> = ({
           bevelThickness: 0.05 * unitsPerMm,
         };
         const frameGeo = new THREE.ExtrudeGeometry(frameShapes, frameSettings);
-        frameGeo.center(); // centers in X, Y, Z
+        frameGeo.translate(-centerX, -centerY, -frameDepth / 2);
         frameGeo.scale(1, -1, -1); // Invert Y and Z directly on the geometry vertices
         
         frameMesh = new THREE.Mesh(frameGeo, frameMaterial);

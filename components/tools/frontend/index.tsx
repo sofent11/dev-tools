@@ -1,3 +1,6 @@
+import { componentIdentifier, serializeAttributes, serializeJsxNode } from './jsxSerializer';
+import { useDraftState } from '../shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useMemo, useState } from 'react';
 import { Check, Copy, Download, Search, Info } from 'lucide-react';
 import { optimize } from 'svgo/browser';
@@ -46,33 +49,24 @@ export const MimeTypeTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="MIME 类型" description="查询常见文件扩展名与 MIME 类型。" />
+      <CardHeader title={tr("MIME 类型")} description={tr("查询常见文件扩展名与 MIME 类型。")} />
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input className="pl-9" placeholder=".svg / json / image" value={query} onChange={event => setQuery(event.target.value)} />
         </div>
-        <div className="flex flex-wrap gap-2">{[['all','全部'],['text','文本'],['image','图片'],['application','应用'],['video','视频'],['audio','音频']].map(([value,label]) => <Button key={value} size="sm" variant={family === value ? 'primary' : 'secondary'} onClick={() => setFamily(value)}>{label}</Button>)}</div>
-        <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500"><span>{rows.length} 个匹配类型</span>{copied && <span role="status">MIME 已复制</span>}</div>
-        <div className="tool-panel overflow-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="p-3">扩展名</th><th className="p-3">Content-Type</th><th className="p-3"><span className="sr-only">复制</span></th></tr></thead><tbody>{rows.map(([extension,mime]) => <tr key={extension} className="border-t border-slate-100"><td className="p-3 font-mono">{extension}</td><td className="p-3 font-mono break-all">{mime}</td><td className="p-3 text-right"><Button size="sm" variant="ghost" onClick={() => copy(mime)} aria-label={`${t('复制')} ${mime}`} icon={<Copy className="h-4 w-4" />}>复制</Button></td></tr>)}</tbody></table>{!rows.length && <div className="p-8 text-center text-sm text-slate-500">没有匹配类型，尝试扩展名或 MIME 关键词。</div>}</div>
+        <div className="flex flex-wrap gap-2">{[['all',tr('全部')],['text',tr('文本')],['image',tr('图片')],['application',tr('应用')],['video',tr('视频')],['audio',tr('音频')]].map(([value,label]) => <Button key={value} size="sm" variant={family === value ? 'primary' : 'secondary'} onClick={() => setFamily(value)}>{label}</Button>)}</div>
+        <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500"><span>{rows.length}{tr("个匹配类型")}</span>{copied && <span role="status">{tr("MIME 已复制")}</span>}</div>
+        <div className="tool-panel overflow-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="p-3">{tr("扩展名")}</th><th className="p-3">Content-Type</th><th className="p-3"><span className="sr-only">{tr("复制")}</span></th></tr></thead><tbody>{rows.map(([extension,mime]) => <tr key={extension} className="border-t border-slate-100"><td className="p-3 font-mono">{extension}</td><td className="p-3 font-mono break-all">{mime}</td><td className="p-3 text-right"><Button size="sm" variant="ghost" onClick={() => copy(mime)} aria-label={`${t('复制')} ${mime}`} icon={<Copy className="h-4 w-4" />}>{tr("复制")}</Button></td></tr>)}</tbody></table>{!rows.length && <div className="p-8 text-center text-sm text-slate-500">{tr("没有匹配类型，尝试扩展名或 MIME 关键词。")}</div>}</div>
       </CardContent>
     </Card>
   );
 };
 
-const encodeSvg = (svg: string) =>
-  svg
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/"/g, '\'')
-    .replace(/%/g, '%25')
-    .replace(/#/g, '%23')
-    .replace(/{/g, '%7B')
-    .replace(/}/g, '%7D')
-    .replace(/</g, '%3C')
-    .replace(/>/g, '%3E');
+const encodeSvg = (svg: string) => encodeURIComponent(svg.trim()).replace(/'/g, '%27');
 
 export const SvgToCssTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#173b33"/></svg>');
   const [mode, setMode] = useState<'background' | 'mask'>('background');
   const { copied, copy } = useCopyToClipboard();
@@ -81,13 +75,13 @@ export const SvgToCssTool: React.FC = () => {
   const safePreview = useMemo(() => sanitizeSvgMarkup(svg), [svg]);
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="SVG 转 CSS" description="粘贴 SVG，选择背景或蒙版用途，复制对应 CSS。" />
+      <CardHeader title={tr("SVG 转 CSS")} description={tr("粘贴 SVG，选择背景或蒙版用途，复制对应 CSS。")} />
       <CardContent className="grid gap-5 overflow-auto lg:grid-cols-2">
-        <div className="flex flex-col gap-3"><FieldLabel hint="实时转换">原始 SVG</FieldLabel><Textarea className="min-h-80 resize-y font-mono text-xs" value={svg} onChange={event => setSvg(event.target.value)} /><Button size="sm" variant="ghost" className="self-start" onClick={() => setSvg('')}>清空</Button></div>
-        <div className="space-y-4 min-w-0"><div className="flex gap-2"><Button size="sm" variant={mode === 'background' ? 'primary' : 'secondary'} onClick={() => setMode('background')}>背景图</Button><Button size="sm" variant={mode === 'mask' ? 'primary' : 'secondary'} onClick={() => setMode('mask')}>蒙版</Button></div>
+        <div className="flex flex-col gap-3"><FieldLabel hint={tr("实时转换")}>{tr("原始 SVG")}</FieldLabel><Textarea className="min-h-80 resize-y font-mono text-xs" value={svg} onChange={event => setSvg(event.target.value)} /><Button size="sm" variant="ghost" className="self-start" onClick={() => setSvg('')}>{tr("清空")}</Button></div>
+        <div className="space-y-4 min-w-0"><div className="flex gap-2"><Button size="sm" variant={mode === 'background' ? 'primary' : 'secondary'} onClick={() => setMode('background')}>{tr("背景图")}</Button><Button size="sm" variant={mode === 'mask' ? 'primary' : 'secondary'} onClick={() => setMode('mask')}>{tr("蒙版")}</Button></div>
           <div className="tool-panel min-h-36 flex items-center justify-center p-6"><div className="h-24 w-24 [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: safePreview }} /></div>
-          <div className="flex items-center justify-between gap-2"><FieldLabel>{mode === 'background' ? 'background-image' : 'mask-image'}</FieldLabel><Button size="sm" disabled={!svg.trim()} onClick={() => copy(output)} icon={copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}>复制 CSS</Button></div>
-          <Textarea readOnly className="min-h-40 font-mono text-xs bg-slate-50 resize-y" value={svg.trim() ? output : ''} placeholder="输入 SVG，CSS 会在这里显示。" />
+          <div className="flex items-center justify-between gap-2"><FieldLabel>{mode === 'background' ? 'background-image' : 'mask-image'}</FieldLabel><Button size="sm" disabled={!svg.trim()} onClick={() => copy(output)} icon={copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}>{tr("复制 CSS")}</Button></div>
+          <Textarea readOnly className="min-h-40 font-mono text-xs bg-slate-50 resize-y" value={svg.trim() ? output : ''} placeholder={tr("输入 SVG，CSS 会在这里显示。")} />
         </div>
       </CardContent>
     </Card>
@@ -104,9 +98,9 @@ const RangeField: React.FC<{
   step?: number;
   unit?: string;
   onChange: (value: number) => void;
-}> = ({ label, value, min, max, step = 1, unit = 'px', onChange }) => (
+}> = ({ label, value, min, max, step = 1, unit = 'px', onChange }) => { useLocaleRender(); return (
   <div>
-    <FieldLabel hint={`${value}${unit}`}>{label}</FieldLabel>
+    <FieldLabel hint={tr(`${value}${unit}`)}>{tr(label)}</FieldLabel>
     <input
       type="range"
       min={min}
@@ -117,9 +111,10 @@ const RangeField: React.FC<{
       className="w-full accent-primary-600"
     />
   </div>
-);
+); };
 
 export const CssGeneratorTool: React.FC = () => {
+  useLocaleRender();
   const [mode, setMode] = useState<CssGeneratorMode>('shadow');
   const [shadow, setShadow] = useState({ x: 0, y: 18, blur: 38, spread: -12, opacity: 0.28 });
   const [gradient, setGradient] = useState({ angle: 135, from: '#0f766e', to: '#f59e0b' });
@@ -148,56 +143,55 @@ export const CssGeneratorTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="CSS 可视化生成器"
-        description="用控件调出常见视觉效果，实时预览并复制 CSS。"
+        title={tr("CSS 可视化生成器")}
+        description={tr("用控件调出常见视觉效果，实时预览并复制 CSS。")}
         actions={
           <Button size="sm" variant="secondary" onClick={() => copy(css)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-            复制 CSS
-          </Button>
+            {tr("复制 CSS")}</Button>
         }
       />
       <Tabs>
         {([
-          ['shadow', '阴影'],
-          ['gradient', '渐变'],
-          ['radius', '圆角'],
-          ['glass', '毛玻璃'],
+          ['shadow', tr('阴影')],
+          ['gradient', tr('渐变')],
+          ['radius', tr('圆角')],
+          ['glass', tr('毛玻璃')],
         ] as const).map(([key, label]) => (
-          <TabButton key={key} active={mode === key} onClick={() => setMode(key)}>{label}</TabButton>
+          <TabButton key={key} active={mode === key} onClick={() => setMode(key)}>{tr(label)}</TabButton>
         ))}
       </Tabs>
       <CardContent className="grid min-h-0 min-w-0 grid-cols-1 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="tool-panel p-4 space-y-4 self-start">
-          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:4,blur:12,spread:0,opacity:0.12 }); else if (mode === 'gradient') setGradient({ angle:135,from:'#173b33',to:'#d4e35b' }); else if (mode === 'radius') setRadius({ tl:12,tr:12,br:12,bl:12 }); else setGlass({ blur:12,opacity:0.2,border:24 }); }}>轻盈</Button><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:24,blur:48,spread:-12,opacity:0.35 }); else if (mode === 'gradient') setGradient({ angle:45,from:'#ee7959',to:'#f7cc70' }); else if (mode === 'radius') setRadius({ tl:48,tr:8,br:48,bl:8 }); else setGlass({ blur:24,opacity:0.45,border:50 }); }}>鲜明</Button></div>
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:4,blur:12,spread:0,opacity:0.12 }); else if (mode === 'gradient') setGradient({ angle:135,from:'#173b33',to:'#d4e35b' }); else if (mode === 'radius') setRadius({ tl:12,tr:12,br:12,bl:12 }); else setGlass({ blur:12,opacity:0.2,border:24 }); }}>{tr("轻盈")}</Button><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:24,blur:48,spread:-12,opacity:0.35 }); else if (mode === 'gradient') setGradient({ angle:45,from:'#ee7959',to:'#f7cc70' }); else if (mode === 'radius') setRadius({ tl:48,tr:8,br:48,bl:8 }); else setGlass({ blur:24,opacity:0.45,border:50 }); }}>{tr("鲜明")}</Button></div>
           {mode === 'shadow' && (
             <>
-              <RangeField label="X 偏移" value={shadow.x} min={-80} max={80} onChange={x => setShadow({ ...shadow, x })} />
-              <RangeField label="Y 偏移" value={shadow.y} min={-80} max={80} onChange={y => setShadow({ ...shadow, y })} />
-              <RangeField label="模糊" value={shadow.blur} min={0} max={120} onChange={blur => setShadow({ ...shadow, blur })} />
-              <RangeField label="扩展" value={shadow.spread} min={-60} max={60} onChange={spread => setShadow({ ...shadow, spread })} />
-              <RangeField label="透明度" value={shadow.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setShadow({ ...shadow, opacity })} />
+              <RangeField label={tr("X 偏移")} value={shadow.x} min={-80} max={80} onChange={x => setShadow({ ...shadow, x })} />
+              <RangeField label={tr("Y 偏移")} value={shadow.y} min={-80} max={80} onChange={y => setShadow({ ...shadow, y })} />
+              <RangeField label={tr("模糊")} value={shadow.blur} min={0} max={120} onChange={blur => setShadow({ ...shadow, blur })} />
+              <RangeField label={tr("扩展")} value={shadow.spread} min={-60} max={60} onChange={spread => setShadow({ ...shadow, spread })} />
+              <RangeField label={tr("透明度")} value={shadow.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setShadow({ ...shadow, opacity })} />
             </>
           )}
           {mode === 'gradient' && (
             <>
-              <RangeField label="角度" value={gradient.angle} min={0} max={360} unit="deg" onChange={angle => setGradient({ ...gradient, angle })} />
-              <div><FieldLabel>起始颜色</FieldLabel><Input type="color" value={gradient.from} onChange={event => setGradient({ ...gradient, from: event.target.value })} /></div>
-              <div><FieldLabel>结束颜色</FieldLabel><Input type="color" value={gradient.to} onChange={event => setGradient({ ...gradient, to: event.target.value })} /></div>
+              <RangeField label={tr("角度")} value={gradient.angle} min={0} max={360} unit="deg" onChange={angle => setGradient({ ...gradient, angle })} />
+              <div><FieldLabel>{tr("起始颜色")}</FieldLabel><Input type="color" value={gradient.from} onChange={event => setGradient({ ...gradient, from: event.target.value })} /></div>
+              <div><FieldLabel>{tr("结束颜色")}</FieldLabel><Input type="color" value={gradient.to} onChange={event => setGradient({ ...gradient, to: event.target.value })} /></div>
             </>
           )}
           {mode === 'radius' && (
             <>
-              <RangeField label="左上" value={radius.tl} min={0} max={120} onChange={tl => setRadius({ ...radius, tl })} />
-              <RangeField label="右上" value={radius.tr} min={0} max={120} onChange={tr => setRadius({ ...radius, tr })} />
-              <RangeField label="右下" value={radius.br} min={0} max={120} onChange={br => setRadius({ ...radius, br })} />
-              <RangeField label="左下" value={radius.bl} min={0} max={120} onChange={bl => setRadius({ ...radius, bl })} />
+              <RangeField label={tr("左上")} value={radius.tl} min={0} max={120} onChange={tl => setRadius({ ...radius, tl })} />
+              <RangeField label={tr("右上")} value={radius.tr} min={0} max={120} onChange={tr => setRadius({ ...radius, tr })} />
+              <RangeField label={tr("右下")} value={radius.br} min={0} max={120} onChange={br => setRadius({ ...radius, br })} />
+              <RangeField label={tr("左下")} value={radius.bl} min={0} max={120} onChange={bl => setRadius({ ...radius, bl })} />
             </>
           )}
           {mode === 'glass' && (
             <>
-              <RangeField label="模糊" value={glass.blur} min={0} max={48} onChange={blur => setGlass({ ...glass, blur })} />
-              <RangeField label="背景透明度" value={glass.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setGlass({ ...glass, opacity })} />
-              <RangeField label="边框透明度" value={glass.border} min={0} max={100} unit="%" onChange={border => setGlass({ ...glass, border })} />
+              <RangeField label={tr("模糊")} value={glass.blur} min={0} max={48} onChange={blur => setGlass({ ...glass, blur })} />
+              <RangeField label={tr("背景透明度")} value={glass.opacity} min={0} max={1} step={0.01} unit="" onChange={opacity => setGlass({ ...glass, opacity })} />
+              <RangeField label={tr("边框透明度")} value={glass.border} min={0} max={100} unit="%" onChange={border => setGlass({ ...glass, border })} />
             </>
           )}
         </div>
@@ -221,7 +215,7 @@ export const CssGeneratorTool: React.FC = () => {
                 ...(mode === 'glass' ? { background: `rgba(255,255,255,${glass.opacity})`, backdropFilter: `blur(${glass.blur}px)`, WebkitBackdropFilter: `blur(${glass.blur}px)`, border: `1px solid rgba(255,255,255,${glass.border / 100})`, borderRadius: 18, color: '#fff' } : {}),
               }}
             >
-              <span className="text-xs tracking-widest opacity-70">ATELIER / 01</span><span className="text-3xl font-serif">Design in motion.</span><span className="opacity-70 text-xs leading-5">调整左侧参数，查看真实卡片的视觉效果。</span>
+              <span className="text-xs tracking-widest opacity-70">ATELIER / 01</span><span className="text-3xl font-serif">Design in motion.</span><span className="opacity-70 text-xs leading-5">{tr("调整左侧参数，查看真实卡片的视觉效果。")}</span>
             </div>
           </div>
           <CodePanel className="overflow-auto whitespace-pre-wrap text-xs">{css}</CodePanel>
@@ -353,6 +347,7 @@ function computeDomDiff(before: string, after: string): DiffAudit[] {
 }
 
 export const SvgOptimizerTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState(sampleSvg);
   const [multipass, setMultipass] = useState(true);
   const [previewTab, setPreviewTab] = useState<'render' | 'code' | 'diff' | 'audit'>('render');
@@ -391,27 +386,25 @@ export const SvgOptimizerTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="SVG 智能压缩与细节差分比对"
-        description="粘贴 SVG，实时压缩；先检查画面，再比较差异、查看代码与精简记录。"
+        title={tr("SVG 智能压缩与细节差分比对")}
+        description={tr("粘贴 SVG，实时压缩；先检查画面，再比较差异、查看代码与精简记录。")}
         actions={
           <div className="flex items-center gap-4 text-xs">
             <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
               <input type="checkbox" checked={multipass} onChange={event => setMultipass(event.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>多轮压缩 (multipass)</span>
+              <span>{tr("多轮压缩 (multipass)")}</span>
             </label>
             <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => copy(result.data)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
-              复制优化代码
-            </Button>
+              {tr("复制优化代码")}</Button>
             <Button size="sm" variant="secondary" disabled={!result.data} onClick={() => downloadText(result.data, 'optimized.svg')} icon={<Download className="h-4 w-4" />}>
-              下载 SVG
-            </Button>
+              {tr("下载 SVG")}</Button>
           </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-2">
         {/* Left Side: Original XML Input (Flexible and tall) */}
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel hint={`${before} bytes`}>原始 SVG XML 源代码</FieldLabel>
+          <FieldLabel hint={`${before} bytes`}>{tr("原始 SVG XML 源代码")}</FieldLabel>
           <Textarea className="min-h-80 flex-1 font-mono text-xs leading-relaxed" value={svg} onChange={event => setSvg(event.target.value)} />
         </div>
 
@@ -429,7 +422,7 @@ export const SvgOptimizerTool: React.FC = () => {
             </div>
             <div className="tool-panel p-3.5 bg-gradient-to-br from-emerald-50 to-emerald-100/50 dark:from-emerald-950/20 dark:to-emerald-950/40 border border-emerald-200 dark:border-emerald-900/30 rounded-xl text-emerald-800 dark:text-emerald-400">
               <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-500 uppercase tracking-wider">Saved</div>
-              <strong className="text-base font-mono font-extrabold">{saved}% 体积</strong>
+              <strong className="text-base font-mono font-extrabold">{saved}{tr("% 体积")}</strong>
             </div>
           </div>
 
@@ -442,17 +435,17 @@ export const SvgOptimizerTool: React.FC = () => {
           {/* Interactive tabs */}
           <div className="flex border-b border-slate-200 dark:border-slate-800">
             {([
-              ['render', '优化预览'],
-              ['code', '优化代码'],
-              ['diff', '前后对比'],
-              ['audit', '精简记录'],
+              ['render', tr('优化预览')],
+              ['code', tr('优化代码')],
+              ['diff', tr('前后对比')],
+              ['audit', tr('精简记录')],
             ] as const).map(([tabKey, label]) => (
               <button
                 key={tabKey}
                 onClick={() => setPreviewTab(tabKey)}
                 className={`py-2 px-4 text-xs font-semibold border-b-2 transition-all ${previewTab === tabKey ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
               >
-                {label}
+                {tr(label)}
               </button>
             ))}
           </div>
@@ -460,7 +453,7 @@ export const SvgOptimizerTool: React.FC = () => {
           {/* Combined Visual workbench container */}
           <div className="min-h-0 flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
             {previewTab === 'render' && <div className="bg-white dark:bg-slate-950 p-8 min-h-72 flex items-center justify-center overflow-auto flex-1 [&>svg]:max-w-full" dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }} />}
-            {previewTab === 'code' && <CodePanel className="min-h-72 flex-1 overflow-auto whitespace-pre-wrap text-xs font-mono p-4">{result.data || '优化结果将在这里显示'}</CodePanel>}
+            {previewTab === 'code' && <CodePanel className="min-h-72 flex-1 overflow-auto whitespace-pre-wrap text-xs font-mono p-4">{result.data || tr('优化结果将在这里显示')}</CodePanel>}
 
             {previewTab === 'diff' && (
               <div className="flex-1 flex flex-col p-4 relative min-h-0 select-none">
@@ -494,7 +487,7 @@ export const SvgOptimizerTool: React.FC = () => {
 
                 {/* Slider inputs control board */}
                 <div className="mt-3 flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl flex-none">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">差分拉条</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">{tr("差分拉条")}</span>
                   <input
                     type="range" min="0" max="100"
                     value={sliderValue}
@@ -510,7 +503,7 @@ export const SvgOptimizerTool: React.FC = () => {
               <div className="flex-1 overflow-auto p-4 space-y-2.5 max-h-[380px]">
                 <div className="flex items-center gap-1.5 text-xs text-slate-500 border-b pb-2 dark:border-slate-800">
                   <Info className="w-3.5 h-3.5 text-primary-500" />
-                  <span>下面列出了 SVGO 引擎在此次压缩中，成功为您剥离的冗余元素及压缩属性：</span>
+                  <span>{tr("下面列出了 SVGO 引擎在此次压缩中，成功为您剥离的冗余元素及压缩属性：")}</span>
                 </div>
 
                 <div className="space-y-2">
@@ -537,7 +530,8 @@ export const SvgOptimizerTool: React.FC = () => {
 
 // ================= HTML to JSX Tool =================
 export const HtmlToJsxTool: React.FC = () => {
-  const [html, setHtml] = useState(
+  useLocaleRender();
+  const [html, setHtml] = useDraftState("components/tools/frontend/index.tsx:HtmlToJsxTool:html",
     `<div class="card" style="margin-top: 10px; background: #fff">\n  <label for="username">Username</label>\n  <input type="text" id="username" class="input-field" disabled>\n  <hr>\n</div>`
   );
   const [wrapFragment, setWrapFragment] = useState(false);
@@ -552,101 +546,14 @@ export const HtmlToJsxTool: React.FC = () => {
 
       if (nodes.length === 0) return '';
 
-      const serializeNode = (node: Node, depth: number): string => {
-        const indent = '  '.repeat(depth);
-
-        if (node.nodeType === Node.TEXT_NODE) {
-          const text = node.nodeValue || '';
-          if (!text.trim()) return text;
-          return text.replace(/[{}]/g, m => `{'${m}'}`);
-        }
-
-        if (node.nodeType === Node.COMMENT_NODE) {
-          return `${indent}{/* ${node.nodeValue?.trim()} */}`;
-        }
-
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const el = node as Element;
-          const tagName = el.tagName.toLowerCase();
-
-          const attrs: string[] = [];
-          for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes[i];
-            let name = attr.name.toLowerCase();
-            const val = attr.value;
-
-            if (name === 'class') name = 'className';
-            else if (name === 'for') name = 'htmlFor';
-            else if (name === 'tabindex') name = 'tabIndex';
-            else if (name === 'autofocus') name = 'autoFocus';
-            else if (name === 'autocomplete') name = 'autoComplete';
-            else if (name === 'readonly') name = 'readOnly';
-            else if (name === 'maxlength') name = 'maxLength';
-            else if (name === 'colspan') name = 'colSpan';
-            else if (name === 'rowspan') name = 'rowSpan';
-            else if (name === 'contenteditable') name = 'contentEditable';
-            else if (name.startsWith('on')) {
-              name = 'on' + name.slice(2).charAt(0).toUpperCase() + name.slice(3);
-            } else if (name.includes('-') && !name.startsWith('data-') && !name.startsWith('aria-')) {
-              name = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
-            }
-
-            if (name === 'style') {
-              const styleObj: Record<string, string> = {};
-              val.split(';').forEach(rule => {
-                const parts = rule.split(':');
-                if (parts.length >= 2) {
-                  const key = parts[0].trim().replace(/-([a-z])/g, g => g[1].toUpperCase());
-                  const value = parts.slice(1).join(':').trim();
-                  if (key && value) {
-                    styleObj[key] = value;
-                  }
-                }
-              });
-              const styleStr = Object.entries(styleObj)
-                .map(([k, v]) => `  ${k}: '${v.replace(/'/g, "\\'")}'`)
-                .join(',\n');
-              attrs.push(`style={{ \n${styleStr}\n}}`);
-            } else {
-              const booleans = ['disabled', 'checked', 'required', 'readOnly', 'multiple', 'autoFocus', 'hidden'];
-              if (booleans.includes(name)) {
-                attrs.push(name);
-              } else {
-                attrs.push(`${name}="${val.replace(/"/g, '&quot;')}"`);
-              }
-            }
-          }
-
-          const attrsStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
-          const selfClosing = ['img', 'input', 'br', 'hr', 'meta', 'link', 'area', 'col', 'embed', 'source', 'track', 'wbr'];
-          if (selfClosing.includes(tagName) && el.childNodes.length === 0) {
-            return `${indent}<${tagName}${attrsStr} />`;
-          }
-
-          let children = '';
-          let hasComplex = false;
-          el.childNodes.forEach(child => {
-            if (child.nodeType === Node.ELEMENT_NODE) hasComplex = true;
-            const childStr = serializeNode(child, depth + 1);
-            if (childStr) children += childStr;
-          });
-
-          if (hasComplex) {
-            return `${indent}<${tagName}${attrsStr}>\n${children}\n${indent}</${tagName}>`;
-          } else {
-            return `${indent}<${tagName}${attrsStr}>${children.trim()}</${tagName}>`;
-          }
-        }
-        return '';
-      };
 
       const filteredNodes = nodes.filter(n => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()));
 
       let finalJsx = '';
       if (wrapFragment || filteredNodes.length > 1) {
-        finalJsx = `<>\n${filteredNodes.map(n => serializeNode(n, 1)).join('\n')}\n</>`;
+        finalJsx = `<>\n${filteredNodes.map(n => serializeJsxNode(n)).join('\n')}\n</>`;
       } else if (filteredNodes.length === 1) {
-        finalJsx = serializeNode(filteredNodes[0], 0);
+        finalJsx = serializeJsxNode(filteredNodes[0]);
       }
 
       return finalJsx;
@@ -658,8 +565,8 @@ export const HtmlToJsxTool: React.FC = () => {
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="HTML 转 JSX 智能编译器"
-        description="将原生 HTML 极速、精确地转换为 React JSX 格式，自动转换 class, style, label-for 等属性。"
+        title={tr("HTML 转 JSX 智能编译器")}
+        description={tr("将原生 HTML 极速、精确地转换为 React JSX 格式，自动转换 class, style, label-for 等属性。")}
         actions={
           <div className="flex items-center gap-4 text-xs">
             <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
@@ -669,18 +576,18 @@ export const HtmlToJsxTool: React.FC = () => {
                 onChange={event => setWrapFragment(event.target.checked)}
                 className="rounded text-primary-600 focus:ring-primary-400"
               />
-              <span>强制 Fragment 包裹</span>
+              <span>{tr("强制 Fragment 包裹")}</span>
             </label>
             <Button size="sm" variant="secondary" disabled={!jsxResult} onClick={() => copy(jsxResult)}>
               {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              <span className="ml-1">复制 JSX</span>
+              <span className="ml-1">{tr("复制 JSX")}</span>
             </Button>
           </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-2">
-          <div className="flex items-center justify-between"><FieldLabel>HTML 源代码</FieldLabel><Button size="sm" variant="ghost" onClick={() => setHtml('')}>清空</Button></div>
+          <div className="flex items-center justify-between"><FieldLabel>{tr("HTML 源代码")}</FieldLabel><Button size="sm" variant="ghost" onClick={() => setHtml('')}>{tr("清空")}</Button></div>
           <Textarea
             className="min-h-80 flex-1 font-mono text-xs leading-relaxed"
             value={html}
@@ -688,9 +595,9 @@ export const HtmlToJsxTool: React.FC = () => {
           />
         </div>
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel hint="实时转换">React JSX 输出</FieldLabel>
+          <FieldLabel hint={tr("实时转换")}>{tr("React JSX 输出")}</FieldLabel>
           <CodePanel className="min-h-80 flex-1 overflow-auto whitespace-pre font-mono text-xs leading-relaxed bg-slate-950 text-emerald-400 p-4">
-            {jsxResult || '// 转换结果将在这里实时显示'}
+            {jsxResult || tr('// 转换结果将在这里实时显示')}
           </CodePanel>
         </div>
       </CardContent>
@@ -700,6 +607,7 @@ export const HtmlToJsxTool: React.FC = () => {
 
 // ================= SVG to React Tool =================
 export const SvgToReactTool: React.FC = () => {
+  useLocaleRender();
   const [svg, setSvg] = useState(
     `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2">\n  <circle cx="12" cy="12" r="10" />\n  <path d="M12 8v4l3 3" />\n</svg>`
   );
@@ -718,103 +626,13 @@ export const SvgToReactTool: React.FC = () => {
       const parser = new DOMParser();
       const doc = parser.parseFromString(svg.trim(), 'image/svg+xml');
       const svgEl = doc.querySelector('svg');
-      if (!svgEl) return '// 错误：无法在输入中找到 <svg> 元素';
+      if (!svgEl || doc.querySelector('parsererror')) return '';
 
-      const name = componentName.trim().replace(/[^a-zA-Z0-9]/g, '') || 'SvgIcon';
-      const attributes: string[] = [];
+      const name = componentIdentifier(componentName);
       const viewBox = svgEl.getAttribute('viewBox') || '0 0 24 24';
-
-      for (let i = 0; i < svgEl.attributes.length; i++) {
-        const attr = svgEl.attributes[i];
-        const attrName = attr.name.toLowerCase();
-        let val = attr.value;
-
-        if (attrName === 'viewbox' || attrName === 'xmlns') continue;
-        if (removeDimensions && (attrName === 'width' || attrName === 'height')) continue;
-
-        let reactName = attrName;
-        if (attrName.includes('-')) {
-          reactName = attrName.replace(/-([a-z])/g, g => g[1].toUpperCase());
-        }
-
-        if (useCurrentColor && (attrName === 'fill' || attrName === 'stroke')) {
-          if (val !== 'none') val = 'currentColor';
-        }
-
-        attributes.push(`${reactName}="${val}"`);
-      }
-
-      if (customSize) {
-        attributes.push('width={size}');
-        attributes.push('height={size}');
-      } else if (!removeDimensions) {
-        const w = svgEl.getAttribute('width');
-        const h = svgEl.getAttribute('height');
-        if (w) attributes.push(`width="${w}"`);
-        if (h) attributes.push(`height="${h}"`);
-      }
-
-      const serializeSvgNode = (node: Node): string => {
-        if (node.nodeType === Node.ELEMENT_NODE) {
-          const el = node as Element;
-          const tagName = el.tagName.toLowerCase();
-          const attrs: string[] = [];
-
-          for (let i = 0; i < el.attributes.length; i++) {
-            const attr = el.attributes[i];
-            let name = attr.name;
-            let val = attr.value;
-
-            if (name.includes('-')) {
-              name = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
-            }
-
-            if (useCurrentColor && (attr.name === 'fill' || attr.name === 'stroke')) {
-              if (val !== 'none') val = 'currentColor';
-            }
-
-            if (name === 'style') {
-              const styleObj: Record<string, string> = {};
-              val.split(';').forEach(rule => {
-                const parts = rule.split(':');
-                if (parts.length >= 2) {
-                  const key = parts[0].trim().replace(/-([a-z])/g, g => g[1].toUpperCase());
-                  const value = parts.slice(1).join(':').trim();
-                  if (key && value) styleObj[key] = value;
-                }
-              });
-              const styleStr = Object.entries(styleObj)
-                .map(([k, v]) => `${k}: '${v}'`)
-                .join(', ');
-              attrs.push(`style={{ ${styleStr} }}`);
-            } else {
-              attrs.push(`${name}="${val}"`);
-            }
-          }
-
-          const attrsStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
-          const selfClosing = ['path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'ellipse', 'stop', 'use', 'image'];
-          if (selfClosing.includes(tagName) && el.childNodes.length === 0) {
-            return `<${tagName}${attrsStr} />`;
-          }
-
-          let children = '';
-          el.childNodes.forEach(child => {
-            children += serializeSvgNode(child);
-          });
-
-          return `<${tagName}${attrsStr}>${children}</${tagName}>`;
-        }
-        if (node.nodeType === Node.TEXT_NODE) {
-          return node.nodeValue || '';
-        }
-        return '';
-      };
-
-      let childrenStr = '';
-      svgEl.childNodes.forEach(child => {
-        childrenStr += serializeSvgNode(child);
-      });
+      const attributes = serializeAttributes(svgEl, { currentColor: useCurrentColor, omit: ['viewbox', 'xmlns', ...(removeDimensions || customSize ? ['width', 'height'] : [])] });
+      if (customSize) attributes.push('width={size}', 'height={size}');
+      const childrenStr = Array.from(svgEl.childNodes).map(node => serializeJsxNode(node, { currentColor: useCurrentColor })).join('');
 
       let code = '';
       if (useForwardRef) {
@@ -848,7 +666,7 @@ export const SvgToReactTool: React.FC = () => {
       code += `  return (\n`;
       const refProp = useForwardRef ? ' ref={ref}' : '';
       code += `    <svg\n`;
-      code += `      viewBox="${viewBox}"\n`;
+      code += `      viewBox={${JSON.stringify(viewBox)}}\n`;
       if (refProp) code += `     ${refProp}\n`;
 
       attributes.forEach(attr => {
@@ -877,27 +695,27 @@ export const SvgToReactTool: React.FC = () => {
       }
 
       return code;
-    } catch (e) {
-      return '// 转换 SVG 出错: ' + (e as Error).message;
+    } catch {
+      return ''; // Invalid XML has no exportable component.
     }
   }, [svg, componentName, isTs, useForwardRef, removeDimensions, useCurrentColor, customSize]);
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="SVG 转 React JSX/TSX 组件"
-        description="一键将 SVG 转换为生产级的 React / TSX 矢量图标组件，支持 TypeScript、forwardRef 引用、自动 currentColor 及弹性尺寸。"
+        title={tr("SVG 转 React JSX/TSX 组件")}
+        description={tr("一键将 SVG 转换为生产级的 React / TSX 矢量图标组件，支持 TypeScript、forwardRef 引用、自动 currentColor 及弹性尺寸。")}
         actions={
           <Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => copy(reactComponentCode)}>
             {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            <span className="ml-1">复制 React 组件</span>
+            <span className="ml-1">{tr("复制 React 组件")}</span>
           </Button>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           <div>
-            <FieldLabel>组件命名</FieldLabel>
+            <FieldLabel>{tr("组件命名")}</FieldLabel>
             <Input value={componentName} onChange={e => setComponentName(e.target.value)} placeholder="e.g. MyIcon" />
           </div>
 
@@ -912,23 +730,23 @@ export const SvgToReactTool: React.FC = () => {
             </label>
           </div>
 
-          <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">尺寸与颜色选项</summary><div className="space-y-2">
+          <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">{tr("尺寸与颜色选项")}</summary><div className="space-y-2">
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={removeDimensions} onChange={e => setRemoveDimensions(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>清理硬编码宽高 (width/height)</span>
+              <span>{tr("清理硬编码宽高 (width/height)")}</span>
             </label>
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={useCurrentColor} onChange={e => setUseCurrentColor(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>自动替换颜色为 currentColor</span>
+              <span>{tr("自动替换颜色为 currentColor")}</span>
             </label>
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={customSize} onChange={e => setCustomSize(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
-              <span>注入弹性 size 属性 (默认为 24)</span>
+              <span>{tr("注入弹性 size 属性 (默认为 24)")}</span>
             </label>
           </div></details>
 
           <div className="flex flex-col gap-2">
-            <FieldLabel hint="实时生成组件">原始 SVG 源码</FieldLabel>
+            <FieldLabel hint={tr("实时生成组件")}>{tr("原始 SVG 源码")}</FieldLabel>
             <Textarea
               className="h-44 font-mono text-[10px] leading-normal"
               value={svg}
@@ -938,9 +756,9 @@ export const SvgToReactTool: React.FC = () => {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-col gap-2">
-          <div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>React 组件代码</FieldLabel><Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => { const name = componentName.trim().replace(/[^a-zA-Z0-9]/g,'') || 'SvgIcon'; const url = URL.createObjectURL(new Blob([reactComponentCode],{ type: 'text/plain' })); const a=document.createElement('a'); a.href=url; a.download=`${name}.${isTs ? 'tsx' : 'jsx'}`; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }} icon={<Download className="h-4 w-4" />}>下载组件</Button></div>
+          <div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>{tr("React 组件代码")}</FieldLabel>{svg.trim() && !reactComponentCode && <span role="alert" className="text-sm text-red-600">{tr("SVG 格式无效，请检查 XML 标签。")}</span>}<Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => { const name = componentIdentifier(componentName); const url = URL.createObjectURL(new Blob([reactComponentCode],{ type: 'text/plain' })); const a=document.createElement('a'); a.href=url; a.download=`${name}.${isTs ? 'tsx' : 'jsx'}`; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }} icon={<Download className="h-4 w-4" />}>{tr("下载组件")}</Button></div>
           <CodePanel className="min-h-[26rem] min-w-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
-            {reactComponentCode || '// 组件输出将在这里实时渲染'}
+            {reactComponentCode || tr('// 组件输出将在这里实时渲染')}
           </CodePanel>
         </div>
       </CardContent>

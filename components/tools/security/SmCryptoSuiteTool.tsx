@@ -1,3 +1,5 @@
+import { runtimeAsset } from '../shared/runtimeAssets';
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Copy, Info, Lock, RefreshCcw, Unlock } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
@@ -7,29 +9,6 @@ import { loadScriptWithCache } from '../shared/cdnCacheManager';
 import { RuntimeAssetStatusPanel } from '../shared/useRuntimeAsset';
 import { notifyToast } from '../shared/notifyToast';
 import type { RuntimeAssetLoaderState } from '../shared/runtimeAssetLoader';
-
-type SecurityOperationStatus = 'idle' | 'validating' | 'running' | 'success' | 'error';
-
-const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
-
-const SecurityStatusPanel: React.FC<{
-  status: SecurityOperationStatus;
-  message: string;
-}> = ({ status, message }) => {
-  if (!message || status === 'idle') return null;
-
-  const styles = status === 'error'
-    ? 'border-rose-200 bg-rose-50 text-rose-700'
-    : status === 'success'
-      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      : 'border-blue-200 bg-blue-50 text-blue-700';
-
-  return (
-    <div className={`rounded-xl border p-3 text-xs leading-5 ${styles}`}>
-      {message}
-    </div>
-  );
-};
 
 interface Sm2KeyPair {
   privateKey: string;
@@ -57,23 +36,44 @@ interface SmCryptoApi {
   };
 }
 
-type CryptoWindow = Window & {
-  smCrypto?: SmCryptoApi;
-};
+const cryptoWindow = () => window as Window & { smCrypto?: SmCryptoApi };
 
-const cryptoWindow = () => window as CryptoWindow;
+type SecurityOperationStatus = 'idle' | 'validating' | 'running' | 'success' | 'error';
+
+const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : String(error);
+
+const SecurityStatusPanel: React.FC<{
+  status: SecurityOperationStatus;
+  message: string;
+}> = ({ status, message }) => {
+  useLocaleRender();
+  if (!message || status === 'idle') return null;
+
+  const styles = status === 'error'
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : status === 'success'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-blue-200 bg-blue-50 text-blue-700';
+
+  return (
+    <div className={`rounded-xl border p-3 text-xs leading-5 ${styles}`}>
+      {tr(message)}
+    </div>
+  );
+};
 
 // --- Chinese National Cryptography GB/T 32918 standard (SM2/SM3/SM4 Suite) ---
 
 export const SmCryptoSuiteTool: React.FC = () => {
+  useLocaleRender();
   const [sm2Task, setSm2Task] = useState<'crypto' | 'signature'>('crypto');
   const [activeTab, setActiveTab] = useState<'sm2' | 'sm3' | 'sm4'>('sm2');
   const [loaded, setLoaded] = useState(false);
   const [smRuntimeState, setSmRuntimeState] = useState<RuntimeAssetLoaderState>({
     status: 'idle',
     label: 'sm-crypto',
-    version: '0.3.12',
-    source: 'https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js',
+    version: runtimeAsset('smCrypto').version,
+    source: runtimeAsset('smCrypto').url,
   });
 
   // SM2 states
@@ -84,7 +84,10 @@ export const SmCryptoSuiteTool: React.FC = () => {
   const [sm2Decrypted, setSm2Decrypted] = useState('');
   const [sm2SignPlain, setSm2SignPlain] = useState('需要签名的国密数据');
   const [sm2SignatureHex, setSm2SignatureHex] = useState('');
-  const [sm2VerifyResult, setSm2VerifyResult] = useState<'none' | 'valid' | 'invalid'>('none');
+  const [sm2Verification, setSm2Verification] = useState<{ snapshot: string; result: 'none' | 'valid' | 'invalid' }>({ snapshot: '', result: 'none' });
+  const sm2Snapshot = JSON.stringify([sm2Pub, sm2SignPlain, sm2SignatureHex]);
+  const sm2VerifyResult = sm2Verification.snapshot === sm2Snapshot ? sm2Verification.result : 'none';
+  const setSm2VerifyResult = (result: 'none' | 'valid' | 'invalid') => setSm2Verification({ snapshot: sm2Snapshot, result });
 
   // SM3 states
   const [sm3Input, setSm3Input] = useState('DevToolbox Pro SM3 Hashing');
@@ -104,9 +107,10 @@ export const SmCryptoSuiteTool: React.FC = () => {
       Promise.resolve().then(() => setLoaded(true));
       return;
     }
-    loadScriptWithCache('https://cdn.jsdelivr.net/npm/sm-crypto@0.3.12/dist/sm-crypto.js', {
+    loadScriptWithCache(runtimeAsset('smCrypto').url, {
+      expectedSha256: runtimeAsset('smCrypto').sha256,
       label: 'sm-crypto',
-      version: '0.3.12',
+      version: runtimeAsset('smCrypto').version,
       onStatus: event => setSmRuntimeState({
         status: event.status,
         label: event.label,
@@ -297,8 +301,8 @@ export const SmCryptoSuiteTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader
-        title="国密算法安全测试中心 (Chinese Cryptography GB/T Standard)"
-        description="支持中国国家商用密码套件：SM2 椭圆曲线非对称密钥对与签名体检验、SM3 杂凑算法特征码比对及 SM4 分组对称加密（ECB/CBC 模式）的 100% 本地离线处理。"
+        title={tr("国密算法安全测试中心 (Chinese Cryptography GB/T Standard)")}
+        description={tr("支持中国国家商用密码套件：SM2 椭圆曲线非对称密钥对与签名体检验、SM3 杂凑算法特征码比对及 SM4 分组对称加密（ECB/CBC 模式）的 100% 本地离线处理。")}
       />
       <CardContent className="flex-1 flex flex-col gap-4 overflow-auto min-h-0 text-slate-700 dark:text-slate-200">
         <RuntimeAssetStatusPanel state={smRuntimeState} onRetry={loadSmCrypto} compact />
@@ -307,7 +311,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
         {!loaded && (
           <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-amber-800 dark:text-amber-400 text-xs flex items-center gap-2 animate-pulse">
             <Info className="w-4 h-4 shrink-0" />
-            <span>正在从安全 CDN 离线载入国密 SM 算法动力包，请稍候...</span>
+            <span>{tr("正在从安全 CDN 离线载入国密 SM 算法动力包，请稍候...")}</span>
           </div>
         )}
 
@@ -323,7 +327,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
                   : 'bg-slate-50 dark:bg-slate-900 text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'
               }`}
             >
-              {tab.toUpperCase()} {tab === 'sm2' ? '非对称与签名' : tab === 'sm3' ? '杂凑计算' : '对称分组加密'}
+              {tab.toUpperCase()} {tab === 'sm2' ? tr('非对称与签名') : tab === 'sm3' ? tr('杂凑计算') : tr('对称分组加密')}
             </button>
           ))}
         </div>
@@ -333,89 +337,88 @@ export const SmCryptoSuiteTool: React.FC = () => {
             <section className="self-start"><div className="space-y-4">
               <div className="p-4 border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/40 space-y-3">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-xs font-bold uppercase text-slate-500">SM2 椭圆曲线公私钥发生器</h3>
+                  <h3 className="text-xs font-bold uppercase text-slate-500">{tr("SM2 椭圆曲线公私钥发生器")}</h3>
                   <Button size="sm" onClick={handleSm2Generate} icon={<RefreshCcw className="w-3.5 h-3.5" />}>
-                    生成 SM2 密钥对
-                  </Button>
+                    {tr("生成 SM2 密钥对")}</Button>
                 </div>
                 <div className="grid gap-3 text-xs">
                   <div className="space-y-1">
-                    <span className="text-slate-500 block font-semibold">SM2 公钥 (Public Key Hex)</span>
+                    <span className="text-slate-500 block font-semibold">{tr("SM2 公钥 (Public Key Hex)")}</span>
                     <input
                       className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-[9px] focus:outline-none"
                       value={sm2Pub}
                       onChange={e => setSm2Pub(e.target.value)}
-                      placeholder="未生成公钥"
+                      placeholder={tr("未生成公钥")}
                     />
                   </div>
                   <div className="space-y-1">
-                    <span className="text-slate-500 block font-semibold">SM2 私钥 (Private Key Hex)</span>
+                    <span className="text-slate-500 block font-semibold">{tr("SM2 私钥 (Private Key Hex)")}</span>
                     <input
                       className="w-full p-2 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-xl font-mono text-[9px] focus:outline-none"
                       value={sm2Priv}
                       onChange={e => setSm2Priv(e.target.value)}
-                      placeholder="未生成私钥"
+                      placeholder={tr("未生成私钥")}
                     />
                   </div>
                 </div>
               </div>
 
             </div></section>
-            <section className="space-y-4 min-w-0"><div className="flex flex-wrap gap-2"><Button size="sm" variant={sm2Task === 'crypto' ? 'primary' : 'secondary'} onClick={() => setSm2Task('crypto')}>加密 / 解密</Button><Button size="sm" variant={sm2Task === 'signature' ? 'primary' : 'secondary'} onClick={() => setSm2Task('signature')}>签名 / 核验</Button></div>
+            <section className="space-y-4 min-w-0"><div className="flex flex-wrap gap-2"><Button size="sm" variant={sm2Task === 'crypto' ? 'primary' : 'secondary'} onClick={() => setSm2Task('crypto')}>{tr("加密 / 解密")}</Button><Button size="sm" variant={sm2Task === 'signature' ? 'primary' : 'secondary'} onClick={() => setSm2Task('signature')}>{tr("签名 / 核验")}</Button></div>
               {sm2Task === 'crypto' ? <div className="p-4 border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950 space-y-3">
-                <h3 className="text-xs font-bold uppercase text-slate-500">SM2 文本非对称加解密 (C1C3C2 模式)</h3>
+                <h3 className="text-xs font-bold uppercase text-slate-500">{tr("SM2 文本非对称加解密 (C1C3C2 模式)")}</h3>
                 <div className="space-y-2">
-                  <FieldLabel>待加密明文 (Plaintext)</FieldLabel>
+                  <FieldLabel>{tr("待加密明文 (Plaintext)")}</FieldLabel>
                   <input
                     className="w-full p-2.5 border rounded-xl text-xs border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none"
                     value={sm2Plain}
                     onChange={e => setSm2Plain(e.target.value)}
                   />
                   <div className="flex gap-2">
-                    <Button onClick={handleSm2Encrypt} icon={<Lock className="w-3.5 h-3.5" />}>加密</Button>
+                    <Button onClick={handleSm2Encrypt} icon={<Lock className="w-3.5 h-3.5" />}>{tr("加密")}</Button>
                   </div>
                 </div>
 
                 <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
-                  <div className="flex flex-wrap justify-between gap-2"><FieldLabel>加密后密文 (Ciphertext Hex)</FieldLabel><Button size="sm" variant="ghost" disabled={!sm2CipherHex} onClick={() => navigator.clipboard.writeText(sm2CipherHex)}>复制密文</Button></div>
+                  <div className="flex flex-wrap justify-between gap-2"><FieldLabel>{tr("加密后密文 (Ciphertext Hex)")}</FieldLabel><Button size="sm" variant="ghost" disabled={!sm2CipherHex} onClick={() => navigator.clipboard.writeText(sm2CipherHex)}>{tr("复制密文")}</Button></div>
                   <textarea
                     className="w-full h-16 p-2.5 border rounded-xl font-mono text-xs leading-relaxed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none resize-none"
                     value={sm2CipherHex}
                     onChange={e => setSm2CipherHex(e.target.value)}
-                    placeholder="加密后的十六进制数据块将在此显示"
+                    placeholder={tr("加密后的十六进制数据块将在此显示")}
                   />
                   <div className="flex gap-2">
-                    <Button onClick={handleSm2Decrypt} icon={<Unlock className="w-3.5 h-3.5" />}>解密</Button>
+                    <Button onClick={handleSm2Decrypt} icon={<Unlock className="w-3.5 h-3.5" />}>{tr("解密")}</Button>
                   </div>
                 </div>
 
                 {sm2Decrypted && (
                   <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-xs text-emerald-800 dark:text-emerald-400 font-mono">
-                    🔓 解密还原明文: {sm2Decrypted}
+                    {tr("🔓 解密还原明文:")}{sm2Decrypted}
                   </div>
                 )}
               </div> : <div className="p-4 border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950 space-y-4">
-              <h3 className="text-xs font-bold uppercase text-slate-500">SM2 离线数字签名与完整性核验</h3>
+              <h3 className="text-xs font-bold uppercase text-slate-500">{tr("SM2 离线数字签名与完整性核验")}</h3>
               <div className="space-y-2">
-                <FieldLabel>待签署数据 (Message to Sign)</FieldLabel>
+                <FieldLabel>{tr("待签署数据 (Message to Sign)")}</FieldLabel>
                 <input
                   className="w-full p-2.5 border rounded-xl text-xs border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none"
                   value={sm2SignPlain}
                   onChange={e => setSm2SignPlain(e.target.value)}
                 />
-                <Button onClick={handleSm2Sign}>签名 (Sign)</Button>
+                <Button onClick={handleSm2Sign}>{tr("签名 (Sign)")}</Button>
               </div>
 
               <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-900">
-                <div className="flex flex-wrap justify-between gap-2"><FieldLabel>生成的签名 (Signature Hex)</FieldLabel><Button size="sm" variant="ghost" disabled={!sm2SignatureHex} onClick={() => navigator.clipboard.writeText(sm2SignatureHex)}>复制签名</Button></div>
+                <div className="flex flex-wrap justify-between gap-2"><FieldLabel>{tr("生成的签名 (Signature Hex)")}</FieldLabel><Button size="sm" variant="ghost" disabled={!sm2SignatureHex} onClick={() => navigator.clipboard.writeText(sm2SignatureHex)}>{tr("复制签名")}</Button></div>
                 <textarea
                   className="w-full h-20 p-2.5 border rounded-xl font-mono text-xs leading-relaxed border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none resize-none"
                   value={sm2SignatureHex}
                   onChange={e => setSm2SignatureHex(e.target.value)}
-                  placeholder="生成的十六进制国密签名串"
+                  placeholder={tr("生成的十六进制国密签名串")}
                 />
                 <div className="flex gap-2">
-                  <Button onClick={handleSm2Verify}>核验签名 (Verify)</Button>
+                  <Button onClick={handleSm2Verify}>{tr("核验签名 (Verify)")}</Button>
                   <Button
                     variant="secondary"
                     onClick={() => {
@@ -423,20 +426,17 @@ export const SmCryptoSuiteTool: React.FC = () => {
                       setSm2VerifyResult('none');
                     }}
                   >
-                    重置
-                  </Button>
+                    {tr("重置")}</Button>
                 </div>
               </div>
 
               {sm2VerifyResult === 'valid' && (
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-emerald-800 dark:text-emerald-350 text-xs font-bold">
-                  🟢 国密签名核验有效！消息完整且确由公钥持有者签署。
-                </div>
+                  {tr("🟢 国密签名核验有效！消息完整且确由公钥持有者签署。")}</div>
               )}
               {sm2VerifyResult === 'invalid' && (
                 <div className="p-4 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-xl text-rose-800 dark:text-rose-450 text-xs font-bold animate-bounce">
-                  🔴 警告：国密签名无效！数据已被非法篡改或密钥对不正确。
-                </div>
+                  {tr("🔴 警告：国密签名无效！数据已被非法篡改或密钥对不正确。")}</div>
               )}
             </div>}
             </section>
@@ -446,7 +446,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
         {loaded && activeTab === 'sm3' && (
           <div className="flex-1 grid lg:grid-cols-2 gap-5 overflow-auto min-h-0 animate-in fade-in duration-200">
             <div className="flex flex-col gap-1.5 flex-1 min-h-[160px]">
-              <FieldLabel>输入需要计算的明文</FieldLabel>
+              <FieldLabel>{tr("输入需要计算的明文")}</FieldLabel>
               <textarea
                 className="w-full flex-1 p-3 border rounded-2xl font-mono text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
                 value={sm3Input}
@@ -455,7 +455,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
             </div>
 
             <div className="p-4 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 rounded-2xl space-y-2 flex-none">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">SM3 杂凑哈希特征串 (256 bits Hex)</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{tr("SM3 杂凑哈希特征串 (256 bits Hex)")}</span>
               <div className="flex gap-2">
                 <pre className="flex-1 p-3 rounded-xl border border-slate-200 dark:border-slate-850 bg-white dark:bg-slate-950 font-mono text-xs font-bold text-slate-800 dark:text-slate-200 break-all whitespace-pre-wrap select-all leading-normal">
                   {sm3Result || '等待计算...'}
@@ -467,8 +467,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
                   }}
                   icon={<Copy className="w-3.5 h-3.5" />}
                 >
-                  复制
-                </Button>
+                  {tr("复制")}</Button>
               </div>
             </div>
           </div>
@@ -478,7 +477,7 @@ export const SmCryptoSuiteTool: React.FC = () => {
           <div className="flex-1 flex flex-col gap-4 overflow-auto min-h-0 animate-in fade-in duration-200">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start flex-none">
               <div className="space-y-1.5">
-                <FieldLabel>对称密钥 (Key Hex - 32位)</FieldLabel>
+                <FieldLabel>{tr("对称密钥 (Key Hex - 32位)")}</FieldLabel>
                 <input
                   className="w-full p-2.5 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
                   value={sm4Key}
@@ -486,19 +485,19 @@ export const SmCryptoSuiteTool: React.FC = () => {
                 />
               </div>
               <div className="space-y-1.5">
-                <FieldLabel>工作模式 (Cipher Mode)</FieldLabel>
+                <FieldLabel>{tr("工作模式 (Cipher Mode)")}</FieldLabel>
                 <select
                   className="w-full p-2.5 border rounded-xl text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
                   value={sm4Mode}
                   onChange={e => setSm4Mode(e.target.value as 'ecb' | 'cbc')}
                 >
-                  <option value="cbc">CBC (链加密模式 - 推荐)</option>
-                  <option value="ecb">ECB (电子密码本模式)</option>
+                  <option value="cbc">{tr("CBC (链加密模式 - 推荐)")}</option>
+                  <option value="ecb">{tr("ECB (电子密码本模式)")}</option>
                 </select>
               </div>
               {sm4Mode === 'cbc' && (
                 <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-200">
-                  <FieldLabel>初始向量 (IV Hex - 32位)</FieldLabel>
+                  <FieldLabel>{tr("初始向量 (IV Hex - 32位)")}</FieldLabel>
                   <input
                     className="w-full p-2.5 border rounded-xl font-mono text-xs border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus:outline-none"
                     value={sm4Iv}
@@ -510,26 +509,26 @@ export const SmCryptoSuiteTool: React.FC = () => {
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 min-h-0">
               <div className="flex flex-col gap-1.5 min-h-[140px]">
-                <FieldLabel>对称明文 (Symmetric Plaintext)</FieldLabel>
+                <FieldLabel>{tr("对称明文 (Symmetric Plaintext)")}</FieldLabel>
                 <textarea
                   className="flex-1 w-full p-2.5 border rounded-xl text-xs bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none leading-relaxed"
                   value={sm4Plain}
                   onChange={e => setSm4Plain(e.target.value)}
                 />
                 <div className="flex justify-end">
-                  <Button onClick={handleSm4Encrypt} icon={<Lock className="w-3.5 h-3.5" />}>对称加密</Button>
+                  <Button onClick={handleSm4Encrypt} icon={<Lock className="w-3.5 h-3.5" />}>{tr("对称加密")}</Button>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5 min-h-[140px]">
-                <div className="flex flex-wrap justify-between gap-2"><FieldLabel>对称密文 (Ciphertext Hex)</FieldLabel><Button size="sm" variant="ghost" disabled={!sm4CipherHex} onClick={() => navigator.clipboard.writeText(sm4CipherHex)}>复制密文</Button></div>
+                <div className="flex flex-wrap justify-between gap-2"><FieldLabel>{tr("对称密文 (Ciphertext Hex)")}</FieldLabel><Button size="sm" variant="ghost" disabled={!sm4CipherHex} onClick={() => navigator.clipboard.writeText(sm4CipherHex)}>{tr("复制密文")}</Button></div>
                 <textarea
                   className="flex-1 w-full p-2.5 border rounded-xl font-mono text-xs leading-relaxed bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:outline-none resize-none"
                   value={sm4CipherHex}
                   onChange={e => setSm4CipherHex(e.target.value)}
-                  placeholder="加密后的分组对称密文将在此以十六进制呈现"
+                  placeholder={tr("加密后的分组对称密文将在此以十六进制呈现")}
                 />
                 <div className="flex justify-end">
-                  <Button onClick={handleSm4Decrypt} icon={<Unlock className="w-3.5 h-3.5" />}>对称解密</Button>
+                  <Button onClick={handleSm4Decrypt} icon={<Unlock className="w-3.5 h-3.5" />}>{tr("对称解密")}</Button>
                 </div>
               </div>
             </div>

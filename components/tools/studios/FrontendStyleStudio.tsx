@@ -1,3 +1,4 @@
+import { translateUi as tr, useLocaleRender } from '../../../src/i18n/render';
 import React from 'react';
 import { ArrowRightLeft, BadgeCent, Code, FileCode, Paintbrush, Palette } from 'lucide-react';
 import { TabbedToolbox, SubTool, lazyNamed } from '../shared/TabbedToolbox';
@@ -20,11 +21,11 @@ const subTools: SubTool[] = [
   { id: 'svg-react', name: 'SVG 转 React', description: 'SVG 转 JSX/TSX 组件', icon: FileCode, component: SvgToReactTool },
 ];
 
-export const FrontendStyleStudio: React.FC = () => (
+export const FrontendStyleStudio: React.FC = () => { useLocaleRender(); return (
   <TabbedToolbox
-    title="前端样式与组件转换工作室"
-    description="把样式计算、视觉效果生成与 SVG/HTML 到前端组件的转换放在同一个前端生产流里"
+    title={tr("前端样式与组件转换工作室")}
+    description={tr("把样式计算、视觉效果生成与 SVG/HTML 到前端组件的转换放在同一个前端生产流里")}
     tools={subTools}
     defaultTab="pxrem"
   />
-);
+); };

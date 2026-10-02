@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import { readPreference, writePreference } from './shared/browserStorage';
+import { useDraftState } from './shared/useDraftState';
+import { translateUi as tr, useLocaleRender } from '../../src/i18n/render';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -295,9 +298,10 @@ const formatsFromText = (text: string, pageUrl: string, source: string, referer?
   return uniqueFormats([...formats, ...tagFormats]);
 };
 
-const fetchText = async (url: string) => {
+const fetchText = async (url: string, signal?: AbortSignal) => {
   const response = await fetch(url, {
     credentials: 'omit',
+    signal,
     headers: {
       Accept: 'text/html,application/json;q=0.9,*/*;q=0.8',
     },
@@ -306,9 +310,10 @@ const fetchText = async (url: string) => {
   return response.text();
 };
 
-const fetchJson = async <T,>(url: string): Promise<T> => {
+const fetchJson = async <T,>(url: string, signal?: AbortSignal): Promise<T> => {
   const response = await fetch(url, {
     credentials: 'omit',
+    signal,
     headers: {
       Accept: 'application/json,text/plain;q=0.9,*/*;q=0.8',
     },
@@ -332,11 +337,11 @@ const parseDirect = (url: string): ParseResult => ({
   warnings: [],
 });
 
-const parseVimeo = async (url: string): Promise<ParseResult> => {
+const parseVimeo = async (url: string, signal?: AbortSignal): Promise<ParseResult> => {
   const id = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i)?.[1];
   if (!id) throw new Error('没有识别到 Vimeo 视频 ID');
 
-  const config = await fetchJson<VimeoConfig>(`https://player.vimeo.com/video/${id}/config`);
+  const config = await fetchJson<VimeoConfig>(`https://player.vimeo.com/video/${id}/config`, signal);
   const progressive = config?.request?.files?.progressive ?? [];
   const hls = config?.request?.files?.hls?.cdns;
   const hlsFormats = hls
@@ -376,16 +381,16 @@ const parseVimeo = async (url: string): Promise<ParseResult> => {
   };
 };
 
-const parseBilibili = async (url: string): Promise<ParseResult> => {
+const parseBilibili = async (url: string, signal?: AbortSignal): Promise<ParseResult> => {
   const bvid = url.match(/\/video\/(BV[a-zA-Z0-9]+)/)?.[1] || url.match(/\b(BV[a-zA-Z0-9]{10,})\b/)?.[1];
   if (!bvid) throw new Error('没有识别到 Bilibili BV 号');
 
-  const view = await fetchJson<BilibiliViewResponse>(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`);
+  const view = await fetchJson<BilibiliViewResponse>(`https://api.bilibili.com/x/web-interface/view?bvid=${encodeURIComponent(bvid)}`, signal);
   const cid = view?.data?.cid;
   if (!cid) throw new Error(view?.message || '无法读取 Bilibili cid');
 
   const play = await fetchJson<BilibiliPlayResponse>(
-    `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&fnval=16&fourk=1`,
+    `https://api.bilibili.com/x/player/playurl?bvid=${encodeURIComponent(bvid)}&cid=${cid}&fnval=16&fourk=1`, signal,
   );
   const durl = play?.data?.durl ?? [];
   const dashVideo = play?.data?.dash?.video ?? [];
@@ -401,10 +406,10 @@ const parseBilibili = async (url: string): Promise<ParseResult> => {
     })),
     ...dashVideo.map((item, index) => ({
       id: `bili-dash-${index}`,
-      quality: item.id ? `${item.id}P` : guessQuality(item.baseUrl || item.base_url, index),
+      quality: item.id ? `${item.id}P` : guessQuality(item.baseUrl || item.base_url || '', index),
       format: item.mimeType?.split('/').pop() || 'm4s',
       resolution: item.width && item.height ? `${item.width}x${item.height}` : undefined,
-      url: item.baseUrl || item.base_url,
+      url: item.baseUrl || item.base_url || '',
       source: 'Bilibili DASH',
       referer: 'https://www.bilibili.com/',
     })),
@@ -424,8 +429,8 @@ const parseBilibili = async (url: string): Promise<ParseResult> => {
   };
 };
 
-const parseGenericPage = async (url: string, platform: Platform): Promise<ParseResult> => {
-  const html = await fetchText(url);
+const parseGenericPage = async (url: string, platform: Platform, signal?: AbortSignal): Promise<ParseResult> => {
+  const html = await fetchText(url, signal);
   const formats = formatsFromText(html, url, '页面源码', platform === 'pinterest' ? 'https://www.pinterest.com/' : undefined);
   return {
     title: getPageTitle(html),
@@ -450,13 +455,15 @@ export const parseFromSource = (source: string, pageUrl: string, platform: Platf
   };
 };
 
-const parseWithWorker = async (endpoint: string, url: string): Promise<ParseResult> => {
+const parseWithWorker = async (endpoint: string, url: string, token = '', signal?: AbortSignal): Promise<ParseResult> => {
   const apiUrl = `${normalizeWorkerEndpoint(endpoint)}/api/extract`;
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
+    signal,
     body: JSON.stringify({ url }),
   });
   const payload = await response.json().catch(() => null);
@@ -503,25 +510,33 @@ const checkWorkerHealth = async (endpoint: string, signal?: AbortSignal) => {
   return payload as { supported?: string[]; unsupported?: string[] };
 };
 
-const buildCommand = (format: VideoFormat) => {
-  const output = `video.${format.format === 'm3u8' || format.format === 'mpd' ? 'mp4' : format.format}`;
-  const header = format.referer ? ` -H "Referer: ${format.referer}"` : '';
-  if (format.format === 'm3u8' || format.format === 'mpd') {
-    return `ffmpeg${format.referer ? ` -headers "Referer: ${format.referer}\\r\\n"` : ''} -i "${format.url}" -c copy "${output}"`;
+const shellQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
+export const buildCommand = (format: VideoFormat) => {
+  const extension = /^[a-z0-9]+$/i.test(format.format) ? format.format : 'mp4';
+  const output = `video.${extension === 'm3u8' || extension === 'mpd' ? 'mp4' : extension}`;
+  const referer = format.referer?.replace(/[\r\n]/g, '');
+  const header = referer ? ` -H ${shellQuote(`Referer: ${referer}`)}` : '';
+  if (extension === 'm3u8' || extension === 'mpd') {
+    return `ffmpeg${referer ? ` -headers ${shellQuote(`Referer: ${referer}\r\n`)}` : ''} -i ${shellQuote(format.url)} -c copy ${shellQuote(output)}`;
   }
-  return `curl -L${header} -o "${output}" "${format.url}"`;
+  return `curl -L${header} -o ${shellQuote(output)} ${shellQuote(format.url)}`;
 };
 
 const getBlockedWarning = (platform: Platform) =>
-  `浏览器无法直接访问该页面或接口，常见原因是 CORS、登录态、地区限制或平台风控。你仍可以打开原页面，查看网页源码后粘贴到“源码解析”模式中扫描媒体地址。${platformHints[platform]}`;
+  `浏览器无法直接访问该页面或接口，常见原因是 CORS、登录态、地区限制或平台风控。你仍可以打开原页面，查看网页源码后粘贴到“源码解析”模式中扫描媒体地址。${tr(platformHints[platform])}`;
 
 export const VideoDownloader: React.FC = () => {
+  useLocaleRender();
   const [mode, setMode] = useState<ParseMode>('url');
-  const [input, setInput] = useState(sampleUrl);
-  const [workerEndpoint, setWorkerEndpoint] = useState(() => localStorage.getItem(WORKER_ENDPOINT_STORAGE_KEY) || DEFAULT_WORKER_ENDPOINT);
+  const parseRef = useRef<AbortController | null>(null);
+  const healthRef = useRef<AbortController | null>(null);
+  useEffect(() => () => { const parse = parseRef.current; const health = healthRef.current; parseRef.current = null; healthRef.current = null; parse?.abort(); health?.abort(); }, []);
+  const [input, setInput] = useDraftState("components/tools/VideoDownloader.tsx:VideoDownloader:input", sampleUrl);
+  const [workerToken, setWorkerToken] = useState('');
+  const [workerEndpoint, setWorkerEndpoint] = useState(() => readPreference(WORKER_ENDPOINT_STORAGE_KEY) || DEFAULT_WORKER_ENDPOINT);
   const [workerHealth, setWorkerHealth] = useState<WorkerHealthState>('idle');
   const [workerHealthMessage, setWorkerHealthMessage] = useState('');
-  const [source, setSource] = useState('');
+  const [source, setSource] = useDraftState("components/tools/VideoDownloader.tsx:VideoDownloader:source", '');
   const [status, setStatus] = useState<ParseStatus>('idle');
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<ParseResult | null>(null);
@@ -530,7 +545,7 @@ export const VideoDownloader: React.FC = () => {
   const [workerScriptCopied, setWorkerScriptCopied] = useState(false);
 
   const copyWorkerScript = async () => {
-    await navigator.clipboard.writeText(videoCatchWorkerCode);
+    try { await navigator.clipboard.writeText(videoCatchWorkerCode); } catch (error) { notifyToast({ title: tr('复制失败'), description: (error as Error).message, tone: 'error' }); return; }
     setWorkerScriptCopied(true);
     window.setTimeout(() => setWorkerScriptCopied(false), 2000);
   };
@@ -550,13 +565,13 @@ export const VideoDownloader: React.FC = () => {
   );
 
   const copyText = async (id: string, text: string) => {
-    await navigator.clipboard.writeText(text);
+    try { await navigator.clipboard.writeText(text); } catch (error) { notifyToast({ title: tr('复制失败'), description: (error as Error).message, tone: 'error' }); return; }
     setCopiedId(id);
     window.setTimeout(() => setCopiedId(current => (current === id ? null : current)), 1200);
   };
 
   const stashFormat = async (format: VideoFormat) => {
-    await useScratchpadStore.getState().addItemAsync({
+    try { await useScratchpadStore.getState().addItemAsync({
       name: `video_${format.quality}_${Date.now()}.txt`,
       content: `${format.url}\n\n${buildCommand(format)}`,
       type: 'text',
@@ -564,17 +579,19 @@ export const VideoDownloader: React.FC = () => {
       sourceTool: '视频下载解析器',
     });
     notifyToast({ title: '视频候选已送入暂存箱', description: format.quality, tone: 'success' });
+    } catch (error) { notifyToast({ title: tr('暂存失败'), description: (error as Error).message, tone: 'error' }); }
   };
 
   const handleWorkerEndpointChange = (value: string) => {
+    healthRef.current?.abort(); healthRef.current = null;
     setWorkerEndpoint(value);
     setWorkerHealth('idle');
     setWorkerHealthMessage('');
     const normalized = normalizeWorkerEndpoint(value);
     if (normalized) {
-      localStorage.setItem(WORKER_ENDPOINT_STORAGE_KEY, normalized);
+      writePreference(WORKER_ENDPOINT_STORAGE_KEY, normalized);
     } else {
-      localStorage.removeItem(WORKER_ENDPOINT_STORAGE_KEY);
+      writePreference(WORKER_ENDPOINT_STORAGE_KEY, null);
     }
   };
 
@@ -585,16 +602,19 @@ export const VideoDownloader: React.FC = () => {
       setWorkerHealthMessage('请先填入您自己的 Cloudflare Worker API 域名。');
       return;
     }
-    const controller = new AbortController();
+    healthRef.current?.abort();
+    const controller = new AbortController(); healthRef.current = controller;
     const timeoutId = window.setTimeout(() => controller.abort(), 5000);
     setWorkerHealth('checking');
     setWorkerHealthMessage('');
     try {
       const payload = await checkWorkerHealth(endpoint, controller.signal);
+      if (healthRef.current !== controller) return;
       setWorkerHealth('ready');
       setWorkerHealthMessage(`Worker 可用。支持：${payload.supported?.join('、') || '公开视频解析'}。`);
       notifyToast({ title: 'Worker 健康检查通过', description: endpoint, tone: 'success' });
     } catch (err) {
+      if (healthRef.current !== controller) return;
       const message = err instanceof Error && err.name === 'AbortError'
         ? 'Worker 健康检查超时，请确认域名和网络。'
         : err instanceof Error ? err.message : 'Worker 健康检查失败';
@@ -603,10 +623,14 @@ export const VideoDownloader: React.FC = () => {
       notifyToast({ title: 'Worker 健康检查失败', description: message, tone: 'error' });
     } finally {
       window.clearTimeout(timeoutId);
+      if (healthRef.current === controller) healthRef.current = null;
     }
   };
 
   const parse = async () => {
+    if (parseRef.current) return;
+    const controller = new AbortController(); parseRef.current = controller;
+    const deadline = setTimeout(() => controller.abort(new DOMException(tr('解析超时，请重试。'), 'TimeoutError')), 30000);
     setStatus('parsing');
     setMessage('');
     setResult(null);
@@ -618,17 +642,18 @@ export const VideoDownloader: React.FC = () => {
       if (mode === 'source') {
         nextResult = parseFromSource(source, targetUrl, nextPlatform);
       } else if (normalizeWorkerEndpoint(workerEndpoint)) {
-        nextResult = await parseWithWorker(workerEndpoint, targetUrl);
+        nextResult = await parseWithWorker(workerEndpoint, targetUrl, workerToken, controller.signal);
       } else if (nextPlatform === 'direct') {
         nextResult = parseDirect(targetUrl);
       } else if (nextPlatform === 'vimeo') {
-        nextResult = await parseVimeo(targetUrl);
+        nextResult = await parseVimeo(targetUrl, controller.signal);
       } else if (nextPlatform === 'bilibili') {
-        nextResult = await parseBilibili(targetUrl);
+        nextResult = await parseBilibili(targetUrl, controller.signal);
       } else {
-        nextResult = await parseGenericPage(targetUrl, nextPlatform);
+        nextResult = await parseGenericPage(targetUrl, nextPlatform, controller.signal);
       }
 
+      if (parseRef.current !== controller) return;
       setResult(nextResult);
       if (nextResult.formats.length === 0 || nextResult.warnings.length > 0) {
         setStatus(nextResult.formats.length ? 'warning' : 'error');
@@ -638,6 +663,8 @@ export const VideoDownloader: React.FC = () => {
         setMessage(`已找到 ${nextResult.formats.length} 个候选视频地址。`);
       }
     } catch (error) {
+      if (parseRef.current !== controller) return;
+      if (controller.signal.aborted) { setStatus('warning'); setMessage(controller.signal.reason instanceof Error ? controller.signal.reason.message : tr('解析已取消。')); return; }
       const nextPlatform = detectPlatform(input);
       setStatus('warning');
       setMessage(`${normalizeWorkerEndpoint(workerEndpoint) ? '私有 Worker 解析失败，可切换源码解析或检查 Worker 健康状态。' : getBlockedWarning(nextPlatform)}（${error instanceof Error ? error.message : '解析失败'}）`);
@@ -647,36 +674,37 @@ export const VideoDownloader: React.FC = () => {
         formats: [],
         warnings: [normalizeWorkerEndpoint(workerEndpoint) ? '请确认 Worker 已部署、域名正确、允许 CORS，并通过健康检查。' : getBlockedWarning(nextPlatform)],
       });
+    } finally {
+      clearTimeout(deadline);
+      if (parseRef.current === controller) parseRef.current = null;
     }
   };
 
   return (
     <Card className="flex h-full flex-col">
       <CardHeader
-        title="视频下载解析器"
-        description="本地优先解析媒体直链、公开页面和源码中的视频资源；平台受登录态、地区、CORS 与风控限制，私有 Worker 为可选增强。"
+        title={tr("视频下载解析器")}
+        description={tr("本地优先解析媒体直链、公开页面和源码中的视频资源；平台受登录态、地区、CORS 与风控限制，私有 Worker 为可选增强。")}
         actions={
           <div className="flex rounded-lg border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
-              onClick={() => setMode('url')}
+              disabled={status === 'parsing'} onClick={() => setMode('url')}
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-semibold transition-colors ${
                 mode === 'url' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Link2 className="h-3.5 w-3.5" />
-              链接
-            </button>
+              {tr("链接")}</button>
             <button
               type="button"
-              onClick={() => setMode('source')}
+              disabled={status === 'parsing'} onClick={() => setMode('source')}
               className={`inline-flex h-8 items-center gap-2 rounded-md px-3 text-xs font-semibold transition-colors ${
                 mode === 'source' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <Clipboard className="h-3.5 w-3.5" />
-              源码
-            </button>
+              {tr("源码")}</button>
           </div>
         }
       />
@@ -686,17 +714,20 @@ export const VideoDownloader: React.FC = () => {
           <div className="border-b border-slate-200 bg-slate-50/70 p-5 lg:border-b-0 lg:border-r">
             <div className="space-y-4">
               <div>
-                <FieldLabel hint={platformLabels[platform]}>视频页面或媒体直链</FieldLabel>
+                <FieldLabel hint={tr(platformLabels[platform])}>{tr("视频页面或媒体直链")}</FieldLabel>
                 <Input
-                  value={input}
+                  disabled={status === 'parsing'} value={input}
                   onChange={event => setInput(event.target.value)}
-                  placeholder="粘贴 Bilibili / Vimeo / Pinterest / mp4 / m3u8 链接"
+                  placeholder={tr("粘贴 Bilibili / Vimeo / Pinterest / mp4 / m3u8 链接")}
                   className="font-mono"
                 />
               </div>
 
-              <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">解析端点与健康检查</summary><div>
-                <FieldLabel hint={workerEndpoint ? '优先使用' : '可选'}>Cloudflare Worker API</FieldLabel>
+              <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">{tr("解析端点与健康检查")}</summary><div>
+                <label className="mb-3 block text-xs">Worker access token (optional, session only)
+                  <Input type="password" autoComplete="off" aria-label="Worker access token" value={workerToken} onChange={event => setWorkerToken(event.target.value)} className="mt-1" />
+                </label>
+                <FieldLabel hint={workerEndpoint ? tr('优先使用') : tr('可选')}>Cloudflare Worker API</FieldLabel>
                 <div className="flex gap-2">
                   <Input
                     value={workerEndpoint}
@@ -711,28 +742,27 @@ export const VideoDownloader: React.FC = () => {
                     onClick={runWorkerHealthCheck}
                     isLoading={workerHealth === 'checking'}
                   >
-                    检测
-                  </Button>
+                    {tr("检测")}</Button>
                 </div>
                 <div className={`mt-1 text-[11px] leading-5 ${
                   workerHealth === 'ready' ? 'text-emerald-700' : workerHealth === 'error' ? 'text-amber-700' : 'text-slate-500'
                 }`}>
                   {workerHealthMessage || (workerEndpoint === DEFAULT_WORKER_ENDPOINT
-                    ? '默认使用 sopace 公共 Worker；您也可以替换为自己的 Cloudflare Worker，建议先点击检测。'
+                    ? tr('默认使用 sopace 公共 Worker；您也可以替换为自己的 Cloudflare Worker，建议先点击检测。')
                     : workerEndpoint
-                      ? '填入后会优先调用您配置的 Worker；建议先点击检测。'
-                      : '未配置 Worker 时仅使用浏览器本地能力，部分平台将受限于跨域报错。')}
+                      ? tr('填入后会优先调用您配置的 Worker；建议先点击检测。')
+                      : tr('未配置 Worker 时仅使用浏览器本地能力，部分平台将受限于跨域报错。'))}
                 </div>
               </div>
 
               </details>
               {mode === 'source' && (
                 <div>
-                  <FieldLabel hint="跨域失败时使用">页面源码 / JSON 配置</FieldLabel>
+                  <FieldLabel hint={tr("跨域失败时使用")}>{tr("页面源码 / JSON 配置")}</FieldLabel>
                   <Textarea
-                    value={source}
+                    disabled={status === 'parsing'} value={source}
                     onChange={event => setSource(event.target.value)}
-                    placeholder="粘贴网页源码、__INITIAL_STATE__、playerConfig 或接口 JSON..."
+                    placeholder={tr("粘贴网页源码、__INITIAL_STATE__、playerConfig 或接口 JSON...")}
                     className="min-h-56 resize-y font-mono text-xs"
                   />
                 </div>
@@ -745,39 +775,35 @@ export const VideoDownloader: React.FC = () => {
                 icon={status === 'parsing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 className="w-full"
               >
-                开始解析
-              </Button>
+                {tr("开始解析")}</Button>
+              {status === 'parsing' && <Button variant="secondary" onClick={() => parseRef.current?.abort(new DOMException(tr('解析已取消。'), 'AbortError'))}>{tr('取消')}</Button>}
 
-              <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-600">iPhone 快捷指令</summary><div className="mt-3 tool-section overflow-hidden border-sky-200 bg-gradient-to-br from-white to-sky-50/70 p-4">
+              <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-600">{tr("iPhone 快捷指令")}</summary><div className="mt-3 tool-section overflow-hidden border-sky-200 bg-gradient-to-br from-white to-sky-50/70 p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 shadow-sm">
                     <Smartphone className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-900">iPhone 快捷指令</div>
+                    <div className="text-sm font-semibold text-slate-900">{tr("iPhone 快捷指令")}</div>
                     <p className="mt-1 text-xs leading-5 text-slate-600">
-                      从 Safari 或 App 分享视频页面到快捷指令，自动调用默认 Worker 并保存第一个视频到相册。
-                    </p>
+                      {tr("从 Safari 或 App 分享视频页面到快捷指令，自动调用默认 Worker 并保存第一个视频到相册。")}</p>
                   </div>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <a href={shortcutInstallUrl} className="min-w-0">
                     <Button size="sm" className="w-full justify-center" icon={<Smartphone className="h-3.5 w-3.5" />}>
-                      安装快捷指令
-                    </Button>
+                      {tr("安装快捷指令")}</Button>
                   </a>
                   <a href={SHORTCUT_FILE_PATH} download={`${SHORTCUT_NAME}.shortcut`} className="min-w-0">
                     <Button size="sm" variant="secondary" className="w-full justify-center" icon={<FileDown className="h-3.5 w-3.5" />}>
-                      下载 .shortcut 文件
-                    </Button>
+                      {tr("下载 .shortcut 文件")}</Button>
                   </a>
                 </div>
                 <div className="mt-2 break-all rounded-lg border border-sky-100 bg-white/70 px-2.5 py-2 font-mono text-[11px] leading-4 text-slate-500">
-                  固定调用默认 Worker：{DEFAULT_WORKER_ENDPOINT}
+                  {tr("固定调用默认 Worker：")}{DEFAULT_WORKER_ENDPOINT}
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-slate-500">
-                  导入后可在分享表单里选择「视频下载解析器」；MP4/WebM 等直链会自动保存到系统相册，流媒体或需 Referer 的资源仍可能受 iOS 限制。
-                </p>
+                  {tr("导入后可在分享表单里选择「视频下载解析器」；MP4/WebM 等直链会自动保存到系统相册，流媒体或需 Referer 的资源仍可能受 iOS 限制。")}</p>
               </div>
 
               </details>
@@ -789,8 +815,7 @@ export const VideoDownloader: React.FC = () => {
                 >
                   <span className="flex items-center gap-2">
                     <Cpu className={`h-4 w-4 transition-transform duration-500 ${showWorkerInfo ? 'text-indigo-600 rotate-180' : 'text-slate-500'}`} />
-                    配置解析 Worker
-                  </span>
+                    {tr("配置解析 Worker")}</span>
                   {showWorkerInfo ? (
                     <ChevronUp className="h-4 w-4 text-slate-500 transition-transform duration-300" />
                   ) : (
@@ -801,32 +826,27 @@ export const VideoDownloader: React.FC = () => {
                 {showWorkerInfo ? (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
                     <p className="text-slate-500">
-                      默认提供 sopace 公共 Worker 作为开箱即用的解析端点；您也可以替换为自己的 Cloudflare Worker。多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制，Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。
-                    </p>
+                      {tr("默认提供 sopace 公共 Worker 作为开箱即用的解析端点；您也可以替换为自己的 Cloudflare Worker。多数视频平台存在 CORS、登录态、地区、风控、DRM 或版权限制，Worker 只能改善由 CORS 导致的抓取失败，不会绕过平台权限或内容保护。")}</p>
                     <div className="grid gap-2 md:grid-cols-2">
                       {videoCapabilityBoundaries.map(item => (
                         <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-2.5">
-                          <div className="font-semibold text-slate-800">{item.label}</div>
-                          <div className="mt-1 text-slate-600">{item.support}</div>
-                          <div className="mt-1 text-amber-700">边界：{item.boundary}</div>
+                          <div className="font-semibold text-slate-800">{tr(item.label)}</div>
+                          <div className="mt-1 text-slate-600">{tr(item.support)}</div>
+                          <div className="mt-1 text-amber-700">{tr("边界：")}{tr(item.boundary)}</div>
                         </div>
                       ))}
                     </div>
                     <div className="rounded-lg bg-slate-50 p-2.5">
-                      <div className="mb-1 font-semibold text-slate-800">极速部署步骤：</div>
+                      <div className="mb-1 font-semibold text-slate-800">{tr("极速部署步骤：")}</div>
                       <ol className="list-decimal pl-4 space-y-1 text-slate-600">
                         <li>
-                          登录 <a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline hover:text-indigo-700">Cloudflare 仪表盘</a>，创建一个新的 Workers。
-                        </li>
+                          {tr("登录")}<a href="https://dash.cloudflare.com" target="_blank" rel="noreferrer" className="text-indigo-600 underline hover:text-indigo-700">{tr("Cloudflare 仪表盘")}</a>{tr("，创建一个新的 Workers。")}</li>
                         <li>
-                          复制下方完整的解析脚本代码。
-                        </li>
+                          {tr("复制下方完整的解析脚本代码。")}</li>
                         <li>
-                          在 Cloudflare 网页编辑器中清空原有内容，粘贴脚本并点击「Deploy」。
-                        </li>
+                          {tr("在 Cloudflare 网页编辑器中清空原有内容，粘贴脚本并点击「Deploy」。")}</li>
                         <li>
-                          复制部署成功后的 API 域名，填入上方的「Cloudflare Worker API」框中。
-                        </li>
+                          {tr("复制部署成功后的 API 域名，填入上方的「Cloudflare Worker API」框中。")}</li>
                       </ol>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -837,7 +857,7 @@ export const VideoDownloader: React.FC = () => {
                         onClick={copyWorkerScript}
                         className="w-full justify-center py-2"
                       >
-                        {workerScriptCopied ? '已复制 Worker 脚本！' : '一键复制 Worker 脚本'}
+                        {workerScriptCopied ? tr('已复制 Worker 脚本！') : tr('一键复制 Worker 脚本')}
                       </Button>
                       <div className="relative">
                         <div className="absolute right-2 top-2 z-10 rounded bg-slate-800/80 px-2 py-0.5 text-[10px] text-white">
@@ -851,23 +871,22 @@ export const VideoDownloader: React.FC = () => {
                   </div>
                 ) : (
                   <p className="mt-2 text-xs leading-5 text-slate-500">
-                    默认使用 sopace 公共 Worker；填入自有 Worker 域名后会优先调用您的配置。清空后仅使用浏览器本地能力，部分平台将受限于跨域报错。
-                  </p>
+                    {tr("默认使用 sopace 公共 Worker；填入自有 Worker 域名后会优先调用您的配置。清空后仅使用浏览器本地能力，部分平台将受限于跨域报错。")}</p>
                 )}
               </div>
 
               <div className="tool-panel p-4">
-                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">平台提示</div>
-                <p className="text-sm leading-6 text-slate-700">{platformHints[platform]}</p>
+                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">{tr("平台提示")}</div>
+                <p className="text-sm leading-6 text-slate-700">{tr(platformHints[platform])}</p>
               </div>
 
-              <details className="tool-panel p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500 mb-3">能力矩阵</summary><div>
+              <details className="tool-panel p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500 mb-3">{tr("能力矩阵")}</summary><div>
                 <div className="grid gap-2 text-xs text-slate-600">
-                  <div className="flex justify-between gap-3"><span>媒体直链 / m3u8 / mpd</span><strong className="text-emerald-700">本地可用</strong></div>
-                  <div className="flex justify-between gap-3"><span>页面源码扫描</span><strong className="text-emerald-700">本地可用</strong></div>
-                  <div className="flex justify-between gap-3"><span>Vimeo / Bilibili 公开接口</span><strong className="text-amber-700">受 CORS/权限影响</strong></div>
-                  <div className="flex justify-between gap-3"><span>抖音 / 小红书 / Pinterest</span><strong className="text-amber-700">建议私有 Worker</strong></div>
-                  <div className="flex justify-between gap-3"><span>Twitter / X</span><strong className="text-red-700">纯浏览器不承诺支持</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("媒体直链 / m3u8 / mpd")}</span><strong className="text-emerald-700">{tr("本地可用")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("页面源码扫描")}</span><strong className="text-emerald-700">{tr("本地可用")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("Vimeo / Bilibili 公开接口")}</span><strong className="text-amber-700">{tr("受 CORS/权限影响")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>{tr("抖音 / 小红书 / Pinterest")}</span><strong className="text-amber-700">{tr("建议私有 Worker")}</strong></div>
+                  <div className="flex justify-between gap-3"><span>Twitter / X</span><strong className="text-red-700">{tr("纯浏览器不承诺支持")}</strong></div>
                 </div>
               </div></details>
             </div>
@@ -881,7 +900,7 @@ export const VideoDownloader: React.FC = () => {
                 }`}
               >
                 {status === 'success' ? <CheckCircle2 className="mt-0.5 h-4 w-4" /> : <AlertTriangle className="mt-0.5 h-4 w-4" />}
-                <span className="leading-5">{message || '准备解析。'}</span>
+                <span className="leading-5">{message || tr('准备解析。')}</span>
               </div>
             )}
 
@@ -905,16 +924,16 @@ export const VideoDownloader: React.FC = () => {
                     </div>
                     <h3 className="break-words text-lg font-semibold leading-7 text-slate-950">{result.title}</h3>
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-                      {result.author && <span className="rounded border border-slate-200 px-2 py-1">作者：{result.author}</span>}
-                      {result.duration && <span className="rounded border border-slate-200 px-2 py-1">时长：{result.duration}</span>}
-                      <span className="rounded border border-slate-200 px-2 py-1">候选：{selectedFormats.length}</span>
+                      {result.author && <span className="rounded border border-slate-200 px-2 py-1">{tr("作者：")}{result.author}</span>}
+                      {result.duration && <span className="rounded border border-slate-200 px-2 py-1">{tr("时长：")}{result.duration}</span>}
+                      <span className="rounded border border-slate-200 px-2 py-1">{tr("候选：")}{selectedFormats.length}</span>
                     </div>
                   </div>
                 </div>
 
                 {hasPreview && previewUrl && (
                   <div>
-                    <div className="mb-2 text-sm font-semibold text-slate-800">预览</div>
+                    <div className="mb-2 text-sm font-semibold text-slate-800">{tr("预览")}</div>
                     <video src={previewUrl} controls className="aspect-video w-full rounded-lg bg-slate-950" />
                   </div>
                 )}
@@ -945,7 +964,7 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Copy className="h-3.5 w-3.5" />}
                               onClick={() => copyText(`url-${format.id}`, format.url)}
                             >
-                              {copiedId === `url-${format.id}` ? '已复制' : '复制链接'}
+                              {copiedId === `url-${format.id}` ? tr('已复制') : tr('复制链接')}
                             </Button>
                             <Button
                               size="sm"
@@ -953,7 +972,7 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Terminal className="h-3.5 w-3.5" />}
                               onClick={() => copyText(`cmd-${format.id}`, buildCommand(format))}
                             >
-                              {copiedId === `cmd-${format.id}` ? '已复制' : '复制命令'}
+                              {copiedId === `cmd-${format.id}` ? tr('已复制') : tr('复制命令')}
                             </Button>
                             <Button
                               size="sm"
@@ -961,32 +980,29 @@ export const VideoDownloader: React.FC = () => {
                               icon={<Clipboard className="h-3.5 w-3.5" />}
                               onClick={() => stashFormat(format)}
                             >
-                              暂存
-                            </Button>
+                              {tr("暂存")}</Button>
                             <a href={format.url} target="_blank" rel="noreferrer" download={`video-${index}.${format.format}`}>
                               <Button size="sm" icon={format.format === 'm3u8' || format.format === 'mpd' ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}>
-                                {format.format === 'm3u8' || format.format === 'mpd' ? '打开' : '下载'}
+                                {format.format === 'm3u8' || format.format === 'mpd' ? tr('打开') : tr('下载')}
                               </Button>
                             </a>
                           </div>
                         </div>
-                        <details className="mt-3"><summary className="cursor-pointer text-xs text-slate-500">查看下载命令</summary><CodePanel muted className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{buildCommand(format)}</CodePanel></details>
+                        <details className="mt-3"><summary className="cursor-pointer text-xs text-slate-500">{tr("查看下载命令")}</summary><CodePanel muted className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{buildCommand(format)}</CodePanel></details>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
-                    暂无候选地址。切换到源码解析，粘贴页面 HTML 或 JSON 配置后可继续扫描。
-                  </div>
+                    {tr("暂无候选地址。切换到源码解析，粘贴页面 HTML 或 JSON 配置后可继续扫描。")}</div>
                 )}
               </div>
             ) : (
               <div className="flex min-h-[28rem] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-center">
                 <FileVideo className="mb-4 h-12 w-12 text-slate-300" />
-                <div className="text-base font-semibold text-slate-800">等待解析视频地址</div>
+                <div className="text-base font-semibold text-slate-800">{tr("等待解析视频地址")}</div>
                 <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  支持媒体直链、Vimeo/Bilibili 公开资源，以及页面源码中的 mp4 / m3u8 / webm / DASH 扫描；复杂平台请部署自己的 Worker 或改用源码解析。
-                </p>
+                  {tr("支持媒体直链、Vimeo/Bilibili 公开资源，以及页面源码中的 mp4 / m3u8 / webm / DASH 扫描；复杂平台请部署自己的 Worker 或改用源码解析。")}</p>
               </div>
             )}
           </div>

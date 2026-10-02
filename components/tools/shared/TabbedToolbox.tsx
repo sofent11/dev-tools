@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState, useTransition, useRef, useId } from 'react';
 import { LucideIcon, ChevronDown, Search, ArrowLeft, ArrowRight, X } from 'lucide-react';
+import { ToolErrorBoundary } from './ToolErrorBoundary';
 import { useI18n } from '../../../src/i18n';
 
 type EmptyProps = Record<string, never>;
@@ -139,7 +140,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
 
   useEffect(() => {
     const activeTool = tools.find(t => t.id === activeTabId);
-    activeTool?.component.preload?.();
+    void activeTool?.component.preload?.().catch(() => { /* The render boundary reports failed imports. */ });
   }, [activeTabId, tools]);
 
   const activeTool = tabLookup.get(activeTabId) || tools[0];
@@ -202,7 +203,7 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
           {isPending && <div className="workflow-notice" role="status">{t('正在加载')} {t(activeTool.name)}...</div>}
           {ActiveComponent ? <Suspense fallback={
             <div className="workspace-loading"><span className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />{t('正在加载')} {t(activeTool.name)}...</div>
-          }><ActiveComponent /></Suspense> : <div className="workspace-loading">{t('未加载工具组件')}</div>}
+          }><ToolErrorBoundary key={activeTool.id}><ActiveComponent /></ToolErrorBoundary></Suspense> : <div className="workspace-loading">{t('未加载工具组件')}</div>}
         </div>
       </div>
       <span className="sr-only">{t(description)}</span>
