@@ -7,7 +7,6 @@ import {
   FileText,
   Loader2,
   RefreshCw,
-  Upload,
 } from 'lucide-react';
 import {
   AmbientLight,
@@ -28,7 +27,9 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Button } from '../../ui/Button';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
-import { FieldLabel, UploadPanel } from '../../ui/ToolUi';
+import { FieldLabel, Select } from '../../ui/ToolUi';
+import { FileDropzone, WorkflowNotice, WorkflowSteps } from '../shared/WorkflowUi';
+import { useI18n } from '../../../src/i18n';
 import { formatBytes } from '../shared/fileUtils';
 import { useMeshStore, SharedMesh } from '../shared/meshStore';
 import type {
@@ -46,6 +47,13 @@ const defaultOptions: VoronoiOptions = {
   thickness: 'standard',
   showOriginal: true,
 };
+
+const latticePresets: Array<{ id: string; label: string; options: VoronoiOptions }> = [
+  { id: 'balanced', label: '均衡镂空', options: defaultOptions },
+  { id: 'light', label: '轻盈大孔', options: { ...defaultOptions, holeDensity: 'low', thickness: 'thin' } },
+  { id: 'dense', label: '密集粗杆', options: { ...defaultOptions, holeDensity: 'high', thickness: 'thick' } },
+  { id: 'plane', label: '平面实验预览', options: { ...defaultOptions, holeDensity: 'low', thickness: 'plane' } },
+];
 
 const densityOptions: Array<{ value: HoleDensity; label: string; hint: string }> = [
   { value: 'low', label: '少', hint: '大孔' },
@@ -139,20 +147,24 @@ const SegmentedControl = <T extends string>({
   value,
   options,
   onChange,
+  disabled = false,
 }: {
   label: string;
   value: T;
   options: Array<{ value: T; label: string; hint?: string }>;
   onChange: (value: T) => void;
+  disabled?: boolean;
 }) => (
   <div>
     <FieldLabel>{label}</FieldLabel>
-    <div className="grid grid-cols-3 gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+    <div className="grid gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map(option => (
         <button
           key={option.value}
           type="button"
-          className={`min-w-0 rounded-md px-2 py-2 text-center text-xs font-semibold transition ${
+          aria-pressed={value === option.value}
+          disabled={disabled}
+          className={`min-w-0 rounded-md px-2 py-2 text-center text-xs font-semibold transition disabled:opacity-50 ${
             value === option.value
               ? 'bg-white text-primary-800 shadow-sm ring-1 ring-primary-100'
               : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
@@ -187,6 +199,7 @@ const Metric: React.FC<{ label: string; value: React.ReactNode; tone?: 'default'
 };
 
 const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }> = ({ report, outputSize }) => {
+  const { t } = useI18n();
   if (!report) {
     return (
       <div className="tool-panel flex min-h-[13rem] flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
@@ -231,7 +244,7 @@ const ReportPanel: React.FC<{ report: VoronoiReport | null; outputSize: number }
 
       <div className="tool-panel p-4 text-xs leading-5 text-slate-500">
         {report.notes.map(note => (
-          <div key={note}>- {note}</div>
+          <div key={note}>- {t(note)}</div>
         ))}
       </div>
     </div>
@@ -435,6 +448,7 @@ const MeshPreview: React.FC<{
 };
 
 export const VoronoiLatticeTool: React.FC = () => {
+  const { t } = useI18n();
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const sharedMesh = useMeshStore(state => state.sharedMesh);
@@ -445,31 +459,39 @@ export const VoronoiLatticeTool: React.FC = () => {
   const [lattice, setLattice] = useState<MeshPreviewData | null>(null);
   const [report, setReport] = useState<VoronoiReport | null>(null);
   const [stlBuffer, setStlBuffer] = useState<ArrayBuffer | null>(null);
+  const [processedOptions, setProcessedOptions] = useState<VoronoiOptions | null>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     return () => {
+      requestIdRef.current += 1;
       workerRef.current?.terminate();
     };
   }, []);
 
   const importSharedMesh = (shared: SharedMesh) => {
-    const stlBuf = exportToStlBuffer(shared.positions, shared.indices);
-    const newFile = new File([stlBuf], shared.fileName, { type: 'model/stl' });
-    setFile(newFile);
-    setOriginal({
-      positions: shared.positions.slice(),
-      indices: shared.indices.slice()
-    });
-    setLattice(null);
-    setReport(null);
-    setStlBuffer(null);
-    setError('');
+    if (processing) return;
+    try {
+      const stlBuf = exportToStlBuffer(shared.positions, shared.indices);
+      const newFile = new File([stlBuf], shared.fileName, { type: 'model/stl' });
+      setFile(newFile);
+      setOriginal({
+        positions: shared.positions.slice(),
+        indices: shared.indices.slice()
+      });
+      setLattice(null);
+      setReport(null);
+      setStlBuffer(null);
+      setProcessedOptions(null);
+      setError('');
+    } catch (importError) { setError(`${t('无法导入共享网格')}：${(importError as Error).message}`); }
   };
 
   const outputSize = stlBuffer?.byteLength ?? 0;
   const canProcess = Boolean(file) && !processing;
+  const staleOutput = Boolean(stlBuffer && processedOptions && (options.holeDensity !== processedOptions.holeDensity || options.thickness !== processedOptions.thickness));
+  const selectedPreset = latticePresets.find(preset => preset.options.holeDensity === options.holeDensity && preset.options.thickness === options.thickness)?.id || 'custom';
 
   const getWorker = () => {
     if (!workerRef.current) {
@@ -483,61 +505,79 @@ export const VoronoiLatticeTool: React.FC = () => {
   };
 
   const handleFile = (nextFile?: File) => {
-    if (!nextFile) return;
+    if (!nextFile || processing) return;
+    if (!/\.stl$/i.test(nextFile.name) && !['model/stl', 'application/sla'].includes(nextFile.type)) { setError(t('请选择 STL 文件，支持 ASCII 与二进制格式。')); return; }
+    if (!nextFile.size) { setError(t('文件为空，请选择包含模型数据的 STL。')); return; }
+    requestIdRef.current += 1;
     setFile(nextFile);
     setOriginal(null);
     setLattice(null);
     setReport(null);
     setStlBuffer(null);
+    setProcessedOptions(null);
     setError('');
   };
 
   const handleProcess = async () => {
-    if (!file) return;
+    if (!file || processing) return;
+    const submittedFile = file;
+    const submittedOptions = { ...options };
 
     setProcessing(true);
     setError('');
     setReport(null);
     setStlBuffer(null);
+    setLattice(null);
+    setProcessedOptions(null);
 
     const id = requestIdRef.current + 1;
     requestIdRef.current = id;
-    const buffer = await file.arrayBuffer();
-    const worker = getWorker();
+    try {
+      const buffer = await submittedFile.arrayBuffer();
+      if (id !== requestIdRef.current) return;
+      const worker = getWorker();
 
-    worker.onmessage = (event: MessageEvent<VoronoiWorkerResponse>) => {
-      if (event.data.id !== requestIdRef.current) return;
+      worker.onmessage = (event: MessageEvent<VoronoiWorkerResponse>) => {
+        if (event.data.id !== requestIdRef.current) return;
 
-      setProcessing(false);
-      if (event.data.type === 'error') {
-        setError(event.data.error);
-        return;
-      }
+        setProcessing(false);
+        if (event.data.type === 'error') {
+          setError(event.data.error);
+          return;
+        }
 
-      setOriginal({
-        positions: new Float32Array(event.data.original.positions),
-        indices: new Uint32Array(event.data.original.indices),
-      });
-      setLattice({
-        positions: new Float32Array(event.data.lattice.positions),
-        indices: new Uint32Array(event.data.lattice.indices),
-      });
-      setReport(event.data.report);
-      setStlBuffer(event.data.stl);
-      if (viewMode === 'original') setViewMode('mixed');
-    };
+        setOriginal({
+          positions: new Float32Array(event.data.original.positions),
+          indices: new Uint32Array(event.data.original.indices),
+        });
+        setLattice({
+          positions: new Float32Array(event.data.lattice.positions),
+          indices: new Uint32Array(event.data.lattice.indices),
+        });
+        setReport(event.data.report);
+        setStlBuffer(event.data.stl);
+        setProcessedOptions(submittedOptions);
+        if (viewMode === 'original') setViewMode('mixed');
+      };
 
-    worker.onerror = event => {
+      worker.onerror = event => {
+        if (id !== requestIdRef.current) return;
+        setProcessing(false);
+        setError(event.message || 'Worker 执行失败');
+        worker.terminate();
+        workerRef.current = null;
+      };
+
+      worker.postMessage({ id, fileName: submittedFile.name, buffer, options: submittedOptions }, [buffer]);
+    } catch (readError) {
       if (id !== requestIdRef.current) return;
       setProcessing(false);
-      setError(event.message || 'Worker 执行失败');
-    };
-
-    worker.postMessage({ id, fileName: file.name, buffer, options }, [buffer]);
+      setError(`${t('无法读取文件或启动处理线程')}：${(readError as Error).message}`);
+    }
   };
 
   const handleDownload = () => {
-    if (!stlBuffer || !file) return;
+    if (!stlBuffer || !file || processing || staleOutput) return;
 
     const blob = new Blob([stlBuffer], { type: 'model/stl' });
     const url = URL.createObjectURL(blob);
@@ -558,114 +598,33 @@ export const VoronoiLatticeTool: React.FC = () => {
   }, [file, processing, report]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
-      <Card className="flex min-h-0 flex-col xl:w-[25rem] xl:flex-none">
-        <CardHeader
-          title="STL 镂空/Voronoi"
-          description="纯浏览器本地生成表面蜂窝杆件，适合快速预览镂空风格并导出实验级 STL。"
-        />
-        <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-          {sharedMesh && (
-            <div className="rounded-xl border border-primary-100 bg-primary-50/30 p-3 dark:border-primary-900/40 dark:bg-primary-950/10 flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2 text-xs font-semibold text-primary-700 dark:text-primary-400">
-                <span className="truncate">💡 共享内存可载入网格模型</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => importSharedMesh(sharedMesh)}
-                className="w-full text-[10px] font-bold py-1.5 px-3 rounded-lg bg-primary-600 hover:bg-primary-700 text-white transition-all shadow-sm cursor-pointer truncate"
-                title={sharedMesh.fileName}
-              >
-                导入：{sharedMesh.fileName}
-              </button>
-            </div>
-          )}
-
-          <UploadPanel className="min-h-[8.5rem]">
-            <label className="flex w-full cursor-pointer flex-col items-center gap-2 p-5 text-center">
-              <Upload className="h-8 w-8 text-primary-600" />
-              <span className="max-w-full truncate text-sm font-semibold text-slate-700">
-                {file ? file.name : '选择 STL 文件'}
-              </span>
-              <span className="text-xs text-slate-500">
-                {file ? `${formatBytes(file.size)} · 全程本地处理` : '支持 ASCII / 二进制 STL'}
-              </span>
-              <input
-                className="hidden"
-                type="file"
-                accept=".stl,model/stl,application/sla"
-                onChange={event => handleFile(event.target.files?.[0])}
-              />
-            </label>
-          </UploadPanel>
-
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-            <div className="flex items-center gap-2 font-medium text-slate-800">
-              {processing ? <Loader2 className="h-4 w-4 animate-spin text-primary-700" /> : <RefreshCw className="h-4 w-4 text-primary-700" />}
-              {statusText}
-            </div>
-          </div>
-
-          <div className="grid gap-4">
-            <SegmentedControl
-              label="孔数量"
-              value={options.holeDensity}
-              options={densityOptions}
-              onChange={value => updateOption('holeDensity', value)}
-            />
-            <SegmentedControl
-              label="厚度"
-              value={options.thickness}
-              options={thicknessOptions}
-              onChange={value => updateOption('thickness', value)}
-            />
-            <SegmentedControl<PreviewMode>
-              label="预览"
-              value={viewMode}
-              options={viewModeOptions}
-              onChange={setViewMode}
-            />
-          </div>
-
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-800">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
-              <span>第一版生成 Voronoi 风格表面杆件，不做实体布尔挖孔；导出结果请在打印前复检。</span>
-            </div>
-          </div>
-
-          {error && <div className="status-error p-3 text-sm">{error}</div>}
-
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />}>
-              生成镂空
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleDownload}
-              disabled={!stlBuffer || processing}
-              icon={<Download className="h-4 w-4" />}
-            >
-              下载 STL
-            </Button>
-          </div>
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[23rem_minmax(0,1fr)] xl:items-start">
+      <div className="xl:col-span-2"><WorkflowSteps steps={['选择 STL 模型', '设置镂空风格', '预览并导出']} active={report && !staleOutput ? 2 : file ? 1 : 0} /></div>
+      <Card className="min-w-0">
+        <CardHeader title="STL 镂空/Voronoi" description={t('选择源模型、设置镂空风格，再生成表面杆件与实验级 STL。')} />
+        <CardContent className="space-y-4">
+          <FileDropzone accept=".stl,model/stl,application/sla" title="选择 STL 文件或拖到这里" hint="支持 ASCII / 二进制 STL，在浏览器本地处理" fileName={file?.name} disabled={processing} onFiles={files => handleFile(files[0])} />
+          {file && <p className="break-all text-xs text-slate-500">{file.name} · {formatBytes(file.size)}</p>}
+          {sharedMesh && <div className="space-y-2 rounded-md border border-primary-100 bg-primary-50/30 p-3"><p className="text-xs leading-6 text-slate-600">{t('也可使用其他 CAD 工具已处理的共享模型。')}</p><Button variant="secondary" disabled={processing} onClick={() => importSharedMesh(sharedMesh)} className="w-full" icon={<Boxes className="h-4 w-4" />}>{t('导入共享网格')}<span className="max-w-36 truncate" title={sharedMesh.fileName}>{sharedMesh.fileName}</span></Button></div>}
+          {error && <WorkflowNotice tone="error" onDismiss={() => setError('')}>{error}</WorkflowNotice>}
+          <div><FieldLabel>{t('镂空风格预设')}</FieldLabel><Select aria-label={t('镂空风格预设')} value={selectedPreset} disabled={processing} onChange={event => { const preset = latticePresets.find(item => item.id === event.target.value); if (preset) setOptions({ ...preset.options }); }}>{latticePresets.map(preset => <option key={preset.id} value={preset.id}>{t(preset.label)}</option>)}<option value="custom" disabled>{t('自定义设置')}</option></Select></div>
+          <details className="rounded-md border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">{t('自定义孔数量与厚度')}</summary><div className="mt-3 space-y-4">
+            <SegmentedControl label="孔数量" value={options.holeDensity} options={densityOptions} disabled={processing} onChange={value => updateOption('holeDensity', value)} />
+            <SegmentedControl label="厚度" value={options.thickness} options={thicknessOptions} disabled={processing} onChange={value => updateOption('thickness', value)} />
+          </div></details>
+          {options.thickness === 'plane' && <WorkflowNotice>{t('平面厚度仅用于视觉实验，不能视为可打印的实体模型。')}</WorkflowNotice>}
+          {staleOutput && <WorkflowNotice>{t('镂空参数已变化。当前预览是上次结果，请重新生成后导出。')}</WorkflowNotice>}
+          <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />} className="w-full">{staleOutput ? t('重新生成镂空') : '生成镂空'}</Button>
+          <div role="status" className="flex items-start gap-2 rounded-md bg-slate-50 p-3 text-xs leading-6 text-slate-600">{processing && <Loader2 className="mt-1 h-4 w-4 shrink-0 animate-spin" />}<span>{statusText}</span></div>
+          <p className="text-xs leading-6 text-slate-500">{t('生成表面杆件效果，不执行实体布尔挖孔；打印前请用切片软件复检。')}</p>
         </CardContent>
       </Card>
-
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader
-          title="镂空预览与报告"
-          description="可旋转查看原模与镂空结果；参数变化后重新生成即可更新导出。"
-          actions={
-            report ? (
-              <span className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                <Eye className="h-3.5 w-3.5" />
-                {report.fileName}
-              </span>
-            ) : null
-          }
-        />
-        <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
+      <Card className="min-w-0">
+        <CardHeader title="镂空预览与报告" description="旋转比较原模与镂空结果；生成后检查报告并导出。" actions={<Button variant="secondary" onClick={handleDownload} disabled={!stlBuffer || processing || staleOutput} icon={<Download className="h-4 w-4" />}>下载 STL</Button>} />
+        <CardContent className="space-y-4">
+          {report && <p className="flex min-w-0 items-center gap-2 break-all text-xs text-slate-500"><Eye className="h-4 w-4 shrink-0" />{report.fileName}</p>}
+          {staleOutput && <WorkflowNotice>{t('此预览对应上次镂空参数，导出已暂停。')}</WorkflowNotice>}
+          <SegmentedControl<PreviewMode> label="预览" value={viewMode} options={viewModeOptions} disabled={!original && !lattice} onChange={setViewMode} />
           <MeshPreview original={original} lattice={lattice} mode={viewMode} isProcessing={processing} />
           <ReportPanel report={report} outputSize={outputSize} />
         </CardContent>

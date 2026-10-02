@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CanvasStage } from './CanvasStage';
 import { ThreeStage } from './ThreeStage';
 import { ControlPanel } from './ControlPanel';
@@ -8,6 +8,10 @@ import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import { SVGLoader } from 'three/examples/jsm/loaders/SVGLoader.js';
 import * as THREE from 'three';
 import opentype from 'opentype.js';
+import { Download, FileCode, RotateCcw } from 'lucide-react';
+import { Button } from '../../ui/Button';
+import { WorkflowNotice } from '../shared/WorkflowUi';
+import { notifyToast } from '../shared/notifyToast';
 
 /**
  * Converts an SVG path data string into a THREE.ShapePath
@@ -135,7 +139,7 @@ const AVAILABLE_FONTS = [
 export const JewelryCustomizer: React.FC = () => {
   // State
   const [selectedFont, setSelectedFont] = useState(AVAILABLE_FONTS[0]);
-  const [text, setText] = useState('Fantistic');
+  const [text, setText] = useState('Atelier');
   const [fontSize, setFontSize] = useState(100);
   const [offsetMm, setOffsetMm] = useState(0.2);
   const [letterSpacingMm, setLetterSpacingMm] = useState(0);
@@ -156,9 +160,15 @@ export const JewelryCustomizer: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [fontError, setFontError] = useState<string | null>(null);
+  const [geometryError, setGeometryError] = useState<string | null>(null);
+  const [generatedFor, setGeneratedFor] = useState<{ key: string; font: opentype.Font } | null>(null);
+  const [generationVersion, setGenerationVersion] = useState(0);
+  const stageHostRef = useRef<HTMLDivElement>(null);
+  const [stageWidth, setStageWidth] = useState(750);
+  const [viewVersion, setViewVersion] = useState(0);
 
   // 3D parameters and mode
-  const [previewMode, setPreviewMode] = useState<'2d' | '3d' | 'split'>('split');
+  const [previewMode, setPreviewMode] = useState<'2d' | '3d' | 'split'>('2d');
   const [extrusionThicknessMm, setExtrusionThicknessMm] = useState(2);
   const [metalMaterial, setMetalMaterial] = useState<'gold' | 'platinum' | 'rose_gold' | 'silver'>('gold');
 
@@ -169,6 +179,20 @@ export const JewelryCustomizer: React.FC = () => {
   const [frameStyle, setFrameStyle] = useState<'none' | 'contour' | 'bar' | 'heart' | 'oval'>('none');
   const [framePaddingMm, setFramePaddingMm] = useState(2.0);
   const [frameMaterial, setFrameMaterial] = useState<'gold' | 'platinum' | 'rose_gold' | 'silver'>('silver');
+
+  const geometryKey = JSON.stringify({ text, selectedFont: selectedFont.url, fontSize, unitsPerMm, offsetMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, letterSpacingMm, autoTighten, autoTightenMaxMm, loopType, loopOuterDiameterMm, loopInnerDiameterMm, frameStyle, framePaddingMm, generationVersion });
+  const hasCurrentGeometry = Boolean(geometry?.processedPath && geometry.polygons.length && generatedFor?.key === geometryKey && generatedFor.font === font);
+  const canExport = hasCurrentGeometry && !loading && !processing && !fontError && !geometryError && Boolean(text.trim());
+  const resetParameters = () => {
+    setFontSize(100); setOffsetMm(0.2); setLetterSpacingMm(0); setMinBridgeMm(1); setBridgeMaxGapMm(12); setFlattenToleranceMm(0.05); setAutoTighten(true); setAutoTightenMaxMm(1.5); setUnitsPerMm(3.78); setExtrusionThicknessMm(2); setMetalMaterial('gold'); setLoopType('none'); setLoopOuterDiameterMm(4); setLoopInnerDiameterMm(2); setFrameStyle('none'); setFramePaddingMm(2); setFrameMaterial('silver'); setRotation(0); setPosition({ x: 375, y: 275 }); setScale(1);
+  };
+  useEffect(() => {
+    const host = stageHostRef.current;
+    if (!host) return;
+    const observer = new ResizeObserver(entries => { const width = Math.floor(entries[0]?.contentRect.width || 750); setStageWidth(Math.max(1, width)); });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, []);
 
   // Load Font
   useEffect(() => {
@@ -201,7 +225,7 @@ export const JewelryCustomizer: React.FC = () => {
 
   // Geometry Processing Loop
   useEffect(() => {
-    if (!font || !text) return;
+    if (!font || !text.trim()) return;
 
     setProcessing(true);
     const timer = setTimeout(() => {
@@ -223,18 +247,21 @@ export const JewelryCustomizer: React.FC = () => {
           framePaddingMm,
         });
         setGeometry(result);
+        setGeneratedFor({ key: geometryKey, font });
+        setGeometryError(null);
       } catch (e) {
-        console.error('Geometry processing failed:', e);
+        setGeometry(null);
+        setGeometryError(e instanceof Error ? e.message : '几何生成失败，请调整参数后重试。');
       } finally {
         setProcessing(false);
       }
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timer);
-  }, [text, fontSize, offsetMm, letterSpacingMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, autoTighten, autoTightenMaxMm, unitsPerMm, font, loopType, loopOuterDiameterMm, loopInnerDiameterMm, frameStyle, framePaddingMm]);
+  }, [text, fontSize, offsetMm, letterSpacingMm, minBridgeMm, bridgeMaxGapMm, flattenToleranceMm, autoTighten, autoTightenMaxMm, unitsPerMm, font, loopType, loopOuterDiameterMm, loopInnerDiameterMm, frameStyle, framePaddingMm, geometryKey]);
 
   const handleExportSvg = () => {
-    if (!geometry) return;
+    if (!canExport || !geometry) return;
 
     const polys = geometry.polygons;
     const bounds = polys.reduce(
@@ -270,7 +297,7 @@ export const JewelryCustomizer: React.FC = () => {
   };
 
   const handleExportDxf = () => {
-    if (!geometry) return;
+    if (!canExport || !geometry) return;
     try {
       const dxfString = generateDxf(geometry.polygons, unitsPerMm);
       const blob = new Blob([dxfString], { type: 'application/dxf' });
@@ -283,12 +310,12 @@ export const JewelryCustomizer: React.FC = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      console.error('Failed to export DXF:', e);
+      notifyToast({ title: '导出 DXF 失败', description: e instanceof Error ? e.message : '请检查当前几何后重试。', tone: 'error' });
     }
   };
 
   const handleExportStl = () => {
-    if (!geometry) return;
+    if (!canExport || !geometry) return;
     try {
       const group = new THREE.Group();
       
@@ -360,14 +387,16 @@ export const JewelryCustomizer: React.FC = () => {
       textGeo.dispose();
       if (frameGeo) frameGeo.dispose();
     } catch (e) {
-      console.error('Failed to export STL:', e);
+      notifyToast({ title: '导出 STL 失败', description: e instanceof Error ? e.message : '请检查当前几何后重试。', tone: 'error' });
     }
   };
+  const stageHeight = Math.min(500, Math.max(300, Math.round(stageWidth * 0.65)));
+  const previewGeometry = text.trim() && font && !fontError ? geometry : null;
+  const halfWidth = Math.max(1, Math.floor((stageWidth - 16) / 2));
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex h-full min-h-0 flex-col gap-4 lg:flex-row">
-        {/* Left: Controls */}
-        <div className="w-full flex-none lg:w-[21rem]">
+    <div className="flex h-full min-h-0 flex-col overflow-auto">
+      <div className="grid min-h-0 flex-1 items-start gap-4 xl:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="min-w-0">
           <ControlPanel
             text={text}
             setText={setText}
@@ -390,8 +419,6 @@ export const JewelryCustomizer: React.FC = () => {
             unitsPerMm={unitsPerMm}
             setUnitsPerMm={setUnitsPerMm}
             
-            previewMode={previewMode}
-            setPreviewMode={setPreviewMode}
             extrusionThicknessMm={extrusionThicknessMm}
             setExtrusionThicknessMm={setExtrusionThicknessMm}
             metalMaterial={metalMaterial}
@@ -410,92 +437,32 @@ export const JewelryCustomizer: React.FC = () => {
             frameMaterial={frameMaterial}
             setFrameMaterial={setFrameMaterial}
             
-            onExportSvg={handleExportSvg}
-            onExportDxf={handleExportDxf}
-            onExportStl={handleExportStl}
+            onReset={resetParameters}
             
             availableFonts={AVAILABLE_FONTS}
             selectedFont={selectedFont}
             setSelectedFont={setSelectedFont}
-            isProcessing={processing}
-            diagnostics={geometry?.diagnostics ?? null}
+            diagnostics={hasCurrentGeometry ? geometry?.diagnostics ?? null : null}
           />
         </div>
 
-        {/* Right: Canvas / 3D Stage */}
-        <div className="tool-section flex min-h-[400px] flex-1 flex-col p-4">
-          <div className="flex-1 relative flex items-center justify-center">
-            {loading ? (
-              <div className="absolute inset-0 flex items-center justify-center text-slate-400">
-                Loading resources...
-              </div>
-            ) : fontError ? (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500 px-6 text-center">
-                <div className="font-medium text-slate-700">字体加载失败</div>
-                <div className="text-xs">{fontError}</div>
-                <div className="text-xs text-slate-400">生产预览需要可解析的 TTF/OTF 字体文件。</div>
-              </div>
-            ) : previewMode === 'split' ? (
-              <div className="flex flex-col xl:flex-row gap-4 items-center justify-center w-full h-full min-h-0">
-                <div className="flex-1 flex items-center justify-center">
-                  <CanvasStage
-                    width={370}
-                    height={500}
-                    position={{ x: 185, y: 250 }}
-                    rotation={rotation}
-                    scale={0.55}
-                    geometry={geometry}
-                    onTransformChange={(attrs) => {
-                      setRotation(attrs.rotation);
-                    }}
-                  />
-                </div>
-                <div className="flex-1 flex items-center justify-center">
-                  <ThreeStage
-                    width={370}
-                    height={500}
-                    geometry={geometry}
-                    thicknessMm={extrusionThicknessMm}
-                    unitsPerMm={unitsPerMm}
-                    materialType={metalMaterial}
-                    frameMaterialType={frameMaterial}
-                  />
-                </div>
-              </div>
-            ) : previewMode === '3d' ? (
-              <ThreeStage
-                width={750}
-                height={500}
-                geometry={geometry}
-                thicknessMm={extrusionThicknessMm}
-                unitsPerMm={unitsPerMm}
-                materialType={metalMaterial}
-                frameMaterialType={frameMaterial}
-              />
-            ) : (
-              <CanvasStage
-                width={750}
-                height={500}
-                position={position}
-                rotation={rotation}
-                scale={scale}
-                geometry={geometry}
-                onTransformChange={(attrs) => {
-                  setPosition({ x: attrs.x, y: attrs.y });
-                  setRotation(attrs.rotation);
-                  setScale(attrs.scale);
-                }}
-              />
-            )}
+        <section className="tool-section flex min-w-0 flex-col gap-4 p-4 xl:sticky xl:top-0">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3">
+            <h3 className="text-sm font-semibold">设计预览</h3>
+            <div className="flex flex-wrap gap-1">{[{ mode: '2d' as const, label: '2D 图纸' }, { mode: '3d' as const, label: '3D 材质' }, { mode: 'split' as const, label: '双视图' }].map(item => <Button key={item.mode} size="sm" variant={previewMode === item.mode ? 'primary' : 'ghost'} aria-pressed={previewMode === item.mode} onClick={() => setPreviewMode(item.mode)}>{item.label}</Button>)}</div>
           </div>
-          <div className="mt-2 text-xs text-slate-400 text-center">
-            {previewMode === 'split' 
-              ? '联动分屏模式 • 左侧 2D 矢量平面 (可拖拽旋转) • 右侧 3D 金属模型 (拖拽旋转)' 
-              : previewMode === '3d' 
-                ? '3D 立体金属模型预览 • 左键旋转 • 右键平移 • 滚轮缩放' 
-                : '2D 矢量平面预览 • 可拖拽 • 滚轮缩放'}
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500" aria-live="polite"><span>{selectedFont.name}</span><span>·</span><span>{extrusionThicknessMm} mm</span><span className="ml-auto">{loading ? '正在加载字体…' : !text.trim() || fontError ? '等待文字与字体' : processing || (!hasCurrentGeometry && !geometryError) ? '正在更新几何…' : canExport ? '几何已就绪' : '等待文字与字体'}</span></div>
+          {fontError && <WorkflowNotice tone="error"><div className="space-y-2"><p>{fontError}</p><Button size="sm" variant="secondary" onClick={() => setSelectedFont({ ...selectedFont })}>重新加载字体</Button></div></WorkflowNotice>}
+          {geometryError && <WorkflowNotice tone="error"><div className="space-y-2"><p>{geometryError}</p><Button size="sm" variant="secondary" onClick={() => setGenerationVersion(version => version + 1)}>重新生成几何</Button></div></WorkflowNotice>}
+          <div ref={stageHostRef} className="relative min-h-[300px] min-w-0 w-full">
+            {loading ? <div className="flex min-h-[300px] items-center justify-center rounded-lg border bg-slate-50 text-sm text-slate-400">正在加载所选字体…</div> : fontError ? <div className="flex min-h-[300px] flex-col items-center justify-center gap-2 rounded-lg border bg-slate-50 p-6 text-center"><p className="text-sm font-medium">选择其他字体或重新加载</p><p className="text-xs text-slate-500">生产预览需要可解析的 TTF/OTF 字体文件。</p></div> : !text.trim() ? <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-dashed text-sm text-slate-400">输入名字或短句，开始生成首饰。</div> : previewMode === 'split' ? <div className="grid gap-4" style={{ gridTemplateColumns: stageWidth >= 640 ? 'minmax(0,1fr) minmax(0,1fr)' : 'minmax(0,1fr)' }}>
+              <div className="min-w-0"><CanvasStage width={750} height={500} position={position} rotation={rotation} scale={scale} geometry={previewGeometry} onTransformChange={attrs => { setPosition({ x: attrs.x, y: attrs.y }); setRotation(attrs.rotation); setScale(attrs.scale); }} /></div>
+              <div className="min-w-0 overflow-hidden"><ThreeStage key={viewVersion} width={stageWidth < 640 ? stageWidth : halfWidth} height={stageHeight} geometry={previewGeometry} thicknessMm={extrusionThicknessMm} unitsPerMm={unitsPerMm} materialType={metalMaterial} frameMaterialType={frameMaterial} /></div>
+            </div> : previewMode === '3d' ? <ThreeStage key={viewVersion} width={stageWidth} height={stageHeight} geometry={previewGeometry} thicknessMm={extrusionThicknessMm} unitsPerMm={unitsPerMm} materialType={metalMaterial} frameMaterialType={frameMaterial} /> : <div className="w-full"><CanvasStage width={750} height={500} position={position} rotation={rotation} scale={scale} geometry={previewGeometry} onTransformChange={attrs => { setPosition({ x: attrs.x, y: attrs.y }); setRotation(attrs.rotation); setScale(attrs.scale); }} /></div>}
           </div>
-        </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><span>{previewMode === '2d' ? '拖拽图形移动 · 滚轮缩放' : '拖拽旋转 · 右键平移 · 滚轮缩放'}</span><Button size="xs" variant="ghost" onClick={() => { setPosition({ x: 375, y: 275 }); setRotation(0); setScale(1); setViewVersion(version => version + 1); }} icon={<RotateCcw className="h-3 w-3" />}>重置视图</Button></div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4"><div><h4 className="text-sm font-semibold">导出当前设计</h4><p className="mt-1 text-xs text-slate-500">SVG / DXF 用于二维图纸，STL 用于三维打印。</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" disabled={!canExport} onClick={handleExportSvg} icon={<Download className="h-4 w-4" />}>SVG</Button><Button size="sm" variant="secondary" disabled={!canExport} onClick={handleExportDxf} icon={<FileCode className="h-4 w-4" />}>DXF</Button><Button size="sm" disabled={!canExport} onClick={handleExportStl} icon={<Download className="h-4 w-4" />}>导出 STL</Button></div></div>
+        </section>
       </div>
     </div>
   );

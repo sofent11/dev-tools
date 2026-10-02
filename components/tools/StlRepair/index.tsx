@@ -7,7 +7,6 @@ import {
   FileText,
   Loader2,
   RefreshCw,
-  Upload,
 } from 'lucide-react';
 import {
   AmbientLight,
@@ -30,7 +29,9 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
-import { FieldLabel, Input, Select, UploadPanel } from '../../ui/ToolUi';
+import { FieldLabel, Input, Select } from '../../ui/ToolUi';
+import { FileDropzone, WorkflowNotice, WorkflowSteps } from '../shared/WorkflowUi';
+import { useI18n } from '../../../src/i18n';
 import { formatBytes } from '../shared/fileUtils';
 import { useMeshStore } from '../shared/meshStore';
 import type {
@@ -52,6 +53,12 @@ const defaultOptions: RepairOptions = {
   fillHoles: true,
   addBase: false,
 };
+
+const repairPresets: Array<{ id: string; label: string; options: RepairOptions }> = [
+  { id: 'balanced', label: '清理与轻量降面', options: defaultOptions },
+  { id: 'detail', label: '保留模型细节', options: { ...defaultOptions, decimate: false } },
+  { id: 'base', label: '添加展示底座', options: { ...defaultOptions, addBase: true } },
+];
 
 const numberFormat = new Intl.NumberFormat('zh-CN');
 const compactFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
@@ -81,6 +88,7 @@ const CheckboxRow: React.FC<{
       type="checkbox"
       className="mt-0.5 h-4 w-4 flex-none"
       checked={checked}
+      aria-label={label}
       onChange={event => onChange(event.target.checked)}
     />
     <span className="min-w-0">
@@ -497,6 +505,7 @@ const MeshPreview: React.FC<{
 };
 
 const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number }> = ({ report, outputSize }) => {
+  const { t } = useI18n();
   if (!report) {
     return (
       <div className="tool-panel flex min-h-[14rem] flex-col items-center justify-center gap-3 p-6 text-center text-slate-500">
@@ -526,8 +535,8 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
             </div>
             <div className="mt-1 text-xs leading-5">
               {report.final.watertight
-                ? '已按 Python 脚本语义完成清理、降面、法线修正和小孔补面；打印前仍建议在切片软件中复检尺寸与朝向。'
-                : '已按 Python 脚本语义处理；脚本同样可能输出非完全水密模型，复杂坏面需要复检。'}
+                ? t('已按所选设置完成修复；打印前请在切片软件中复检尺寸与朝向。')
+                : t('修复已完成，模型仍有拓扑风险；复杂孔洞或坏面需要进一步复检。')}
             </div>
           </div>
         </div>
@@ -540,6 +549,9 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
         <Metric label="补洞数量" value={formatNumber(report.filledHoles)} tone={report.filledHoles ? 'good' : 'default'} />
       </div>
 
+      <details className="rounded-md border border-slate-200 p-3">
+        <summary className="cursor-pointer text-xs font-medium text-slate-600">{t('修复细节与模型统计')}</summary>
+        <div className="mt-3 space-y-3">
       <div className="tool-panel p-4">
         <div className="grid gap-2 text-sm text-slate-700 md:grid-cols-2">
           <div>删除退化面：{formatNumber(report.skippedDegenerateFaces)}</div>
@@ -559,7 +571,7 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
         {report.notes.length > 0 && (
           <div className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
             {report.notes.map(note => (
-              <div key={note}>- {note}</div>
+              <div key={note}>- {t(note)}</div>
             ))}
           </div>
         )}
@@ -568,11 +580,14 @@ const ReportSummary: React.FC<{ report: RepairReport | null; outputSize: number 
       <StatsGrid title="输入模型" stats={report.initial} />
       <StatsGrid title="清理后模型" stats={report.afterCleanup} />
       <StatsGrid title="最终模型" stats={report.final} />
+        </div>
+      </details>
     </div>
   );
 };
 
 export const StlRepairTool: React.FC = () => {
+  const { t } = useI18n();
   const workerRef = useRef<Worker | null>(null);
   const wallWorkerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
@@ -582,6 +597,7 @@ export const StlRepairTool: React.FC = () => {
   const [mesh, setMesh] = useState<MeshPreviewData | null>(null);
   const [report, setReport] = useState<RepairReport | null>(null);
   const [stlBuffer, setStlBuffer] = useState<ArrayBuffer | null>(null);
+  const [processedOptions, setProcessedOptions] = useState<RepairOptions | null>(null);
   const [error, setError] = useState('');
   const [processing, setProcessing] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -600,6 +616,7 @@ export const StlRepairTool: React.FC = () => {
 
   useEffect(() => {
     return () => {
+      requestIdRef.current += 1;
       workerRef.current?.terminate();
       wallWorkerRef.current?.terminate();
     };
@@ -607,6 +624,8 @@ export const StlRepairTool: React.FC = () => {
 
   const canProcess = Boolean(file) && !processing;
   const outputSize = stlBuffer?.byteLength ?? 0;
+  const staleOutput = Boolean(stlBuffer && processedOptions && JSON.stringify(options) !== JSON.stringify(processedOptions));
+  const selectedPreset = repairPresets.find(preset => JSON.stringify(preset.options) === JSON.stringify(options))?.id || 'custom';
   const estimatedWallWork = useMemo(() => {
     if (!mesh) return null;
     const faceCount = Math.floor(mesh.indices.length / 3);
@@ -657,7 +676,8 @@ export const StlRepairTool: React.FC = () => {
     setWallColors(null);
     const id = wallRequestIdRef.current + 1;
     wallRequestIdRef.current = id;
-    const worker = getWallWorker();
+    let worker: Worker;
+    try { worker = getWallWorker(); } catch (workerError) { setWallAnalysisRunning(false); setError(`${t('无法启动壁厚分析线程')}：${(workerError as Error).message}`); return; }
     const positions = targetMesh.positions.slice();
     const indices = targetMesh.indices.slice();
 
@@ -683,92 +703,106 @@ export const StlRepairTool: React.FC = () => {
       setError(event.message || '壁厚分析 Worker 执行失败');
     };
 
-    worker.postMessage({
-      id,
-      positions,
-      indices,
-      threshold: wallThicknessThreshold,
-      mode: wallThicknessMode,
-      maxAnalysisMs: wallThicknessMode === 'precise' ? 6500 : 2500,
-    }, [positions.buffer, indices.buffer]);
+    try {
+      worker.postMessage({ id, positions, indices, threshold: wallThicknessThreshold, mode: wallThicknessMode, maxAnalysisMs: wallThicknessMode === 'precise' ? 6500 : 2500 }, [positions.buffer, indices.buffer]);
+    } catch (workerError) { setWallAnalysisRunning(false); setError(`${t('无法启动壁厚分析线程')}：${(workerError as Error).message}`); }
   };
 
   const handleFile = (nextFile?: File) => {
-    if (!nextFile) return;
+    if (!nextFile || processing) return;
+    if (!/\.stl$/i.test(nextFile.name) && !['model/stl', 'application/sla'].includes(nextFile.type)) { setError(t('请选择 STL 文件，支持 ASCII 与二进制格式。')); return; }
+    if (!nextFile.size) { setError(t('文件为空，请选择包含模型数据的 STL。')); return; }
+    requestIdRef.current += 1;
     setFile(nextFile);
     setMesh(null);
     setReport(null);
     setWallReport(null);
     setWallColors(null);
     setStlBuffer(null);
+    setProcessedOptions(null);
     setError('');
     cancelWallAnalysis();
   };
 
   const handleProcess = async () => {
-    if (!file) return;
+    if (!file || processing) return;
+    const submittedFile = file;
+    const submittedOptions = { ...options };
 
     setProcessing(true);
     setError('');
+    setMesh(null);
     setReport(null);
     setWallReport(null);
     setWallColors(null);
     setStlBuffer(null);
+    setProcessedOptions(null);
+    cancelWallAnalysis();
     setProgressPercent(0);
     setProgressText('已启动 Web Worker 线程...');
 
     const id = requestIdRef.current + 1;
     requestIdRef.current = id;
-    const buffer = await file.arrayBuffer();
-    const worker = getWorker();
+    try {
+      const buffer = await submittedFile.arrayBuffer();
+      if (id !== requestIdRef.current) return;
+      const worker = getWorker();
 
-    worker.onmessage = (event: MessageEvent<RepairWorkerResponse>) => {
-      if (event.data.id !== requestIdRef.current) return;
+      worker.onmessage = (event: MessageEvent<RepairWorkerResponse>) => {
+        if (event.data.id !== requestIdRef.current) return;
 
-      if (event.data.type === 'progress') {
-        setProgressPercent(event.data.progress);
-        setProgressText(event.data.status);
-        return;
-      }
+        if (event.data.type === 'progress') {
+          setProgressPercent(event.data.progress);
+          setProgressText(event.data.status);
+          return;
+        }
 
-      setProcessing(false);
-      if (event.data.type === 'error') {
-        setError(event.data.error);
-        return;
-      }
+        setProcessing(false);
+        if (event.data.type === 'error') {
+          setError(event.data.error);
+          return;
+        }
 
-      const pos = new Float32Array(event.data.mesh.positions);
-      const ind = new Uint32Array(event.data.mesh.indices);
-      setMesh({
-        positions: pos,
-        indices: ind,
-      });
-      setReport(event.data.report);
-      setStlBuffer(event.data.stl);
+        const pos = new Float32Array(event.data.mesh.positions);
+        const ind = new Uint32Array(event.data.mesh.indices);
+        setMesh({
+          positions: pos,
+          indices: ind,
+        });
+        setReport(event.data.report);
+        setStlBuffer(event.data.stl);
+        setProcessedOptions(submittedOptions);
 
-      // Save to global mesh store for cross-tab sharing
-      useMeshStore.getState().setSharedMesh({
-        positions: pos.slice(),
-        indices: ind.slice(),
-        fileName: file.name,
-      });
+        // Save to global mesh store for cross-tab sharing
+        useMeshStore.getState().setSharedMesh({
+          positions: pos.slice(),
+          indices: ind.slice(),
+          fileName: submittedFile.name,
+        });
 
-      if (wallThicknessEnabled) {
-        runWallAnalysis({ positions: pos, indices: ind });
-      }
-    };
+        if (wallThicknessEnabled) {
+          runWallAnalysis({ positions: pos, indices: ind });
+        }
+      };
 
-    worker.onerror = event => {
+      worker.onerror = event => {
+        if (id !== requestIdRef.current) return;
+        setProcessing(false);
+        setError(event.message || 'Worker 执行失败');
+        worker.terminate();
+        workerRef.current = null;
+      };
+
+      worker.postMessage({ id, fileName: submittedFile.name, buffer, options: submittedOptions }, [buffer]);
+    } catch (readError) {
       if (id !== requestIdRef.current) return;
       setProcessing(false);
-      setError(event.message || 'Worker 执行失败');
-    };
-
-    worker.postMessage({ id, fileName: file.name, buffer, options }, [buffer]);
+      setError(`${t('无法读取文件或启动处理线程')}：${(readError as Error).message}`);
+    }
   };
 
   const handleDownload = () => {
-    if (!stlBuffer || !file) return;
+    if (!stlBuffer || !file || processing || staleOutput) return;
 
     const blob = new Blob([stlBuffer], { type: 'model/stl' });
     const url = URL.createObjectURL(blob);
@@ -782,12 +816,12 @@ export const StlRepairTool: React.FC = () => {
   };
 
   const statusText = useMemo(() => {
-    if (processing) return '正在按 Python 脚本语义清理、降面并导出 STL';
-    if (wallAnalysisRunning) return `正在 Worker 中执行壁厚采样分析 (${wallAnalysisProgress}%)`;
+    if (processing) return t('正在清理模型并生成 STL');
+    if (wallAnalysisRunning) return `${t('正在采样分析壁厚')} (${wallAnalysisProgress}%)`;
     if (report) return report.final.watertight ? '处理完成，拓扑检测为水密' : '处理完成，仍建议复检';
     if (file) return '已选择文件，等待处理';
     return '选择 STL 文件开始';
-  }, [file, processing, report, wallAnalysisProgress, wallAnalysisRunning]);
+  }, [file, processing, report, t, wallAnalysisProgress, wallAnalysisRunning]);
 
   useEffect(() => {
     if (wallThicknessEnabled && mesh) {
@@ -801,197 +835,68 @@ export const StlRepairTool: React.FC = () => {
   }, [wallThicknessEnabled, wallThicknessThreshold, wallThicknessMode]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4 xl:flex-row">
-      <Card className="flex min-h-0 flex-col xl:w-[24rem] xl:flex-none">
-        <CardHeader
-          title="STL 修复/降面"
-          description="浏览器本地处理，适合快速清理碎片、降面和导出可复检 STL。"
-        />
-        <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-          <UploadPanel className="min-h-[8.5rem]">
-            <label className="flex w-full cursor-pointer flex-col items-center gap-2 p-5 text-center">
-              <Upload className="h-8 w-8 text-primary-600" />
-              <span className="max-w-full truncate text-sm font-semibold text-slate-700">
-                {file ? file.name : '选择 STL 文件'}
-              </span>
-              <span className="text-xs text-slate-500">
-                {file ? `${formatBytes(file.size)} · 不会上传到服务器` : '支持 ASCII / 二进制 STL'}
-              </span>
-              <input
-                className="hidden"
-                type="file"
-                accept=".stl,model/stl,application/sla"
-                onChange={event => handleFile(event.target.files?.[0])}
-              />
-            </label>
-          </UploadPanel>
-
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
-            <div className="flex items-center gap-2 font-medium text-slate-800">
-              {processing ? <Loader2 className="h-4 w-4 animate-spin text-primary-700" /> : <RefreshCw className="h-4 w-4 text-primary-700" />}
-              {processing && progressText ? progressText : statusText}
-            </div>
-            {processing && (
-              <div className="mt-2.5 h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
-                <div
-                  className="h-full bg-primary-600 transition-all duration-300 ease-out"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            )}
-            {wallAnalysisRunning && (
-              <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full bg-amber-500 transition-all duration-300 ease-out"
-                  style={{ width: `${wallAnalysisProgress}%` }}
-                />
-              </div>
-            )}
+    <div className="grid min-w-0 gap-4 xl:grid-cols-[23rem_minmax(0,1fr)] xl:items-start">
+      <div className="xl:col-span-2"><WorkflowSteps steps={['选择 STL 模型', '设置修复策略', '检查并导出']} active={report && !staleOutput ? 2 : file ? 1 : 0} /></div>
+      <Card className="min-w-0">
+        <CardHeader title="STL 修复/降面" description={t('先选择模型与修复策略，再检查结果并导出。文件在本地处理。')} />
+        <CardContent className="space-y-4">
+          <FileDropzone accept=".stl,model/stl,application/sla" title="选择 STL 文件或拖到这里" hint="支持 ASCII / 二进制 STL，在浏览器本地处理" fileName={file?.name} disabled={processing} onFiles={files => handleFile(files[0])} />
+          {file && <p className="break-all text-xs text-slate-500">{file.name} · {formatBytes(file.size)}</p>}
+          {error && <WorkflowNotice tone="error" onDismiss={() => setError('')}>{error}</WorkflowNotice>}
+          <fieldset disabled={processing} className="space-y-3 disabled:opacity-60">
+            <div><FieldLabel>{t('修复策略')}</FieldLabel><Select aria-label={t('修复策略')} value={selectedPreset} onChange={event => { const preset = repairPresets.find(item => item.id === event.target.value); if (preset) setOptions({ ...preset.options }); }}>
+              {repairPresets.map(preset => <option key={preset.id} value={preset.id}>{t(preset.label)}</option>)}<option value="custom" disabled>{t('自定义设置')}</option>
+            </Select></div>
+            <CheckboxRow checked={options.decimate} label="超过目标时自动降面" hint="使用 meshoptimizer，结果可能受原模型拓扑限制。" onChange={checked => updateOption('decimate', checked)} />
+            <div><FieldLabel hint={`${formatNumber(options.targetFaces)} 面`}>目标三角面数上限</FieldLabel><Input aria-label="目标三角面数上限" type="number" min={1000} step={1000} value={options.targetFaces} disabled={!options.decimate} onChange={event => updateOption('targetFaces', Math.max(1000, Number(event.target.value) || 1000))} /></div>
+            <CheckboxRow checked={options.keepLargest} label="只保留最大连通块" hint="清除扫描或生成模型里常见的小碎片。" onChange={checked => updateOption('keepLargest', checked)} />
+            <details className="rounded-md border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">{t('精细修复设置')}</summary><div className="mt-3 space-y-3">
+              <div><FieldLabel hint="0 使用精确顶点去重">焊接容差</FieldLabel><Input aria-label="焊接容差" type="number" min={0} step={0.0001} value={options.weldTolerance} onChange={event => updateOption('weldTolerance', Math.max(0, Number(event.target.value) || 0))} /></div>
+              <div><FieldLabel hint="meshoptimizer 相对误差">降面误差</FieldLabel><Input aria-label="降面误差" type="number" min={0.0001} max={1} step={0.001} disabled={!options.decimate} value={options.targetError} onChange={event => updateOption('targetError', Math.min(1, Math.max(0.0001, Number(event.target.value) || 0.01)))} /></div>
+              <CheckboxRow checked={options.fillHoles} label="尝试补小孔" hint="仅补单三角孔和单四边孔，不适用于复杂孔洞。" onChange={checked => updateOption('fillHoles', checked)} />
+              <CheckboxRow checked={options.addBase} label="添加圆形底座" hint="直接合并展示底座到导出模型；打印前复检连接与尺寸。" onChange={checked => updateOption('addBase', checked)} />
+            </div></details>
+          </fieldset>
+          {staleOutput && <WorkflowNotice>{t('修复设置已变化。当前预览是上次结果，请重新处理后导出。')}</WorkflowNotice>}
+          <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />} className="w-full">{staleOutput ? t('重新处理') : '开始处理'}</Button>
+          <div role="status" className="rounded-md bg-slate-50 p-3 text-xs leading-6 text-slate-600">
+            <span className="flex items-center gap-2">{processing && <Loader2 className="h-4 w-4 shrink-0 animate-spin" />}{processing && progressText ? progressText : statusText}</span>
+            {processing && <div role="progressbar" aria-label={t('修复进度')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progressPercent} className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full bg-primary-600" style={{ width: `${progressPercent}%` }} /></div>}
           </div>
-
-          <div className="grid gap-3">
-            <div>
-              <FieldLabel hint={`${formatNumber(options.targetFaces)} 面`}>目标三角面数上限</FieldLabel>
-              <Input
-                type="number"
-                min={1000}
-                step={1000}
-                value={options.targetFaces}
-                disabled={!options.decimate}
-                onChange={event => updateOption('targetFaces', Math.max(1000, Number(event.target.value) || 1000))}
-              />
-            </div>
-            <div>
-              <FieldLabel hint="0 为脚本同款精确去重">焊接容差</FieldLabel>
-              <Input
-                type="number"
-                min={0}
-                step={0.0001}
-                value={options.weldTolerance}
-                onChange={event => updateOption('weldTolerance', Math.max(0, Number(event.target.value) || 0))}
-              />
-            </div>
-            <div>
-              <FieldLabel hint="meshoptimizer 相对误差">降面误差</FieldLabel>
-              <Input
-                type="number"
-                min={0.0001}
-                max={1}
-                step={0.001}
-                disabled={!options.decimate}
-                value={options.targetError}
-                onChange={event => updateOption('targetError', Math.max(0.0001, Number(event.target.value) || 0.01))}
-              />
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <CheckboxRow
-              checked={options.keepLargest}
-              label="只保留最大连通块"
-              hint="清除扫描或生成模型里常见的小碎片。"
-              onChange={checked => updateOption('keepLargest', checked)}
-            />
-            <CheckboxRow
-              checked={options.decimate}
-              label="超过目标时自动降面"
-              hint="使用 meshoptimizer，结果可能受原模型拓扑限制。"
-              onChange={checked => updateOption('decimate', checked)}
-            />
-            <CheckboxRow
-              checked={options.fillHoles}
-              label="尝试补小孔"
-              hint="对齐 Trimesh fill_holes 的轻量范围，仅补单三角孔和单四边孔。"
-              onChange={checked => updateOption('fillHoles', checked)}
-            />
-            <CheckboxRow
-              checked={options.addBase}
-              label="添加圆形底座"
-              hint="按 Python 脚本同款比例生成，直接合并到 STL。"
-              onChange={checked => updateOption('addBase', checked)}
-            />
-          </div>
-
-          <div className="grid gap-3 border-t border-slate-200 pt-3">
-            <div>
-              <FieldLabel>预览渲染材质</FieldLabel>
-              <Select value={materialType} onChange={event => setMaterialType(event.target.value as typeof materialType)}>
-                <option value="default">默认 (Matte Green)</option>
-                <option value="gold">🏆 皇家黄金 (Gold PBR)</option>
-                <option value="silver">🥈 抛光白银 (Silver PBR)</option>
-                <option value="jade">🍀 冰种温润翡翠 (Jade SSS)</option>
-                <option value="glass">💎 钢化玻璃 (Glass Refract)</option>
-              </Select>
-            </div>
-            <CheckboxRow
-              checked={showDiagnostics}
-              label="开启坏面霓虹诊断模式"
-              hint="自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。"
-              onChange={checked => setShowDiagnostics(checked)}
-            />
-            <CheckboxRow
-              checked={wallThicknessEnabled}
-              label="开启壁厚热力图"
-              hint="在 Worker 中采样估算薄壁风险：红色低于阈值，橙色接近阈值，绿色相对安全。"
-              onChange={checked => setWallThicknessEnabled(checked)}
-            />
-            <div>
-              <FieldLabel>壁厚分析模式</FieldLabel>
-              <Select
-                value={wallThicknessMode}
-                aria-label="壁厚分析模式"
-                disabled={!wallThicknessEnabled}
-                onChange={event => setWallThicknessMode(event.target.value as WallThicknessMode)}
-              >
-                <option value="fast">快速采样 (推荐)</option>
-                <option value="precise">精细采样 (较慢)</option>
-              </Select>
-              {wallThicknessEnabled && (
-                <p className={`mt-1 text-[11px] leading-4 ${preciseModeWarning ? 'text-amber-700' : 'text-slate-500'}`}>
-                  {estimatedWallWork === null
-                    ? '导入模型后会预估分析成本；大模型建议先用快速采样。'
-                    : `预计约 ${formatNumber(estimatedWallWork)} 次候选射线测试，Worker 会用网格预筛并在超预算时返回局部报告。${preciseModeWarning ? ' 当前模型较大，建议优先使用快速采样。' : ''}`}
-                </p>
-              )}
-            </div>
-            <div>
-              <FieldLabel hint={`${formatSize(wallThicknessThreshold)} mm`}>壁厚风险阈值</FieldLabel>
-              <Input
-                type="number"
-                min={0.1}
-                step={0.1}
-                value={wallThicknessThreshold}
-                disabled={!wallThicknessEnabled}
-                onChange={event => setWallThicknessThreshold(Math.max(0.1, Number(event.target.value) || 0.8))}
-              />
-            </div>
-            <div>
-              <FieldLabel>环境光预设</FieldLabel>
-              <Select value={environmentPreset} onChange={event => setEnvironmentPreset(event.target.value as EnvironmentPreset)}>
-                <option value="studio">明亮工作室</option>
-                <option value="warm">暖金展示台</option>
-                <option value="cool">冷蓝工程灯</option>
-                <option value="contrast">深色高对比</option>
-              </Select>
-            </div>
-            <CheckboxRow
-              checked={softShadows}
-              label="柔和阴影"
-              hint="为 PBR 预览启用更有空间感的阴影表现。"
-              onChange={checked => setSoftShadows(checked)}
-            />
-          </div>
-
+          <fieldset disabled={processing} className="space-y-3 border-t border-slate-200 pt-4">
+            <h3 className="text-xs font-semibold text-slate-700">{t('壁厚风险检查')}</h3>
+            <CheckboxRow checked={wallThicknessEnabled} label="开启壁厚热力图" hint="采样估算薄壁风险；不影响修复后的 STL 几何。" onChange={setWallThicknessEnabled} />
+            <div><FieldLabel>壁厚分析模式</FieldLabel><Select value={wallThicknessMode} aria-label="壁厚分析模式" disabled={!wallThicknessEnabled} onChange={event => setWallThicknessMode(event.target.value as WallThicknessMode)}><option value="fast">快速采样 (推荐)</option><option value="precise">精细采样 (较慢)</option></Select></div>
+            {wallThicknessEnabled && <><p className={`text-[11px] leading-5 ${preciseModeWarning ? 'text-amber-700' : 'text-slate-500'}`}>{estimatedWallWork === null ? '导入模型后会预估分析成本；大模型建议先用快速采样。' : `${t('候选射线测试')} ≈ ${formatNumber(estimatedWallWork)}${preciseModeWarning ? ` · ${t('模型较大，建议优先使用快速采样。')}` : ''}`}</p><div><FieldLabel hint={`${formatSize(wallThicknessThreshold)} mm`}>壁厚风险阈值</FieldLabel><Input aria-label="壁厚风险阈值" type="number" min={0.1} step={0.1} value={wallThicknessThreshold} onChange={event => setWallThicknessThreshold(Math.max(0.1, Number(event.target.value) || 0.8))} /></div></>}
+          </fieldset>
+        </CardContent>
+      </Card>
+      <Card className="min-w-0">
+        <CardHeader title="模型预览与报告" description="旋转查看模型；检查拓扑风险后再导出。" actions={<Button variant="secondary" onClick={handleDownload} disabled={!stlBuffer || processing || staleOutput} icon={<Download className="h-4 w-4" />}>下载 STL</Button>} />
+        <CardContent className="space-y-4">
+          {staleOutput && <WorkflowNotice>{t('此预览对应上次修复设置，导出已暂停。')}</WorkflowNotice>}
+          <MeshPreview mesh={mesh} isProcessing={processing} materialType={materialType} showDiagnostics={showDiagnostics} wallThicknessEnabled={wallThicknessEnabled} wallColors={wallColors} environmentPreset={environmentPreset} softShadows={softShadows} />
+          <details className="rounded-md border border-slate-200 p-3"><summary className="cursor-pointer text-xs font-medium text-slate-600">{t('预览外观与诊断')}</summary><div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div><FieldLabel>预览渲染材质</FieldLabel><Select aria-label="预览渲染材质" value={materialType} onChange={event => setMaterialType(event.target.value as typeof materialType)}><option value="default">默认 (Matte Green)</option><option value="gold">黄金 (Gold)</option><option value="silver">白银 (Silver)</option><option value="jade">翡翠 (Jade)</option><option value="glass">玻璃 (Glass)</option></Select></div>
+            <div><FieldLabel>环境光预设</FieldLabel><Select aria-label="环境光预设" value={environmentPreset} onChange={event => setEnvironmentPreset(event.target.value as EnvironmentPreset)}><option value="studio">明亮工作室</option><option value="warm">暖金展示台</option><option value="cool">冷蓝工程灯</option><option value="contrast">深色高对比</option></Select></div>
+            <CheckboxRow checked={showDiagnostics} label="开启坏面霓虹诊断模式" hint="显示模型的边界与缺陷缝隙。" onChange={setShowDiagnostics} /><CheckboxRow checked={softShadows} label="柔和阴影" hint="仅调整预览，不改变导出文件。" onChange={setSoftShadows} />
+          </div></details>
           {wallReport && (
             <div className={wallReport.thinFaces > 0 ? 'status-warning p-3 text-xs' : 'status-success p-3 text-xs'}>
               <div className="font-semibold">壁厚采样诊断</div>
-              <div className="mt-1 leading-5">
-                已采样 {formatNumber(wallReport.sampledFaces)} 个面，低于 {formatSize(wallReport.threshold)} mm 的风险面 {formatNumber(wallReport.thinFaces)} 个；
-                最小估算厚度 {wallReport.minThickness === null ? '未命中对向面' : `${formatSize(wallReport.minThickness)} mm`}；
-                采样率 {(wallReport.sampleRate * 100).toFixed(1)}%，置信度 {wallReport.confidence}，耗时 {Math.round(wallReport.elapsedMs)} ms；
-                估算工作量 {formatNumber(wallReport.estimatedWork || 0)} 次射线测试；
-                加速结构 {wallReport.acceleration || 'none'}，实际候选测试 {formatNumber(wallReport.candidateTests || 0)} 次，跳过 {formatNumber(wallReport.skippedFaces || 0)} 个候选面。
-              </div>
+              <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                {[
+                  ['采样面数', formatNumber(wallReport.sampledFaces)],
+                  ['薄壁风险面', `${formatNumber(wallReport.thinFaces)} (< ${formatSize(wallReport.threshold)} mm)`],
+                  ['最小估算厚度', wallReport.minThickness === null ? t('未命中对向面') : `${formatSize(wallReport.minThickness)} mm`],
+                  ['采样率', `${(wallReport.sampleRate * 100).toFixed(1)}%`],
+                  ['置信度', t(wallReport.confidence)],
+                  ['分析耗时', `${Math.round(wallReport.elapsedMs)} ms`],
+                  ['估算射线测试', formatNumber(wallReport.estimatedWork || 0)],
+                  ['实际候选测试', formatNumber(wallReport.candidateTests || 0)],
+                  ['跳过候选面', formatNumber(wallReport.skippedFaces || 0)],
+                ].map(([label, value]) => <div key={label}><dt className="text-[11px] opacity-80">{t(label)}</dt><dd className="mt-0.5 font-medium">{value}</dd></div>)}
+              </dl>
               {wallReport.partial && (
                 <div className="mt-1 leading-5 text-amber-700">
                   已达到浏览器预算上限，本次结果为局部采样报告；可切换快速模式或降低模型面数后复检。
@@ -1008,47 +913,6 @@ export const StlRepairTool: React.FC = () => {
             </Button>
           )}
 
-          {error && <div className="status-error p-3 text-sm">{error}</div>}
-
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={handleProcess} disabled={!canProcess} isLoading={processing} icon={<RefreshCw className="h-4 w-4" />}>
-              开始处理
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleDownload}
-              disabled={!stlBuffer || processing}
-              icon={<Download className="h-4 w-4" />}
-            >
-              下载 STL
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader
-          title="模型预览与报告"
-          description="可旋转查看修复结果；报告展示拓扑风险，不把轻量清理误报为完整修复。"
-          actions={
-            report ? (
-              <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
-                {report.fileName}
-              </span>
-            ) : null
-          }
-        />
-        <CardContent className="app-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
-          <MeshPreview
-            mesh={mesh}
-            isProcessing={processing}
-            materialType={materialType}
-            showDiagnostics={showDiagnostics}
-            wallThicknessEnabled={wallThicknessEnabled}
-            wallColors={wallColors}
-            environmentPreset={environmentPreset}
-            softShadows={softShadows}
-          />
           <ReportSummary report={report} outputSize={outputSize} />
         </CardContent>
       </Card>

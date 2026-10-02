@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Upload, Download, RefreshCw, Brush, Paintbrush, Pipette } from 'lucide-react';
+import { Download, RefreshCw, Brush, Paintbrush, Pipette } from 'lucide-react';
+
+import { FileDropzone, WorkflowSteps, WorkflowEmpty } from '../shared/WorkflowUi';
 
 type BrushMode = 'erase' | 'restore' | 'none';
 
 export const BackgroundRemoval: React.FC = () => {
   // States
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
   const [keyColor, setKeyColor] = useState<{ r: number; g: number; b: number } | null>(null);
   const [tolerance, setTolerance] = useState(25);
   const [feather, setFeather] = useState(5);
@@ -114,9 +117,10 @@ export const BackgroundRemoval: React.FC = () => {
   }, [keyColor, tolerance, feather]);
 
   // Handle uploading image
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleImageUpload = (files: File[]) => {
+    const file = files[0];
     if (!file) return;
+    setFileName(file.name);
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -293,7 +297,8 @@ export const BackgroundRemoval: React.FC = () => {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full min-h-[500px]">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 min-h-[420px]">
+      <div className="lg:col-span-3 space-y-3"><WorkflowSteps steps={['选择图片', '取色与修正', '导出透明图']} active={imageSrc ? 1 : 0} /><FileDropzone accept="image/*" fileName={fileName} onFiles={handleImageUpload} title="选择图片或拖到这里" hint="先取背景色，再用画笔修正边缘" /></div>
       
       {/* Visual Canvas Workbench */}
       <div className="lg:col-span-2 relative flex flex-col rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950 overflow-hidden shadow-inner justify-center items-center p-4">
@@ -304,40 +309,24 @@ export const BackgroundRemoval: React.FC = () => {
               <canvas
                 ref={displayCanvasRef}
                 onClick={handleCanvasClick}
-                onMouseDown={handleDrawingStart}
-                onMouseMove={handleDrawingMove}
-                onMouseUp={handleDrawingEnd}
-                onMouseLeave={handleDrawingEnd}
+                onPointerDown={event => { if (brushMode !== 'none') event.currentTarget.setPointerCapture(event.pointerId); handleDrawingStart(event); }}
+                onPointerMove={handleDrawingMove}
+                onPointerUp={handleDrawingEnd}
+                onPointerCancel={handleDrawingEnd}
+                style={{ touchAction: brushMode !== 'none' ? 'none' : 'auto' }}
                 className={`max-w-full max-h-[380px] lg:max-h-[520px] block ${isPickingColor ? 'cursor-crosshair' : brushMode !== 'none' ? 'cursor-none' : 'cursor-default'}`}
               />
             </div>
             
             {/* Color picker cursor notification */}
             {isPickingColor && (
-              <div className="absolute top-4 bg-primary-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow z-10 animate-bounce">
+              <div className="absolute top-4 bg-primary-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow z-10">
                 请在图片上点击你想去除的背景色
               </div>
             )}
           </div>
         ) : (
-          /* Initial Upload Area */
-          <div className="w-full max-w-md p-8 text-center border-2 border-dashed border-slate-300 hover:border-primary-500 rounded-xl bg-white dark:bg-slate-900 transition-all cursor-pointer">
-            <label className="flex flex-col items-center gap-3 cursor-pointer">
-              <div className="h-12 w-12 rounded-full bg-primary-50 flex items-center justify-center text-primary-600 dark:bg-primary-950/40">
-                <Upload className="w-6 h-6" />
-              </div>
-              <div className="min-w-0">
-                <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200">上传你想抠图的图片</span>
-                <span className="block text-xs text-slate-400 mt-1">支持 PNG, JPG, JPEG 格式，100% 浏览器本地化处理</span>
-              </div>
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-              />
-            </label>
-          </div>
+          <WorkflowEmpty title="在画布上去除背景" description="先选择图片，再取样背景色。擦除与还原画笔支持鼠标和触屏。" />
         )}
       </div>
 
@@ -409,6 +398,7 @@ export const BackgroundRemoval: React.FC = () => {
               {/* Manual Brush Tool */}
               <div className="space-y-4 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <h4 className="text-xs font-bold text-slate-500 uppercase">画笔精细修正</h4>
+                {brushMode !== 'none' && <button className="text-xs text-primary-700 underline" onClick={() => setBrushMode('none')}>停止画笔</button>}
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => {
@@ -449,8 +439,10 @@ export const BackgroundRemoval: React.FC = () => {
               </div>
 
               {/* Backdrop Preview Selectors */}
+              <details className="workflow-settings" open>
+              <summary>预览显示</summary>
               <div className="space-y-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <h4 className="text-xs font-bold text-slate-500 uppercase">背景预览背景色</h4>
+                <h4 className="text-xs font-bold text-slate-500 uppercase">预览背景</h4>
                 <div className="grid grid-cols-5 gap-1">
                   {(['grid', 'white', 'dark', 'blue', 'sunset'] as const).map(bg => (
                     <button
@@ -463,6 +455,7 @@ export const BackgroundRemoval: React.FC = () => {
                 </div>
               </div>
 
+              </details>
             </div>
 
             {/* Actions Footer */}

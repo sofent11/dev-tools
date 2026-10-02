@@ -2,7 +2,8 @@ import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { Globe, Send, Info, AlertTriangle, Plus, Trash2, ShieldCheck, Copy, Check, Activity, Play, Pause, Wifi } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { FieldLabel } from '../ui/ToolUi';
+import { FieldLabel, Textarea } from '../ui/ToolUi';
+import { useCopyToClipboard } from './shared/useCopyToClipboard';
 import { notifyToast } from './shared/notifyToast';
 import { parseCurlCommand, parseFormBodyLines, type RequestBodyMode } from './network/curlParser';
 import { useI18n } from '../../src/i18n';
@@ -127,6 +128,7 @@ class MockEventSource {
 }
 
 export const HttpBuilderTool: React.FC = () => {
+    const { copied: responseCopied, copy: copyResponse } = useCopyToClipboard();
     const [method, setMethod] = useState('GET');
     const [url, setUrl] = useState('');
     const [headers, setHeaders] = useState('{\n  "Content-Type": "application/json"\n}');
@@ -401,7 +403,7 @@ export const HttpBuilderTool: React.FC = () => {
         } catch (e) {
             const errMsg = (e as Error).message;
             setResponse(`Error: ${errMsg}\n\nNote: This tool runs fully locally in your browser.`);
-            
+
             // Auto trigger CORS alert bubble if TypeError occurs without proxy
             if (!useProxy && errMsg.toLowerCase().includes('failed to fetch')) {
                 setShowCorsAlert(true);
@@ -414,11 +416,11 @@ export const HttpBuilderTool: React.FC = () => {
     return (
         <Card className="h-full flex flex-col">
             <CardHeader title="HTTP 智能调试与 Mock 沙箱" description="调试本地/公网 API 请求，支持一键 CORS 跨域代理与零后端 Mock 拦截沙箱。" />
-            <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
-                
+            <CardContent className="flex-1 grid lg:grid-cols-2 gap-5 overflow-auto min-h-0">
+
                 {/* Left Side: Request Builder & Configurations (7 cols equivalent) */}
                 <div className="flex-1 flex flex-col gap-4 min-h-0">
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-2">
                         <select
                             className="p-2.5 border rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-xs font-bold focus:outline-none"
                             value={method}
@@ -438,8 +440,8 @@ export const HttpBuilderTool: React.FC = () => {
                         <Button onClick={() => setShowCurlModal(true)} variant="secondary">
                             导入 cURL
                         </Button>
-                        <Button onClick={sendRequest} disabled={loading} icon={<Send className="w-4 h-4"/>}>
-                            发送请求
+                        <Button onClick={sendRequest} disabled={loading || !url.trim()} icon={<Send className="w-4 h-4"/>}>
+                            {loading ? '请求中…' : '发送请求'}
                         </Button>
                     </div>
 
@@ -467,23 +469,24 @@ export const HttpBuilderTool: React.FC = () => {
                     )}
 
                     {/* CORS Proxy Configuration Bar */}
+                    <details className="tool-panel p-3" open={useProxy || undefined}><summary className="cursor-pointer text-xs font-semibold text-slate-600">跨域代理设置</summary>
                     <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs">
                         <label className="flex items-center gap-2 font-semibold cursor-pointer">
-                            <input 
-                                type="checkbox" checked={useProxy} 
+                            <input
+                                type="checkbox" checked={useProxy}
                                 onChange={e => {
                                     setUseProxy(e.target.checked);
                                     if (e.target.checked) setShowCorsAlert(false);
                                 }}
-                                className="rounded text-primary-600 focus:ring-primary-400" 
+                                className="rounded text-primary-600 focus:ring-primary-400"
                             />
                             <span>启用 CORS 跨域安全中继代理 (Bypass CORS)</span>
                         </label>
                         {useProxy && (
                             <div className="flex items-center gap-1.5 w-full md:w-auto">
                                 <span className="text-slate-400">代理服务器:</span>
-                                <select 
-                                    value={proxyUrl} 
+                                <select
+                                    value={proxyUrl}
                                     onChange={e => setProxyUrl(e.target.value)}
                                     className="p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-md font-mono text-[10px]"
                                 >
@@ -494,6 +497,7 @@ export const HttpBuilderTool: React.FC = () => {
                         )}
                     </div>
 
+                    </details>
                     {/* Automatic CORS failure warning card */}
                     {showCorsAlert && (
                         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
@@ -505,7 +509,7 @@ export const HttpBuilderTool: React.FC = () => {
                                 由于本百宝箱运行在您的浏览器本地，向没有明确放开 CORS 头的外部 API 发起网络请求会直接被浏览器强行阻断。
                             </p>
                             <div className="pl-6 flex gap-2">
-                                <button 
+                                <button
                                     onClick={() => {
                                         setUseProxy(true);
                                         setShowCorsAlert(false);
@@ -515,7 +519,7 @@ export const HttpBuilderTool: React.FC = () => {
                                 >
                                     一键启用跨域中转代理并重发
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => setShowCorsAlert(false)}
                                     className="border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold px-3 py-1.5 rounded-lg transition-all"
                                 >
@@ -563,95 +567,19 @@ export const HttpBuilderTool: React.FC = () => {
                 </div>
 
                 {/* Right Side: Response View & Local Mock Sandbox (5 cols equivalent) */}
-                <div className="w-full lg:w-96 flex flex-col gap-4 min-h-0 shrink-0">
-                    
-                    {/* Sandbox Control Card */}
-                    <div className="p-4 border border-slate-200 dark:border-slate-800 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                                <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">本地 Mock 拦截沙箱</h3>
-                            </div>
-                            <label className="relative inline-flex items-center cursor-pointer select-none text-[10px]">
-                                <input 
-                                    type="checkbox" checked={mockEnabled} 
-                                    onChange={e => setMockEnabled(e.target.checked)}
-                                    className="sr-only peer" 
-                                />
-                                <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
-                                <span className="ml-1.5 font-bold text-slate-600 dark:text-slate-400">{mockEnabled ? '启用' : '未开启'}</span>
-                            </label>
-                        </div>
-
-                        {mockEnabled && (
-                            <div className="space-y-3 max-h-[160px] overflow-y-auto pr-1 animate-in fade-in duration-300">
-                                {mockRules.map(rule => (
-                                    <div key={rule.id} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] space-y-2 relative group shadow-sm">
-                                        <div className="flex gap-2">
-                                            <input 
-                                                className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono focus:outline-none focus:border-primary-500 font-bold"
-                                                value={rule.path}
-                                                onChange={e => updateMockRule(rule.id, { path: e.target.value })}
-                                                placeholder="拦截路径: /api/v1/..."
-                                            />
-                                            <button 
-                                                onClick={() => deleteMockRule(rule.id)}
-                                                className="text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
-                                            >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold">
-                                            <div className="flex items-center gap-1">
-                                                <span>延迟:</span>
-                                                <input 
-                                                    type="number" className="w-10 border rounded px-1 text-center font-mono"
-                                                    value={rule.delay}
-                                                    onChange={e => updateMockRule(rule.id, { delay: Number(e.target.value) })}
-                                                />
-                                                <span>ms</span>
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                                <span>状态:</span>
-                                                <input 
-                                                    type="number" className="w-10 border rounded px-1 text-center font-mono"
-                                                    value={rule.status}
-                                                    onChange={e => updateMockRule(rule.id, { status: Number(e.target.value) })}
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <span className="text-[9px] text-slate-400 block mb-0.5">Mock JSON Response</span>
-                                            <textarea 
-                                                className="w-full h-12 p-1.5 border border-slate-200 dark:border-slate-800 rounded font-mono text-[9px] resize-none focus:outline-none"
-                                                value={rule.body}
-                                                onChange={e => updateMockRule(rule.id, { body: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                                <button 
-                                    onClick={addMockRule}
-                                    className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all"
-                                >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    <span>添加拦截路由</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                <div className="min-w-0 flex flex-col gap-4 min-h-0">
 
                     {/* Tabbed Response & Code Gen Card */}
-                    <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[220px]">
+                    <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[360px]">
                         <div className="bg-slate-50 dark:bg-slate-950 px-3 py-1.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
                             <div className="flex gap-2">
-                                <button 
+                                <button
                                     className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'response' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                                     onClick={() => setResTab('response')}
                                 >
                                     响应结果
                                 </button>
-                                <button 
+                                <button
                                     className={`px-2.5 py-1 text-[10px] font-bold rounded transition-all ${resTab === 'export' ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
                                     onClick={() => setResTab('export')}
                                 >
@@ -660,11 +588,13 @@ export const HttpBuilderTool: React.FC = () => {
                             </div>
                         </div>
 
+                        <div className="flex justify-end gap-2 bg-slate-50 px-3 py-2 text-xs"><Button size="sm" variant="ghost" disabled={!response} onClick={() => copyResponse(response)} icon={responseCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}>复制响应</Button></div>
                         {resTab === 'response' ? (
                             <textarea
                                 readOnly
                                 className="flex-1 p-3 bg-slate-950 border-0 outline-none font-mono text-xs text-emerald-400 leading-relaxed resize-none overflow-auto"
                                 value={response}
+                                placeholder="发送请求后，在此查看状态码、响应头和响应内容。"
                             />
                         ) : (
                             <div className="flex-1 flex flex-col bg-slate-950 p-3 min-h-0">
@@ -675,8 +605,8 @@ export const HttpBuilderTool: React.FC = () => {
                                             key={lang}
                                             onClick={() => setExportLang(lang)}
                                             className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all ${
-                                                exportLang === lang 
-                                                    ? 'bg-primary-950 border-primary-800 text-primary-400' 
+                                                exportLang === lang
+                                                    ? 'bg-primary-950 border-primary-800 text-primary-400'
                                                     : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                                             }`}
                                         >
@@ -684,7 +614,7 @@ export const HttpBuilderTool: React.FC = () => {
                                         </button>
                                     ))}
                                 </div>
-                                
+
                                 {/* Snippet output container */}
                                 <div className="flex-1 relative min-h-0">
                                     <pre className="w-full h-full p-2.5 rounded-lg border border-slate-900 bg-slate-900/40 font-mono text-[10px] text-slate-300 overflow-auto whitespace-pre leading-relaxed select-all">
@@ -699,7 +629,82 @@ export const HttpBuilderTool: React.FC = () => {
                                 </div>
                             </div>
                         )}
+                    </div>                    {/* Sandbox Control Card */}
+                    <div className="p-4 border border-slate-200 dark:border-slate-800 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase">本地 Mock 拦截沙箱</h3>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer select-none text-[10px]">
+                                <input
+                                    type="checkbox" checked={mockEnabled}
+                                    onChange={e => setMockEnabled(e.target.checked)}
+                                    className="sr-only peer"
+                                />
+                                <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all dark:border-slate-600 peer-checked:bg-emerald-500"></div>
+                                <span className="ml-1.5 font-bold text-slate-600 dark:text-slate-400">{mockEnabled ? '启用' : '未开启'}</span>
+                            </label>
+                        </div>
+
+                        {mockEnabled && (
+                            <details><summary className="cursor-pointer text-xs font-semibold text-slate-500 mb-3">编辑拦截规则 ({mockRules.length})</summary><div className="space-y-3 max-h-[160px] overflow-y-auto pr-1 animate-in fade-in duration-300">
+                                {mockRules.map(rule => (
+                                    <div key={rule.id} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[10px] space-y-2 relative group shadow-sm">
+                                        <div className="flex gap-2">
+                                            <input
+                                                className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono focus:outline-none focus:border-primary-500 font-bold"
+                                                value={rule.path}
+                                                onChange={e => updateMockRule(rule.id, { path: e.target.value })}
+                                                placeholder="拦截路径: /api/v1/..."
+                                            />
+                                            <button
+                                                onClick={() => deleteMockRule(rule.id)}
+                                                className="text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-500 font-semibold">
+                                            <div className="flex items-center gap-1">
+                                                <span>延迟:</span>
+                                                <input
+                                                    type="number" className="w-10 border rounded px-1 text-center font-mono"
+                                                    value={rule.delay}
+                                                    onChange={e => updateMockRule(rule.id, { delay: Number(e.target.value) })}
+                                                />
+                                                <span>ms</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <span>状态:</span>
+                                                <input
+                                                    type="number" className="w-10 border rounded px-1 text-center font-mono"
+                                                    value={rule.status}
+                                                    onChange={e => updateMockRule(rule.id, { status: Number(e.target.value) })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-[9px] text-slate-400 block mb-0.5">Mock JSON Response</span>
+                                            <textarea
+                                                className="w-full h-12 p-1.5 border border-slate-200 dark:border-slate-800 rounded font-mono text-[9px] resize-none focus:outline-none"
+                                                value={rule.body}
+                                                onChange={e => updateMockRule(rule.id, { body: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
+                                <button
+                                    onClick={addMockRule}
+                                    className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-dashed border-slate-200 dark:border-slate-800 rounded-lg text-[10px] font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-all"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    <span>添加拦截路由</span>
+                                </button>
+                            </div></details>
+                        )}
                     </div>
+
                 </div>
 
             </CardContent>
@@ -710,35 +715,20 @@ export const HttpBuilderTool: React.FC = () => {
 // --- User Agent Parser ---
 export const UserAgentTool: React.FC = () => {
     const [ua, setUa] = useState(navigator.userAgent);
-
-    return (
-        <Card className="h-full flex flex-col">
-             <CardHeader title="User Agent 解析" description="查看当前浏览器 UA 或解析自定义 UA" />
-             <CardContent className="space-y-4">
-                <textarea
-                    className="w-full h-24 p-2 border rounded font-mono text-sm"
-                    value={ua}
-                    onChange={e => setUa(e.target.value)}
-                />
-                <div className="p-4 bg-slate-50 border rounded-lg space-y-2">
-                    {/* Simple parsing demonstration */}
-                    <div className="flex justify-between border-b pb-2">
-                        <span className="font-semibold">Browser:</span>
-                        <span>{/Chrome\/(\d+)/.test(ua) ? 'Chrome ' + ua.match(/Chrome\/(\d+)/)?.[1] : 'Unknown/Other'}</span>
-                    </div>
-                    <div className="flex justify-between border-b pb-2">
-                        <span className="font-semibold">OS:</span>
-                        <span>{/Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'MacOS' : /Linux/.test(ua) ? 'Linux' : 'Other'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                          <span className="font-semibold">Mobile:</span>
-                          <span>{/Mobile/.test(ua) ? 'Yes' : 'No'}</span>
-                    </div>
-                </div>
-             </CardContent>
-        </Card>
-    );
-}
+    const { copied, copy } = useCopyToClipboard();
+    const browserMatch = ['Edg', 'OPR', 'Firefox', 'CriOS', 'Chrome', 'Version'].map(name => ua.match(new RegExp(`${name}/([\\d.]+)`))).find(Boolean);
+    const browserId = browserMatch?.[0].split('/')[0];
+    const browserNames: Record<string,string> = { Edg: 'Edge', OPR: 'Opera', Firefox: 'Firefox', CriOS: 'Chrome iOS', Chrome: 'Chrome', Version: 'Safari' };
+    const browser = browserMatch ? `${browserNames[browserId!]} ${browserMatch[1]}` : '未知浏览器';
+    const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iOS / iPadOS' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '未知系统';
+    return <Card className="h-full flex flex-col">
+        <CardHeader title="User Agent 解析" description="拆解浏览器、系统和设备类型，支持自定义 UA。" />
+        <CardContent className="space-y-5 overflow-auto">
+            <div className="tool-panel p-4 space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>User Agent</FieldLabel><Button size="sm" variant="secondary" onClick={() => setUa(navigator.userAgent)}>使用当前浏览器</Button></div><Textarea className="min-h-28 font-mono" value={ua} onChange={event => setUa(event.target.value)} placeholder="粘贴 User Agent 文本" /></div>
+            {ua.trim() ? <><div className="grid gap-4 sm:grid-cols-3">{[['浏览器',browser],['操作系统',os],['设备类型',/Mobile|Android|iPhone/.test(ua) ? '移动设备' : /iPad|Tablet/.test(ua) ? '平板设备' : '桌面设备']].map(([label,value]) => <div key={label} className="tool-panel p-5"><p className="text-xs text-slate-500">{label}</p><p className="text-lg font-semibold mt-3 break-all">{value}</p></div>)}</div><Button size="sm" variant="secondary" onClick={() => copy(JSON.stringify({ browser, os, userAgent: ua },null,2))} icon={copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}>复制解析结果</Button></> : <div className="tool-panel p-8 text-center text-sm text-slate-500">输入 UA 文本，查看识别结果。</div>}
+        </CardContent>
+    </Card>;
+};
 
 interface IpInfoData {
     ip: string;
@@ -785,9 +775,6 @@ export const IpInfoTool: React.FC = () => {
         }
     };
 
-    React.useEffect(() => {
-        fetchIpInfo();
-    }, []);
 
     const handleCopy = () => {
         if (data?.ip) {
@@ -798,8 +785,9 @@ export const IpInfoTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-             <CardHeader title={t('IP 地址及网络信息')} description={t('纯本地浏览器获取并解析本机公网 IP 及归属地信息')} />
+             <CardHeader title={t('IP 地址及网络信息')} description={t('向公共查询服务请求当前公网 IP 和网络归属信息。')} />
              <CardContent className="flex-1 overflow-auto p-6 space-y-6">
+                {!data && !loading && !error && <div className="tool-panel p-10 text-center space-y-4"><Globe className="h-10 w-10 mx-auto text-primary-500" /><p className="text-sm text-slate-600">{t('查询本机公网 IP，查看运营商、城市和时区。')}</p><Button onClick={fetchIpInfo}>{t('查询公网 IP')}</Button></div>}
                 {loading && (
                     <div className="h-48 flex flex-col items-center justify-center space-y-3">
                         <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary-500 border-t-transparent"></div>
@@ -815,10 +803,10 @@ export const IpInfoTool: React.FC = () => {
                         </div>
                         <Button
                             className="w-full"
-                            onClick={() => window.open('https://ipapi.co/json/', '_blank')}
+                            onClick={fetchIpInfo}
                             icon={<Globe className="w-4 h-4"/>}
                         >
-                            {t('在新标签页手动打开查询链接')}
+                            {t('重试查询')}
                         </Button>
                     </div>
                 )}
@@ -834,7 +822,7 @@ export const IpInfoTool: React.FC = () => {
                             </div>
                             <div className="flex gap-2">
                                 <Button size="sm" onClick={handleCopy}>{t('复制 IP')}</Button>
-                                <Button size="sm" variant="secondary" onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{t('刷新')}</Button>
+                                <Button size="sm" variant="secondary" disabled={loading} onClick={fetchIpInfo} icon={<Globe className="w-4 h-4" />}>{t('刷新')}</Button>
                             </div>
                         </div>
 
@@ -856,12 +844,12 @@ export const IpInfoTool: React.FC = () => {
                                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                                     <span className="text-xs text-slate-400 font-medium">{t('经纬度 / 时区')}</span>
                                     <p className="text-sm font-semibold text-slate-700">
-                                        {data.latitude && data.longitude ? `${data.latitude}, ${data.longitude}` : t('未知')} • {data.timezone || t('未知')}
+                                        {data.latitude !== undefined && data.longitude !== undefined ? `${data.latitude}, ${data.longitude}` : t('未知')} • {data.timezone || t('未知')}
                                     </p>
                                 </div>
                             </div>
                         )}
-                        
+
                         <div className="text-center">
                             <span className="text-xs text-slate-400">{t('信息由免费公共服务提供 • 仅在浏览器本地获取展示')}</span>
                         </div>
@@ -879,12 +867,13 @@ interface PingRecord {
 }
 
 export const PingAnalyzerTool: React.FC = () => {
+    const { copied, copy } = useCopyToClipboard();
     const [target, setTarget] = useState('https://www.cloudflare.com/cdn-cgi/trace');
     const [customUrl, setCustomUrl] = useState('');
     const [intervalMs, setIntervalMs] = useState(1000);
     const [isRunning, setIsRunning] = useState(false);
     const [history, setHistory] = useState<PingRecord[]>([]);
-    
+
     const timerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Derive network stats dynamically on every render to fully prevent set-state-in-effect issues
@@ -919,11 +908,11 @@ export const PingAnalyzerTool: React.FC = () => {
 
         const urlWithBuster = `${pingUrl}${pingUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
         const start = performance.now();
-        
+
         try {
             await fetch(urlWithBuster, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(3000) });
             const latency = Math.round(performance.now() - start);
-            
+
             setHistory(prev => {
                 const next: PingRecord[] = [...prev, { time: Date.now(), latency, status: 'success' }];
                 return next.slice(-30);
@@ -951,20 +940,20 @@ export const PingAnalyzerTool: React.FC = () => {
 
     const renderChart = () => {
         if (history.length === 0) return null;
-        
+
         const width = 500;
         const height = 150;
         const padding = 20;
 
         const maxVal = Math.max(...history.map(h => h.latency), 100);
-        
+
         const points = history.map((record, i) => {
             const x = padding + (i * (width - padding * 2)) / Math.max(1, history.length - 1);
             const y = height - padding - (record.status === 'success' ? (record.latency * (height - padding * 2)) / maxVal : 0);
             return { x, y, record };
         });
 
-        const pathD = points.length > 1 
+        const pathD = points.length > 1
             ? `M ${points[0].x} ${points[0].y} ` + points.slice(1).map(p => `L ${p.x} ${p.y}`).join(' ')
             : '';
 
@@ -992,7 +981,7 @@ export const PingAnalyzerTool: React.FC = () => {
 
                 {points.map((p, idx) => (
                     <g key={idx} className="group/dot cursor-pointer">
-                        <circle 
+                        <circle
                             cx={p.x} cy={p.y} r={p.record.status === 'success' ? 3.5 : 5}
                             fill={p.record.status === 'success' ? 'rgb(59, 130, 246)' : 'rgb(239, 68, 68)'}
                             className="transition-all hover:scale-150"
@@ -1056,8 +1045,8 @@ export const PingAnalyzerTool: React.FC = () => {
                         <button
                             onClick={() => setIsRunning(!isRunning)}
                             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl font-bold transition-all shadow active:scale-95 border ${
-                                isRunning 
-                                    ? 'bg-rose-600 border-rose-500 text-white' 
+                                isRunning
+                                    ? 'bg-rose-600 border-rose-500 text-white'
                                     : 'bg-primary-600 border-primary-500 text-white'
                             }`}
                         >
@@ -1073,12 +1062,13 @@ export const PingAnalyzerTool: React.FC = () => {
                     </div>
                 </div>
 
+                <div className="flex flex-wrap justify-between items-center gap-3"><span className="text-xs text-slate-500">{isRunning ? '探测中' : history.length ? '已暂停' : '等待开始'} · {history.length} 次采样</span><Button size="sm" variant="secondary" disabled={!history.length} onClick={() => copy(JSON.stringify({ target, history },null,2))} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制探测记录</Button></div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">实时延迟</span>
                         <p className="text-2xl font-mono font-bold text-slate-800 dark:text-slate-100">
-                            {history.length > 0 && history[history.length - 1].status === 'success' 
-                                ? `${history[history.length - 1].latency} ms` 
+                            {history.length > 0 && history[history.length - 1].status === 'success'
+                                ? `${history[history.length - 1].latency} ms`
                                 : '--'
                             }
                         </p>
@@ -1094,7 +1084,7 @@ export const PingAnalyzerTool: React.FC = () => {
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">丢包率</span>
                         <p className={`text-2xl font-mono font-bold ${lossRate > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                            {lossRate}%
+                            {history.length ? `${lossRate}%` : '--'}
                         </p>
                     </div>
                     <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center space-y-1 col-span-2 sm:col-span-1">
@@ -1141,6 +1131,7 @@ interface LogItem {
 }
 
 export const WebSocketSseSandboxTool: React.FC = () => {
+    const { copied: logsCopied, copy: copyLogs } = useCopyToClipboard();
     const [mode, setMode] = useState<'ws' | 'sse'>('ws');
     const [wsUrl, setWsUrl] = useState('wss://echo.websocket.org');
     const [sseUrl, setSseUrl] = useState('https://html5demos.com/sse-demo.php');
@@ -1149,7 +1140,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
     const [logs, setLogs] = useState<LogItem[]>([]);
     const [isConnected, setIsConnected] = useState(false);
     const [useMockServer, setUseMockServer] = useState(false);
-    
+
     // Heartbeat configuration
     const [enableHeartbeat, setEnableHeartbeat] = useState(false);
     const [heartbeatInterval, setHeartbeatInterval] = useState(10); // in seconds
@@ -1314,7 +1305,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
         if (useMockServer) {
             try {
                 addLog('info', `正在开启本地 Mock SSE 监听 (mock://local-sse-server)...`);
-                
+
                 const sse = new MockEventSource('mock://local-sse-server') as unknown as EventSource;
                 sseRef.current = sse;
                 setIsConnected(true);
@@ -1385,18 +1376,18 @@ export const WebSocketSseSandboxTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader 
-                title="WebSocket & SSE 实时双向通信沙箱" 
-                description="100% 浏览器离线连接调试，支持 WebSocket 双向数据收发、自定义 Subprotocols、心跳包配置以及 Server-Sent Events (SSE) 流式推送监听。" 
+            <CardHeader
+                title="WebSocket & SSE 实时双向通信沙箱"
+                description="选择协议、建立连接，按时间线查看消息；可切换本地模拟服务器。"
             />
-            <CardContent className="flex-1 flex flex-col lg:flex-row gap-5 overflow-auto min-h-0">
+            <CardContent className="flex-1 grid lg:grid-cols-2 gap-5 overflow-auto min-h-0">
                 {/* Left Side: Connection & Configuration Panel */}
                 <div className="flex-1 flex flex-col gap-4 min-h-0">
                     <div className="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                         <div className="flex gap-3">
                             <label className="flex items-center gap-1.5 font-bold cursor-pointer">
-                                <input 
-                                    type="radio" name="mode" checked={mode === 'ws'} 
+                                <input
+                                    type="radio" name="mode" checked={mode === 'ws'}
                                     onChange={() => {
                                         if (isConnected) {
                                             if (wsRef.current) wsRef.current.close();
@@ -1406,13 +1397,13 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                         setMode('ws');
                                         setLogs([]);
                                     }}
-                                    className="text-primary-600 focus:ring-primary-400" 
+                                    className="text-primary-600 focus:ring-primary-400"
                                 />
                                 <span>WebSocket 客户端</span>
                             </label>
                             <label className="flex items-center gap-1.5 font-bold cursor-pointer">
-                                <input 
-                                    type="radio" name="mode" checked={mode === 'sse'} 
+                                <input
+                                    type="radio" name="mode" checked={mode === 'sse'}
                                     onChange={() => {
                                         if (isConnected) {
                                             if (wsRef.current) wsRef.current.close();
@@ -1422,14 +1413,14 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                         setMode('sse');
                                         setLogs([]);
                                     }}
-                                    className="text-primary-600 focus:ring-primary-400" 
+                                    className="text-primary-600 focus:ring-primary-400"
                                 />
                                 <span>SSE (Server-Sent Events)</span>
                             </label>
                         </div>
                         <label className="flex items-center gap-2 font-bold cursor-pointer text-emerald-600 dark:text-emerald-400">
-                            <input 
-                                type="checkbox" checked={useMockServer} 
+                            <input
+                                type="checkbox" checked={useMockServer}
                                 onChange={e => {
                                     if (isConnected) {
                                         if (wsRef.current) wsRef.current.close();
@@ -1438,7 +1429,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     }
                                     setUseMockServer(e.target.checked);
                                 }}
-                                className="rounded text-emerald-600 focus:ring-emerald-400" 
+                                className="rounded text-emerald-600 focus:ring-emerald-400"
                             />
                             <span>启用本地 Mock 仿真服务器模式</span>
                         </label>
@@ -1454,15 +1445,15 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     onChange={e => setWsUrl(e.target.value)}
                                     disabled={isConnected}
                                 />
-                                <Button 
-                                    onClick={handleConnectWs} 
+                                <Button
+                                    onClick={handleConnectWs}
                                     className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                                 >
                                     {isConnected ? '断开连接' : '建立连接'}
                                 </Button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">子协议与握手说明</summary>                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1.5">
                                     <FieldLabel>子协议 (Subprotocols, 逗号分隔)</FieldLabel>
                                     <input
@@ -1481,6 +1472,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                 </div>
                             </div>
 
+</details>
                             {/* Send Message Area */}
                             <div className="flex flex-col gap-1.5">
                                 <FieldLabel>发送消息负荷 (Message Body)</FieldLabel>
@@ -1497,13 +1489,13 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                             </div>
 
                             {/* Heartbeat Controls */}
-                            <div className="p-3 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 rounded-xl space-y-3">
+                            <details className="tool-panel p-3" open={enableHeartbeat || undefined}><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">心跳保活设置</summary><div className="p-3 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 rounded-xl space-y-3">
                                 <div className="flex items-center justify-between">
                                     <label className="flex items-center gap-2 font-bold cursor-pointer text-xs">
-                                        <input 
-                                            type="checkbox" checked={enableHeartbeat} 
+                                        <input
+                                            type="checkbox" checked={enableHeartbeat}
                                             onChange={e => setEnableHeartbeat(e.target.checked)}
-                                            className="rounded text-primary-600 focus:ring-primary-400" 
+                                            className="rounded text-primary-600 focus:ring-primary-400"
                                         />
                                         <span>开启本地定时心跳保活帧 (Ping Heartbeat)</span>
                                     </label>
@@ -1512,7 +1504,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     <div className="grid grid-cols-2 gap-3 text-xs animate-in fade-in duration-200">
                                         <div className="space-y-1">
                                             <span className="text-slate-400">发送间隔 (秒):</span>
-                                            <input 
+                                            <input
                                                 type="number" className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
                                                 value={heartbeatInterval}
                                                 onChange={e => setHeartbeatInterval(Math.max(1, Number(e.target.value)))}
@@ -1520,7 +1512,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                         </div>
                                         <div className="space-y-1">
                                             <span className="text-slate-400">心跳帧载荷 (文本):</span>
-                                            <input 
+                                            <input
                                                 className="w-full p-1.5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 rounded-md font-mono"
                                                 value={heartbeatText}
                                                 onChange={e => setHeartbeatText(e.target.value)}
@@ -1528,7 +1520,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
-                            </div>
+                            </div></details>
                         </div>
                     ) : (
                         <div className="space-y-4">
@@ -1540,8 +1532,8 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                                     onChange={e => setSseUrl(e.target.value)}
                                     disabled={isConnected}
                                 />
-                                <Button 
-                                    onClick={handleToggleSse} 
+                                <Button
+                                    onClick={handleToggleSse}
                                     className={`${isConnected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-primary-600 hover:bg-primary-700'}`}
                                 >
                                     {isConnected ? '停止监听' : '开启监听'}
@@ -1558,21 +1550,21 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                 </div>
 
                 {/* Right Side: Log Time-Grid Grid View Console */}
-                <div className="w-full lg:w-[480px] flex flex-col border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden min-h-[360px] shrink-0 bg-slate-950">
+                <div className="min-w-0 flex flex-col border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden min-h-[360px] shrink-0 bg-slate-950">
                     <div className="px-4 py-2.5 border-b border-slate-850 flex justify-between items-center flex-none">
                         <div className="flex items-center gap-2">
                             <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></div>
                             <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">长连接事件诊断控制台</span>
                         </div>
-                        <button 
+                        <button
                             onClick={clearLogs}
                             className="text-[10px] px-2 py-0.5 border border-slate-800 hover:border-slate-700 rounded text-slate-500 hover:text-slate-300 font-bold transition-all"
                         >
                             清屏
-                        </button>
+                        </button><Button size="sm" variant="ghost" disabled={!logs.length} onClick={() => copyLogs(logs.map(log => `[${log.time}] ${log.type}: ${log.msg}`).join('\n'))}>{logsCopied ? '已复制' : '复制日志'}</Button>
                     </div>
 
-                    <div className="flex-1 p-3 font-mono text-[10px] leading-relaxed overflow-y-auto space-y-2 select-text scrollbar-thin">
+                    <div className="flex-1 p-3 font-mono text-xs leading-relaxed overflow-y-auto space-y-2 select-text scrollbar-thin">
                         {logs.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-600 space-y-2 select-none">
                                 <Activity className="w-8 h-8 stroke-1 animate-pulse" />
@@ -1595,6 +1587,7 @@ export const WebSocketSseSandboxTool: React.FC = () => {
                         )}
                         <div ref={consoleEndRef}></div>
                     </div>
+
                 </div>
             </CardContent>
         </Card>

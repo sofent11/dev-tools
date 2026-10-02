@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactCrop, { Crop, PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { FaceDetector, FilesetResolver, Detection } from '@mediapipe/tasks-vision';
-import { Upload, Download, RefreshCw, AlertCircle } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { 
@@ -13,6 +13,7 @@ import {
 import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtimeAssetLoader';
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
 import { notifyToast } from './shared/notifyToast';
+import { FileDropzone, WorkflowSteps } from './shared/WorkflowUi';
 
 const MEDIAPIPE_WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm';
 const MEDIAPIPE_MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite';
@@ -31,6 +32,8 @@ const createRuntimeState = (
 
 export const HeadshotExtractor: React.FC = () => {
   const [imgSrc, setImgSrc] = useState('');
+  const [sourceName, setSourceName] = useState('');
+  const [aspect, setAspect] = useState<number | undefined>();
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [isLoading, setIsLoading] = useState(false);
@@ -244,16 +247,24 @@ export const HeadshotExtractor: React.FC = () => {
     return defaultCrop;
   };
 
-  const onSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setCrop(undefined); 
-      setCompletedCrop(undefined);
-      const reader = new FileReader();
-      reader.addEventListener('load', () =>
-        setImgSrc(reader.result?.toString() || ''),
-      );
-      reader.readAsDataURL(e.target.files[0]);
-    }
+  const onSelectFile = (files: File[]) => {
+    const file = files[0]; if (!file) return;
+    setCrop(undefined); setCompletedCrop(undefined); setAspect(undefined); setSourceName(file.name); setTaskError('');
+    const reader = new FileReader();
+    reader.addEventListener('load', () => setImgSrc(reader.result?.toString() || ''));
+    reader.addEventListener('error', () => setTaskError('无法读取图片，请重新选择。'));
+    reader.readAsDataURL(file);
+  };
+  const chooseAspect = (value?: number) => {
+    setAspect(value);
+    const image = imgRef.current;
+    if (!image || !value) return;
+    const width = Math.min(crop?.width || image.width * .8, image.height * .8 * value);
+    const height = width / value;
+    const x = Math.max(0, Math.min(image.width - width, (crop?.x || 0) + (crop?.width || image.width) / 2 - width / 2));
+    const y = Math.max(0, Math.min(image.height - height, (crop?.y || 0) + (crop?.height || image.height) / 2 - height / 2));
+    const next: PixelCrop = { unit: 'px', x, y, width, height };
+    setCrop(next); setCompletedCrop(next);
   };
 
   const onImageLoad = async (e: React.SyntheticEvent<HTMLImageElement>) => {
@@ -444,27 +455,12 @@ export const HeadshotExtractor: React.FC = () => {
         description="自动定位头部与肩部，支持人工微调裁剪 (Powered by MediaPipe)"
       />
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
-        {/* Upload Area */}
-        <div className="relative flex-none p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 flex flex-col items-center justify-center gap-4 text-center hover:bg-slate-100 transition-colors">
-            <div className="p-4 bg-white rounded-full shadow-sm">
-                <Upload className="w-8 h-8 text-primary-500" />
-            </div>
-            <div>
-                <p className="font-medium text-slate-700">点击上传或拖拽图片</p>
-                <p className="text-sm text-slate-500">支持 JPG, PNG, WEBP</p>
-            </div>
-            <input
-                type="file"
-                accept="image/*"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                onChange={onSelectFile}
-            />
-        </div>
-
-        <div className="max-w-md mx-auto w-full space-y-2">
-          <RuntimeAssetStatusPanel state={wasmRuntimeState} onRetry={initMediaPipe} compact />
-          <RuntimeAssetStatusPanel state={modelRuntimeState} onRetry={initMediaPipe} compact />
-        </div>
+        <WorkflowSteps steps={['选择照片', '调整裁剪', '保存结果']} active={!imgSrc ? 0 : completedCrop ? 2 : 1} />
+        <FileDropzone accept="image/*" fileName={sourceName} disabled={isLoading} onFiles={onSelectFile} title="选择照片或拖到这里" hint="JPG / PNG / WebP，模型不可用时仍可手动裁剪" />
+        <details className="workflow-settings" open={wasmRuntimeState.status === 'error' || modelRuntimeState.status === 'error'}>
+          <summary>自动识别模型状态</summary>
+          <div className="space-y-2"><RuntimeAssetStatusPanel state={wasmRuntimeState} onRetry={initMediaPipe} compact /><RuntimeAssetStatusPanel state={modelRuntimeState} onRetry={initMediaPipe} compact /></div>
+        </details>
 
         {taskError && (
           <div className={`mx-auto w-full max-w-md rounded-xl border p-3 text-xs leading-5 ${
@@ -506,6 +502,7 @@ export const HeadshotExtractor: React.FC = () => {
                 <div className="flex-1 flex items-center justify-center bg-slate-100 rounded-xl border border-slate-200 p-4 overflow-hidden relative">
                     <ReactCrop
                         crop={crop}
+                        aspect={aspect}
                         onChange={(c) => setCrop(c)}
                         onComplete={(c) => setCompletedCrop(c)}
                         className="max-h-full"
@@ -523,7 +520,8 @@ export const HeadshotExtractor: React.FC = () => {
                 {/* Preview & Action Area */}
                 <div className="w-full md:w-80 flex-none space-y-6">
                     <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-sm space-y-4">
-                        <h3 className="font-semibold text-slate-800">预览</h3>
+                        <h3 className="font-semibold text-slate-800">裁剪比例与预览</h3>
+                        <div className="workflow-segmented"><button aria-pressed={!aspect} onClick={() => chooseAspect()}>自由</button><button aria-pressed={aspect === 1} onClick={() => chooseAspect(1)}>1:1</button><button aria-pressed={aspect === 4 / 5} onClick={() => chooseAspect(4 / 5)}>4:5</button></div>
                         <div className="flex items-center justify-center bg-slate-50 border border-slate-200 rounded-lg p-2 min-h-[150px]">
                             {completedCrop ? (
                                 <canvas
@@ -540,12 +538,12 @@ export const HeadshotExtractor: React.FC = () => {
                                 <span className="text-slate-400 text-sm">暂无预览</span>
                             )}
                         </div>
-                        <Button onClick={onDownloadCrop} className="w-full" icon={<Download className="w-4 h-4" />}>
+                        <Button disabled={!completedCrop?.width || !completedCrop?.height} onClick={onDownloadCrop} className="w-full" icon={<Download className="w-4 h-4" />}>
                             保存裁剪结果
                         </Button>
                     </div>
 
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 flex items-start gap-2">
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 flex items-start gap-2">
                         <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
                         <p>
                             系统会自动尝试定位头部和肩部区域。您可以通过拖动选择框来微调位置。

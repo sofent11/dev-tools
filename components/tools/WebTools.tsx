@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { Card, CardContent, CardHeader } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { FieldLabel, Input, CodePanel } from '../ui/ToolUi';
+import { useCopyToClipboard } from './shared/useCopyToClipboard';
 
 const clampChannel = (value: number) => Math.min(255, Math.max(0, Math.round(value)));
 
@@ -64,64 +66,36 @@ const wcagBadge = (ratio: number) => {
 
 // --- PX to REM Tool ---
 export const PxRemTool: React.FC = () => {
-  const [px, setPx] = useState<number>(16);
-  const [root, setRoot] = useState<number>(16);
-  const [rem, setRem] = useState<number>(1);
-
-  const handlePxChange = (val: string) => {
-    const v = parseFloat(val);
-    setPx(v);
-    if (!isNaN(v)) setRem(parseFloat((v / root).toFixed(4)));
-  };
-
-  const handleRemChange = (val: string) => {
-    const v = parseFloat(val);
-    setRem(v);
-    if (!isNaN(v)) setPx(parseFloat((v * root).toFixed(4)));
-  };
-
-  const handleRootChange = (val: string) => {
-      const v = parseFloat(val);
-      setRoot(v);
-      if (!isNaN(v)) setRem(parseFloat((px / v).toFixed(4)));
-  }
-
+  const [px, setPx] = useState('16');
+  const [root, setRoot] = useState('16');
+  const [rem, setRem] = useState('1');
+  const { copied, copy } = useCopyToClipboard();
+  const validRoot = Number.isFinite(Number(root)) && Number(root) > 0 && root !== '';
+  const handlePxChange = (value: string) => { setPx(value); if (value !== '' && validRoot) setRem(String(Number((Number(value) / Number(root)).toFixed(6)))); };
+  const handleRemChange = (value: string) => { setRem(value); if (value !== '' && validRoot) setPx(String(Number((Number(value) * Number(root)).toFixed(6)))); };
+  const handleRootChange = (value: string) => { setRoot(value); if (Number(value) > 0 && px !== '') setRem(String(Number((Number(px) / Number(value)).toFixed(6)))); };
+  const css = `font-size: ${rem}rem; /* ${px}px at ${root}px root */`;
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="PX / REM 转换器" description="CSS 像素与 REM 单位互转。" />
-      <CardContent className="flex-1 flex flex-col items-center justify-center space-y-8">
-        <div className="tool-panel w-full max-w-md p-6">
-            <div className="mb-6">
-                 <label className="block text-xs uppercase text-slate-500 font-bold mb-1">Root Font Size (px)</label>
-                 <input 
-                    type="number" 
-                    value={root} 
-                    onChange={e => handleRootChange(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg text-center font-mono"
-                 />
+      <CardHeader title="PX / REM 转换器" description="编辑任意一侧，另一侧同步换算；设置页面根字号。" />
+      <CardContent className="flex-1 overflow-auto space-y-5">
+        <div className="grid gap-5 lg:grid-cols-[18rem_1fr]">
+          <section className="tool-panel p-4 space-y-4 self-start">
+            <FieldLabel hint="必须大于 0">根字号 (px)</FieldLabel>
+            <Input type="number" min="0.01" value={root} onChange={event => handleRootChange(event.target.value)} aria-invalid={!validRoot} />
+            <div className="flex flex-wrap gap-2">{[10, 16, 18, 20].map(value => <Button key={value} size="sm" variant={root === String(value) ? 'primary' : 'secondary'} onClick={() => handleRootChange(String(value))}>{value}px</Button>)}</div>
+            {!validRoot && <p role="alert" className="text-sm text-red-600">根字号需要大于 0，才能进行换算。</p>}
+          </section>
+          <section className="tool-panel p-5 space-y-5">
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto_1fr] items-center">
+              <div><FieldLabel>像素 (px)</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" value={px} onChange={event => handlePxChange(event.target.value)} /></div>
+              <ArrowRightLeft className="h-5 w-5 text-slate-400 mx-auto sm:mt-6" />
+              <div><FieldLabel>相对单位 (rem)</FieldLabel><Input className="h-16 text-2xl font-mono" type="number" step="any" value={rem} onChange={event => handleRemChange(event.target.value)} /></div>
             </div>
-            
-            <div className="flex items-center gap-4">
-                 <div className="flex-1">
-                    <label className="block text-xs uppercase text-slate-500 font-bold mb-1">Pixels (px)</label>
-                    <input 
-                        type="number" 
-                        value={px}
-                        onChange={e => handlePxChange(e.target.value)}
-                        className="w-full p-4 text-xl border border-primary-200 focus:border-primary-500 ring-2 ring-primary-50 rounded-lg text-center font-mono font-bold text-slate-800 focus:outline-none transition-all"
-                    />
-                 </div>
-                 <ArrowRightLeft className="w-6 h-6 text-slate-400 mt-6" />
-                 <div className="flex-1">
-                    <label className="block text-xs uppercase text-slate-500 font-bold mb-1">REM</label>
-                    <input 
-                        type="number" 
-                        value={rem}
-                        onChange={e => handleRemChange(e.target.value)}
-                        className="w-full p-4 text-xl border border-emerald-200 focus:border-emerald-500 ring-2 ring-emerald-50 rounded-lg text-center font-mono font-bold text-slate-800 focus:outline-none transition-all"
-                    />
-                 </div>
-            </div>
+            <div className="flex flex-wrap gap-2">{[12, 14, 16, 24, 32, 48].map(value => <button type="button" className="rounded border border-slate-200 px-3 py-1.5 text-xs hover:border-primary-500" key={value} onClick={() => handlePxChange(String(value))}>{value}px</button>)}</div>
+            <CodePanel>{validRoot && px !== '' && rem !== '' ? css : '—'}</CodePanel>
+            <Button size="sm" disabled={!validRoot || px === '' || rem === ''} onClick={() => copy(css)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制 CSS</Button>
+          </section>
         </div>
       </CardContent>
     </Card>
@@ -262,21 +236,22 @@ export const ColorConverterTool: React.FC = () => {
               actions={<Button size="sm" variant="secondary" onClick={copyCss} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制颜色值</Button>}
             />
             <CardContent className="flex-1 overflow-auto space-y-8">
-                 <div className="flex flex-col items-center justify-center space-y-4">
-                 <div 
-                    className="h-32 w-32 rounded-full border-4 border-white shadow-sm ring-1 ring-slate-200 transition-colors duration-300"
+                 <div className="tool-panel flex flex-col sm:flex-row sm:justify-between items-center gap-4 p-4">
+                 <div
+                    className="h-20 w-32 shrink-0 rounded-lg border border-slate-200 transition-colors duration-300"
                     style={{ backgroundColor: rgbaText }}
                  />
-                 <div className="text-center font-mono text-sm text-slate-500">{hex.toUpperCase()} · {rgbaText}</div>
+                 <div className="font-mono text-sm text-slate-500">{hex.toUpperCase()} · {rgbaText}</div>
+                 <div className="flex gap-2">{['#173b33', '#d4e35b', '#ee7959', '#efe9da', '#181d23'].map(value => <button key={value} type="button" onClick={() => handleHexChange(value)} aria-label={`使用颜色 ${value}`} title={value} className="h-8 w-8 rounded-full border border-slate-200" style={{ backgroundColor: value }} />)}</div>
                  </div>
-                 
+
                  <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">HEX Color</label>
                         <div className="flex items-center gap-2">
                             <input type="color" value={hex} onChange={e => handleHexChange(e.target.value)} className="h-9 w-10 rounded border border-slate-200 bg-white" />
                             <span className="text-slate-400 text-lg">#</span>
-                            <input 
+                            <input
                                 value={hex.replace('#', '')}
                                 onChange={e => handleHexChange('#' + e.target.value)}
                                 className="w-full bg-transparent font-mono text-xl text-slate-800 focus:outline-none uppercase"
@@ -288,25 +263,25 @@ export const ColorConverterTool: React.FC = () => {
                     <div className="tool-panel p-4">
                         <label className="block text-xs uppercase text-slate-500 font-bold mb-2">RGB Color</label>
                         <div className="flex gap-2">
-                            <input 
-                                type="number" 
-                                value={rgb.r} 
+                            <input
+                                type="number"
+                                value={rgb.r}
                                 onChange={e => handleRgbChange('r', e.target.value)}
-                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono" 
+                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono"
                                 placeholder="R"
                             />
-                            <input 
-                                type="number" 
-                                value={rgb.g} 
+                            <input
+                                type="number"
+                                value={rgb.g}
                                 onChange={e => handleRgbChange('g', e.target.value)}
-                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono" 
+                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono"
                                 placeholder="G"
                             />
-                            <input 
-                                type="number" 
-                                value={rgb.b} 
+                            <input
+                                type="number"
+                                value={rgb.b}
                                 onChange={e => handleRgbChange('b', e.target.value)}
-                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono" 
+                                className="w-full p-2 bg-white border border-slate-200 rounded text-center font-mono"
                                 placeholder="B"
                             />
                         </div>
@@ -391,6 +366,8 @@ export const QrCodeTool: React.FC = () => {
     const [qrDataUrl, setQrDataUrl] = useState('');
     const [decodedText, setDecodedText] = useState('');
     const [decodeError, setDecodeError] = useState('');
+    const { copied, copy } = useCopyToClipboard();
+    const [generationError, setGenerationError] = useState('');
 
     const content = useMemo(() => {
         if (mode === 'wifi') return `WIFI:T:${wifi.encryption};S:${wifi.ssid};P:${wifi.password};;`;
@@ -406,10 +383,10 @@ export const QrCodeTool: React.FC = () => {
             : Promise.resolve('')
         )
             .then(url => {
-                if (isActive) setQrDataUrl(url);
+                if (isActive) { setQrDataUrl(url); setGenerationError(''); }
             })
             .catch(() => {
-                if (isActive) setQrDataUrl('');
+                if (isActive) { setQrDataUrl(''); setGenerationError('内容过长或格式无法编码，请缩短后重试。'); }
             });
         return () => {
             isActive = false;
@@ -456,7 +433,7 @@ export const QrCodeTool: React.FC = () => {
                 <button className={`border-b-2 px-3 py-3 text-sm font-medium ${tab === 'decode' ? 'border-primary-500 text-primary-700' : 'border-transparent text-slate-500'}`} onClick={() => setTab('decode')}>解析</button>
             </div>
             {tab === 'generate' ? (
-            <CardContent className="flex-1 flex flex-col md:flex-row gap-8 p-6">
+            <CardContent className="flex-1 grid gap-5 overflow-auto lg:grid-cols-[1fr_24rem]">
                 <div className="flex-1 space-y-4">
                     <div className="flex flex-wrap gap-2">
                         {(['text', 'wifi', 'vcard', 'event'] as const).map(item => (
@@ -504,10 +481,10 @@ export const QrCodeTool: React.FC = () => {
                     </div>
                     <div>
                          <label className="block text-sm font-medium text-slate-700 mb-1">尺寸 ({size}px)</label>
-                         <input 
-                            type="range" 
-                            min="100" 
-                            max="500" 
+                         <input
+                            type="range"
+                            min="100"
+                            max="500"
                             step="10"
                             value={size}
                             onChange={e => setSize(Number(e.target.value))}
@@ -515,13 +492,13 @@ export const QrCodeTool: React.FC = () => {
                          />
                     </div>
                 </div>
-                <div className="tool-panel flex min-h-[300px] flex-1 items-center justify-center">
+                <div className="tool-panel flex min-h-[300px] flex-col items-center justify-center gap-5 p-5 self-start lg:sticky lg:top-0">
                     {qrDataUrl ? (
-                        <img src={qrDataUrl} alt="QR Code" className="mix-blend-multiply" />
+                        <><img src={qrDataUrl} alt="二维码预览" className="max-w-full bg-white rounded-lg" /><a href={qrDataUrl} download="qrcode.png" className="rounded-lg bg-primary-600 px-5 py-2 text-sm font-semibold text-white">下载 PNG</a><span className="text-xs text-slate-500">{size} × {size}px · PNG</span></>
                     ) : (
                         <div className="text-slate-400 flex flex-col items-center">
                             <QrCode className="w-12 h-12 mb-2 opacity-20"/>
-                            <p>输入文本以生成</p>
+                            <p role={generationError ? 'alert' : 'status'}>{generationError || '输入文本以生成'}</p>
                         </div>
                     )}
                 </div>
@@ -538,7 +515,7 @@ export const QrCodeTool: React.FC = () => {
                     <div className="text-sm font-semibold text-slate-700">解析结果</div>
                     {decodeError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{decodeError}</div>}
                     <textarea readOnly className="min-h-0 flex-1 resize-none rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-sm" value={decodedText} placeholder="解析出的文本会显示在这里" />
-                    <Button variant="secondary" disabled={!decodedText} onClick={() => navigator.clipboard.writeText(decodedText)}>复制结果</Button>
+                    <Button variant="secondary" disabled={!decodedText} onClick={() => copy(decodedText)}>{copied ? '已复制' : '复制结果'}</Button>
                 </div>
             </CardContent>
             )}
@@ -548,6 +525,7 @@ export const QrCodeTool: React.FC = () => {
 
 // --- Device Info Tool ---
 export const DeviceInfoTool: React.FC = () => {
+    const { copied, copy } = useCopyToClipboard();
     // Lazily initialize state to avoid setting it in effect
     const [info, setInfo] = useState<Record<string, string>>(() => {
         // Check if window is defined (for safety, though we are client-side)
@@ -583,11 +561,11 @@ export const DeviceInfoTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader title="设备信息" description="查看当前浏览器和系统环境信息。" />
+            <CardHeader title="设备信息" description="屏幕与浏览器参数，窗口尺寸随调整即时更新。" actions={<Button size="sm" variant="secondary" onClick={() => copy(JSON.stringify(info, null, 2))} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制环境报告</Button>} />
             <CardContent className="flex-1 overflow-auto">
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     {Object.entries(info).map(([key, value]) => (
-                        <div key={key} className="tool-panel flex flex-col justify-between p-4 md:flex-row md:items-center">
+                        <div key={key} className={`tool-panel flex flex-col justify-between gap-3 p-4 ${key === 'User Agent' ? 'sm:col-span-2 xl:col-span-3' : ''}`}>
                             <span className="text-sm font-semibold text-slate-500 uppercase">{key}</span>
                             <code className="mt-1 md:mt-0 text-sm font-mono text-slate-800 bg-white px-2 py-1 rounded border border-slate-200 break-all">
                                 {value}

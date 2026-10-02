@@ -42,7 +42,7 @@ export const Button: React.FC<ButtonProps> = ({
 
   return (
     <button
-      className={twMerge(baseStyles, variants[variant], sizes[size], className)}
+      className={twMerge(`ui-button ui-button--${variant}`, baseStyles, variants[variant], sizes[size], className)}
       disabled={disabled || isLoading}
       {...props}
     >

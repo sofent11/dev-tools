@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import TurndownService from 'turndown';
-import { ArrowRightLeft, Check, Copy, FileCode, Minimize2 } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../../ui/Card';
+import { ArrowRightLeft, FileCode, Minimize2 } from 'lucide-react';
+import { Card, CardContent } from '../../ui/Card';
 import { Button } from '../../ui/Button';
-import { FieldLabel, Input, Textarea } from '../../ui/ToolUi';
+import { FieldLabel, Input } from '../../ui/ToolUi';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
+import { ContentEditor, ContentToolbar, ContentOptions } from '../shared/ContentWorkflow';
 
 const sampleHtml = '<article><h1>Hello</h1><p>Paste HTML here.</p><ul><li>Local only</li></ul></article>';
 
@@ -41,78 +42,36 @@ const minifyHtml = (html: string) =>
     .trim();
 
 export const HtmlToMarkdownTool: React.FC = () => {
-  const [input, setInput] = useState(sampleHtml);
-  const { copied, copy } = useCopyToClipboard();
-
-  const output = useMemo(() => {
-    const service = new TurndownService({
-      codeBlockStyle: 'fenced',
-      headingStyle: 'atx',
-      bulletListMarker: '-',
-    });
-    return input.trim() ? service.turndown(input) : '';
-  }, [input]);
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader title="HTML 转 Markdown" description="在浏览器本地把 HTML 片段转换为 Markdown。" />
-      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
-        <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>HTML 输入</FieldLabel>
-          <Textarea className="min-h-0 flex-1 resize-none font-mono" value={input} onChange={event => setInput(event.target.value)} />
-        </div>
-        <div className="flex min-h-0 flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <FieldLabel>Markdown 输出</FieldLabel>
-            <Button size="sm" variant="secondary" onClick={() => copy(output)} disabled={!output}>
-              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-            </Button>
-          </div>
-          <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono" value={output} />
-        </div>
-      </CardContent>
-    </Card>
-  );
+  const [input, setInput] = useState('');
+  const [heading, setHeading] = useState<'atx' | 'setext'>('atx');
+  const [codeStyle, setCodeStyle] = useState<'fenced' | 'indented'>('fenced');
+  const result = useMemo(() => {
+    try {
+      const service = new TurndownService({ codeBlockStyle: codeStyle, headingStyle: heading, bulletListMarker: '-' });
+      return { output: input.trim() ? service.turndown(input) : '', error: '' };
+    } catch (error) { return { output: '', error: error instanceof Error ? error.message : 'HTML 处理失败' }; }
+  }, [codeStyle, heading, input]);
+  return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
+    <ContentToolbar onSample={() => setInput(sampleHtml)} onClear={() => setInput('')} status="实时转换" />
+    <ContentOptions title="Markdown 输出选项"><label className="flex items-center gap-2 text-sm">标题格式<select aria-label="标题格式" className="rounded border p-2" value={heading} onChange={event => setHeading(event.target.value as typeof heading)}><option value="atx"># 标题</option><option value="setext">下划线标题</option></select></label><label className="flex items-center gap-2 text-sm">代码块<select aria-label="代码块" className="rounded border p-2" value={codeStyle} onChange={event => setCodeStyle(event.target.value as typeof codeStyle)}><option value="fenced">围栏代码块</option><option value="indented">缩进代码块</option></select></label></ContentOptions>
+    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="HTML 输入" value={input} onChange={setInput} error={result.error} placeholder="粘贴 HTML 片段，转换后的 Markdown 即时显示。" /><ContentEditor label="Markdown 输出" value={result.output} output placeholder="转换结果会保留标题、列表、链接与代码结构。" /></div>
+  </CardContent></Card>;
 };
 
 export const HtmlFormatTool: React.FC = () => {
-  const [input, setInput] = useState(sampleHtml);
+  const [input, setInput] = useState('');
+  const [output, setOutput] = useState('');
   const [error, setError] = useState('');
-  const { copied, copy } = useCopyToClipboard();
-
+  const updateInput = (value: string) => { setInput(value); setOutput(''); setError(''); };
   const run = (mode: 'format' | 'minify') => {
-    try {
-      setInput(mode === 'format' ? formatHtml(input) : minifyHtml(input));
-      setError('');
-    } catch (event) {
-      setError(event instanceof Error ? event.message : 'HTML 处理失败');
-    }
+    try { setOutput(mode === 'format' ? formatHtml(input) : minifyHtml(input)); setError(''); }
+    catch (event) { setOutput(''); setError(event instanceof Error ? event.message : 'HTML 处理失败'); }
   };
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader
-        title="HTML 格式化/压缩器"
-        description="轻量格式化 HTML，或压缩基础空白字符。"
-        actions={
-          <>
-            <Button size="sm" variant="secondary" icon={<Minimize2 className="h-4 w-4" />} onClick={() => run('minify')}>压缩</Button>
-            <Button size="sm" icon={<FileCode className="h-4 w-4" />} onClick={() => run('format')}>格式化</Button>
-          </>
-        }
-      />
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="flex items-center justify-between">
-          <FieldLabel>HTML</FieldLabel>
-          <Button size="sm" variant="secondary" onClick={() => copy(input)} disabled={!input}>
-            {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-          </Button>
-        </div>
-        <Textarea className="min-h-0 flex-1 resize-none font-mono" value={input} onChange={event => setInput(event.target.value)} />
-        {error && <div className="status-error p-3 text-sm">{error}</div>}
-      </CardContent>
-    </Card>
-  );
+  return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
+    <ContentToolbar onSample={() => updateInput(sampleHtml)} onClear={() => updateInput('')}><Button icon={<FileCode className="h-4 w-4" />} onClick={() => run('format')} disabled={!input.trim()}>格式化</Button><Button variant="secondary" icon={<Minimize2 className="h-4 w-4" />} onClick={() => run('minify')} disabled={!input.trim()}>压缩</Button></ContentToolbar>
+    <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="HTML 输入" value={input} onChange={updateInput} error={error} placeholder="粘贴 HTML，原始输入会保留。" /><ContentEditor label="HTML 输出" value={output} output placeholder="格式化或压缩后查看结果。" onUseResult={() => updateInput(output)} /></div>
+    <p className="text-xs text-slate-500">轻量模式会调整基础空白字符；包含依赖空白的内容时请检查处理结果。</p>
+  </CardContent></Card>;
 };
 
 const rmbDigits = ['零', '壹', '贰', '叁', '肆', '伍', '陆', '柒', '捌', '玖'];
@@ -180,21 +139,22 @@ const toRmbUppercase = (value: string) => {
 export const RmbUppercaseTool: React.FC = () => {
   const [input, setInput] = useState('123456.78');
   const { copied, copy } = useCopyToClipboard();
-  const output = useMemo(() => toRmbUppercase(input), [input]);
+  const output = useMemo(() => input.trim() ? toRmbUppercase(input) : '', [input]);
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="人民币大写" description="金额数字转换为中文大写金额。" />
-      <CardContent className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5">
+
+      <CardContent className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col gap-5 overflow-auto">
+        <ContentToolbar onSample={() => setInput('123456.78')} onClear={() => setInput('')} status="实时转换" />
         <div>
           <FieldLabel>金额</FieldLabel>
-          <Input type="number" min="0" step="0.01" value={input} onChange={event => setInput(event.target.value)} />
+          <Input aria-label="金额" placeholder="输入金额，例如 1234.56" type="number" min="0" step="0.01" value={input} onChange={event => setInput(event.target.value)} />
         </div>
         <div className="tool-panel p-5">
           <div className="mb-2 text-xs font-semibold text-slate-500">大写结果</div>
-          <div className="break-all text-xl font-semibold leading-8 text-slate-950">{output}</div>
+          <div className="break-all text-xl font-semibold leading-8 text-slate-950">{output || '输入金额后显示大写结果'}</div>
         </div>
-        <Button className="self-start" icon={<ArrowRightLeft className="h-4 w-4" />} onClick={() => copy(output)}>
+        <Button className="self-start" icon={<ArrowRightLeft className="h-4 w-4" />} onClick={() => copy(output)} disabled={!output || output.startsWith('请输入')}>
           {copied ? '已复制' : '复制结果'}
         </Button>
       </CardContent>

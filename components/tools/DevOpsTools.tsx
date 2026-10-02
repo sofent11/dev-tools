@@ -19,18 +19,18 @@ interface PermissionGroupProps {
 const PermissionGroup: React.FC<PermissionGroupProps> = ({ label, role, permissions, toggle }) => (
     <div className="tool-panel flex flex-col gap-3 p-4">
         <span className="font-semibold text-slate-700">{label}</span>
-        <div className="flex gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].read} onChange={() => toggle(role, 'read')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Read (4)</span>
+                <span className="text-sm">读取 (4)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].write} onChange={() => toggle(role, 'write')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Write (2)</span>
+                <span className="text-sm">写入 (2)</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={permissions[role].execute} onChange={() => toggle(role, 'execute')} className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500" />
-                <span className="text-sm">Execute (1)</span>
+                <span className="text-sm">执行 (1)</span>
             </label>
         </div>
     </div>
@@ -49,7 +49,7 @@ export const ChmodTool: React.FC = () => {
     const g = calcDigit(permissions.group);
     const p = calcDigit(permissions.public);
 
-    const sym = (p: typeof permissions.owner) => 
+    const sym = (p: typeof permissions.owner) =>
         (p.read ? 'r' : '-') + (p.write ? 'w' : '-') + (p.execute ? 'x' : '-');
 
     return {
@@ -58,6 +58,11 @@ export const ChmodTool: React.FC = () => {
     };
   }, [permissions]);
 
+  const { copied, copy } = useCopy();
+  const applyPreset = (value: string) => {
+    const digit = (index: number) => { const n = Number(value[index]); return { read: !!(n & 4), write: !!(n & 2), execute: !!(n & 1) }; };
+    setPermissions({ owner: digit(0), group: digit(1), public: digit(2) });
+  };
   const toggle = (role: 'owner' | 'group' | 'public', perm: 'read' | 'write' | 'execute') => {
       setPermissions(prev => ({
           ...prev,
@@ -68,23 +73,23 @@ export const ChmodTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="Chmod 计算器" description="Linux 文件权限计算 (Octal & Symbolic)。" />
-      <CardContent className="flex-1 flex flex-col gap-6">
-        <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-slate-900 p-6 text-white">
-                 <div className="text-sm text-slate-400 mb-2 uppercase font-bold">Octal Value</div>
-                 <div className="text-5xl font-mono font-bold text-green-400">{octal}</div>
-                 <div className="mt-4 text-sm text-slate-500">chmod {octal} filename</div>
-            </div>
-            <div className="flex flex-1 flex-col items-center justify-center rounded-lg bg-slate-800 p-6 text-white">
-                 <div className="text-sm text-slate-400 mb-2 uppercase font-bold">Symbolic Value</div>
-                 <div className="text-3xl font-mono font-bold text-yellow-400">{symbolic}</div>
-            </div>
+      <CardContent className="flex-1 overflow-auto space-y-5">
+        <div className="flex flex-wrap gap-2">
+          {[['644', '普通文件'], ['755', '可执行文件'], ['600', '私有文件'], ['700', '私有目录']].map(([value,label]) => <Button key={value} size="sm" variant={octal === value ? 'primary' : 'secondary'} onClick={() => applyPreset(value)}>{label} · {value}</Button>)}
         </div>
-
-        <div className="space-y-4">
-            <PermissionGroup label="Owner" role="owner" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="Group" role="group" permissions={permissions} toggle={toggle} />
-            <PermissionGroup label="Public" role="public" permissions={permissions} toggle={toggle} />
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold text-slate-800">设置访问权限</h3>
+            <PermissionGroup label="所有者" role="owner" permissions={permissions} toggle={toggle} />
+            <PermissionGroup label="用户组" role="group" permissions={permissions} toggle={toggle} />
+            <PermissionGroup label="其他用户" role="public" permissions={permissions} toggle={toggle} />
+          </section>
+          <section className="tool-panel p-5 space-y-5 self-start lg:sticky lg:top-0">
+            <div><span className="text-xs text-slate-500">八进制权限</span><p className="text-6xl font-mono font-semibold text-primary-700 mt-2">{octal}</p></div>
+            <div><span className="text-xs text-slate-500">符号权限</span><p className="font-mono text-xl mt-1">{symbolic}</p></div>
+            <CodePanel>chmod {octal} filename</CodePanel>
+            <Button className="w-full" onClick={() => copy(`chmod ${octal} filename`)} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制命令</Button>
+          </section>
         </div>
       </CardContent>
     </Card>
@@ -153,7 +158,8 @@ export const CronTool: React.FC = () => {
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="tool-panel p-4 space-y-4">
+          <h3 className="text-sm font-semibold">逐项构建</h3>
           {([
             ['minute', '分钟'],
             ['hour', '小时'],
@@ -175,21 +181,24 @@ export const CronTool: React.FC = () => {
         </div>
 
         <div className="flex min-h-0 flex-col gap-4">
+          <div className="flex flex-wrap gap-2">
+            {[['每分钟', '* * * * *'], ['每小时', '0 * * * *'], ['每天 09:00', '0 9 * * *'], ['工作日 09:00', '0 9 * * 1-5']].map(([label,value]) => <Button key={value} size="sm" variant={expression === value ? 'primary' : 'secondary'} onClick={() => setExpression(value)}>{label}</Button>)}
+          </div>
           <div>
             <FieldLabel hint="minute hour day month weekday">Cron 表达式</FieldLabel>
-            <Input className="font-mono" value={expression} onChange={event => setExpression(event.target.value)} />
+            <Input aria-invalid={!!preview.error} className="font-mono" value={expression} onChange={event => setExpression(event.target.value)} />
           </div>
           {preview.error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{preview.error}</div>
           ) : (
-            <CodePanel className="space-y-2">
+            <div className="space-y-3"><div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500"><span>未来 5 次执行</span><span>{Intl.DateTimeFormat().resolvedOptions().timeZone}</span></div><CodePanel className="space-y-2">
               {preview.dates.map((date, index) => (
                 <div key={date.toISOString()} className="flex items-center justify-between gap-3 border-b border-slate-700/40 pb-2 last:border-0 last:pb-0">
                   <span className="text-slate-400">#{index + 1}</span>
                   <span>{date.toLocaleString()}</span>
                 </div>
               ))}
-            </CodePanel>
+            </CodePanel></div>
           )}
           <div className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
             <div className="tool-panel p-3"><code>*</code><span className="ml-2">每个单位</span></div>

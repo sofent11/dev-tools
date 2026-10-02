@@ -69,22 +69,22 @@ function encodeAsn1Length(len: number): number[] {
 function convertPkcs1ToPkcs8(pkcs1Bytes: Uint8Array): Uint8Array {
   const algoId = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00];
   const version = [0x02, 0x01, 0x00];
-  
+
   const octetStringHeader = [0x04, ...encodeAsn1Length(pkcs1Bytes.length)];
   const octetString = new Uint8Array(octetStringHeader.length + pkcs1Bytes.length);
   octetString.set(octetStringHeader, 0);
   octetString.set(pkcs1Bytes, octetStringHeader.length);
-  
+
   const totalPayloadLength = version.length + algoId.length + octetString.length;
   const seqHeader = [0x30, ...encodeAsn1Length(totalPayloadLength)];
-  
+
   const pkcs8 = new Uint8Array(seqHeader.length + totalPayloadLength);
   let offset = 0;
   pkcs8.set(seqHeader, offset); offset += seqHeader.length;
   pkcs8.set(version, offset); offset += version.length;
   pkcs8.set(algoId, offset); offset += algoId.length;
   pkcs8.set(octetString, offset);
-  
+
   return pkcs8;
 }
 
@@ -95,12 +95,12 @@ function getRsaBitLength(der: Uint8Array): number {
     if (der[pos++] !== 0x30) return 0; // Sequence
     const len = der[pos++];
     if (len & 0x80) pos += len & 0x7f; // Skip SEQUENCE length
-    
+
     // Version (integer)
     if (der[pos++] !== 0x02) return 0;
     const verLen = der[pos++];
     pos += verLen; // Skip version
-    
+
     // Modulus (integer)
     if (der[pos++] !== 0x02) return 0;
     let modLen = der[pos++];
@@ -133,7 +133,7 @@ interface AuditReport {
 export const AsymmetricKeyTool: React.FC = () => {
   const [inputKey, setInputKey] = useState<string>('');
   const [outputFormat, setOutputFormat] = useState<'pem' | 'jwk' | 'der'>('jwk');
-  
+
   // Results
   const [convertedResult, setConvertedResult] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -147,7 +147,7 @@ export const AsymmetricKeyTool: React.FC = () => {
     const ext = isJwk ? 'json' : outputFormat === 'pem' ? 'pem' : 'hex';
     const type = isJwk ? 'json' : 'text';
     const mime = isJwk ? 'application/json' : 'text/plain';
-    
+
     useScratchpadStore.getState().addItem({
       name: `exported_key.${ext}`,
       content: convertedResult,
@@ -190,7 +190,7 @@ export const AsymmetricKeyTool: React.FC = () => {
   const handleConvert = async () => {
     setErrorMessage('');
     setConvertedResult('');
-    
+
     const raw = inputKey.trim();
     if (!raw) {
       setErrorMessage('请输入非对称密钥 PEM、JWK 或 HEX 内容');
@@ -220,7 +220,7 @@ export const AsymmetricKeyTool: React.FC = () => {
         const cleanedHex = raw.replace(/[^0-9a-fA-F]/g, '');
         parsedDer = hexToBytes(cleanedHex);
         // Fallback checks for HEX private
-        isPrivateKey = cleanedHex.length > 500; 
+        isPrivateKey = cleanedHex.length > 500;
       } else {
         throw new Error('未识别的密钥格式。请提供有效的 PEM, JWK 格式或 DER Hex 十六进制');
       }
@@ -237,7 +237,7 @@ export const AsymmetricKeyTool: React.FC = () => {
           .replace(new RegExp(`-----BEGIN ${pemLabel}-----`), '')
           .replace(new RegExp(`-----END ${pemLabel}-----`), '')
           .replace(/\s/g, '');
-        
+
         let derBytes = base64ToBytes(base64);
 
         // Seamless auto Conversion PKCS#1 RSA Private -> PKCS#8 Private
@@ -308,10 +308,10 @@ export const AsymmetricKeyTool: React.FC = () => {
         // Convert DER/PEM to alternative formats
         // Let's audit and fetch key parameters
         let keySize = 0;
-        
+
         // Auto detect RSA vs ECC by parsing length
         const rawHex = bytesToHex(parsedDer);
-        
+
         if (rawHex.includes('2a864886f70d010101') || isPrivateKey) { // RSA OID
           keySize = getRsaBitLength(parsedDer);
           if (keySize === 0) {
@@ -441,7 +441,7 @@ export const AsymmetricKeyTool: React.FC = () => {
         }
       />
       <CardContent className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0 overflow-auto">
-        
+
         {/* Left Side: Inputs and settings (5 cols) */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0">
           <div className="flex-1 flex flex-col gap-2 min-h-[220px]">
@@ -493,9 +493,67 @@ export const AsymmetricKeyTool: React.FC = () => {
 
         {/* Right Side: Results & Audit Board (7 cols) */}
         <div className="lg:col-span-7 flex flex-col gap-4 min-h-0">
-          
+
+          {/* Result Output Card */}
+          <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[220px]">
+            <div className="bg-slate-50 dark:bg-slate-950 px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap gap-2 justify-between items-center flex-none">
+              <div className="flex items-center gap-1.5">
+                <FileCode className="w-4 h-4 text-slate-500" />
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                  转换输出 ({outputFormat})
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!convertedResult}
+                  onClick={stashConvertedKey}
+                  icon={stashed ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ClipboardList className="w-3.5 h-3.5" />}
+                >
+                  暂存
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!convertedResult}
+                  onClick={() => copy(convertedResult)}
+                  icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                >
+                  复制
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!convertedResult}
+                  onClick={downloadResultFile}
+                  icon={<Download className="w-3.5 h-3.5" />}
+                >
+                  下载
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex-1 relative min-h-72 bg-slate-950 p-4">
+              {errorMessage ? (
+                <div className="absolute inset-0 p-4 bg-rose-950/20 text-rose-400 text-xs font-mono leading-relaxed overflow-auto border border-rose-900/30 m-4 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span>{errorMessage}</span>
+                  </div>
+                </div>
+              ) : (
+                <textarea
+                  readOnly
+                  className="w-full h-full font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
+                  value={convertedResult}
+                  placeholder="转换结果将在此呈现"
+                />
+              )}
+            </div>
+          </div>
           {/* Key Auditor Card */}
-          <div className="p-5 border border-slate-200 dark:border-slate-800 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 space-y-4">
+          <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-600">密钥结构与安全评估</summary><div className="mt-4 p-5 border border-slate-200 dark:border-slate-800 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 space-y-4">
             <div className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-primary-500" />
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">密钥合规安全评估报告</h3>
@@ -548,66 +606,7 @@ export const AsymmetricKeyTool: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Result Output Card */}
-          <div className="flex-1 flex flex-col border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden min-h-[220px]">
-            <div className="bg-slate-50 dark:bg-slate-950 px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
-              <div className="flex items-center gap-1.5">
-                <FileCode className="w-4 h-4 text-slate-500" />
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
-                  转换输出 ({outputFormat})
-                </span>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!convertedResult}
-                  onClick={stashConvertedKey}
-                  icon={stashed ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <ClipboardList className="w-3.5 h-3.5" />}
-                >
-                  暂存
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!convertedResult}
-                  onClick={() => copy(convertedResult)}
-                  icon={copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                >
-                  复制
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!convertedResult}
-                  onClick={downloadResultFile}
-                  icon={<Download className="w-3.5 h-3.5" />}
-                >
-                  下载
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex-1 relative min-h-0 bg-slate-950 p-4">
-              {errorMessage ? (
-                <div className="absolute inset-0 p-4 bg-rose-950/20 text-rose-400 text-xs font-mono leading-relaxed overflow-auto border border-rose-900/30 m-4 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>{errorMessage}</span>
-                  </div>
-                </div>
-              ) : (
-                <textarea
-                  readOnly
-                  className="w-full h-full font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
-                  value={convertedResult || '转换结果与导出的 Key 将在这里呈现...'}
-                  placeholder="转换结果将在此呈现"
-                />
-              )}
-            </div>
-          </div>
+          </div></details>
         </div>
 
       </CardContent>

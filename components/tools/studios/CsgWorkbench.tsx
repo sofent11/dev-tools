@@ -6,9 +6,11 @@ import { useMeshStore, SharedMesh } from '../shared/meshStore';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import { STLExporter } from 'three/examples/jsm/exporters/STLExporter.js';
 import {
-  HelpCircle, Layers, Trash2, Download, RefreshCw, Upload, Eye, EyeOff, Plus, Settings, Ruler
+  HelpCircle, Layers, Trash2, Download, RefreshCw, Eye, EyeOff, Plus, Settings, Ruler
 } from 'lucide-react';
+import { useI18n } from '../../../src/i18n';
 import { notifyToast } from '../shared/notifyToast';
+import { FileDropzone, WorkflowSteps } from '../shared/WorkflowUi';
 
 interface ShapeConfig {
   id: string;
@@ -28,7 +30,7 @@ interface ShapeConfig {
 
 type MaterialType = 'default' | 'gold' | 'silver' | 'jade' | 'glass';
 
-let globalShapeIdCounter = 0;
+let globalShapeIdCounter = 3;
 
 const PRESET_COLORS = [
   '#3b82f6', // blue
@@ -40,6 +42,7 @@ const PRESET_COLORS = [
 ];
 
 export const CsgWorkbench: React.FC = () => {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
   const sharedMesh = useMeshStore(state => state.sharedMesh);
   
@@ -126,8 +129,8 @@ export const CsgWorkbench: React.FC = () => {
   }, [shapes]);
 
   // Handle STL uploading
-  const handleStlUpload = (event: React.ChangeEvent<HTMLInputElement>, id: string) => {
-    const file = event.target.files?.[0];
+  const handleStlUpload = (files: File[], id: string) => {
+    const file = files[0];
     if (!file) return;
 
     const reader = new FileReader();
@@ -156,6 +159,7 @@ export const CsgWorkbench: React.FC = () => {
         notifyToast({ title: 'STL 解析失败', description: message, tone: 'error' });
       }
     };
+    reader.onerror = () => setStatusMessage({ tone: 'warning', text: 'STL 文件读取失败，请更换文件。' });
     reader.readAsArrayBuffer(file);
   };
 
@@ -512,6 +516,8 @@ export const CsgWorkbench: React.FC = () => {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    const ownedMeshes = meshesMapRef.current;
+    const ownedHelpers = boxHelpersMapRef.current;
 
     // Create scene
     const scene = new THREE.Scene();
@@ -628,14 +634,18 @@ export const CsgWorkbench: React.FC = () => {
       window.removeEventListener('resize', handleResize);
       
       scene.remove(tControls.getHelper());
-      tControls.dispose();
-      if (rendererRef.current) {
-        rendererRef.current.forceContextLoss();
-        rendererRef.current.dispose();
-      }
-      if (rendererRef.current) {
-        container.removeChild(rendererRef.current.domElement);
-      }
+      tControls.dispose(); controls.dispose();
+      ownedMeshes.forEach(mesh => {
+        mesh.geometry.dispose();
+        (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(material => material.dispose());
+      });
+      ownedMeshes.clear();
+      ownedHelpers.forEach(helper => { helper.geometry.dispose(); helper.material.dispose(); });
+      ownedHelpers.clear();
+      renderer.forceContextLoss(); renderer.dispose();
+      renderer.domElement.remove();
+      sceneRef.current = null; rendererRef.current = null;
+      transformControlsRef.current = null; controlsRef.current = null;
     };
   }, []);
 
@@ -897,9 +907,13 @@ export const CsgWorkbench: React.FC = () => {
   };
 
   const selectedDim = getSelectedShapeDimensions();
+  const visibleToolCount = shapes.filter(shape => shape.id !== baseShapeId && toolShapeIds[shape.id] && shape.visible).length;
+  const baseShape = shapes.find(shape => shape.id === baseShapeId);
+  const canCalculate = !isProcessing && !!baseShape?.visible && visibleToolCount > 0;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full min-h-[500px]">
+    <div className="grid grid-cols-1 lg:grid-cols-3 lg:grid-rows-[auto_minmax(0,1fr)] gap-4 h-auto lg:h-full min-h-[500px]">
+      <div className="lg:col-span-3"><WorkflowSteps steps={['选择基准与工具实体', '调整并运算', '检查与导出网格']} active={resultGeometry ? 2 : 1} /></div>
       
       {/* 3D WebGL Canvas */}
       <div className="lg:col-span-2 relative flex flex-col rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950 overflow-hidden shadow-inner">
@@ -912,6 +926,7 @@ export const CsgWorkbench: React.FC = () => {
               <button
                 key={mode}
                 onClick={() => setGizmoMode(mode)}
+                aria-pressed={gizmoMode === mode}
                 className={`text-[10px] font-bold px-2 py-1.5 rounded transition-all cursor-pointer capitalize ${gizmoMode === mode ? 'bg-primary-500 text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200'}`}
               >
                 {mode === 'translate' ? '移动' : mode === 'rotate' ? '旋转' : '缩放'}
@@ -938,6 +953,7 @@ export const CsgWorkbench: React.FC = () => {
           <div className="h-4 w-px bg-slate-350 dark:bg-slate-700" />
           <button
             onClick={() => setShowWireframe(!showWireframe)}
+            aria-pressed={showWireframe}
             className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded transition-colors cursor-pointer ${showWireframe ? 'bg-primary-500 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}
           >
             <Eye className="w-3.5 h-3.5" />
@@ -973,7 +989,7 @@ export const CsgWorkbench: React.FC = () => {
       </div>
 
       {/* Control Panel Sidebar */}
-      <div className="flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm max-h-[750px] overflow-y-auto">
+      <div className="flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm lg:max-h-[800px] overflow-y-auto">
         {statusMessage && (
           <div className={`mb-4 rounded-xl border p-3 text-xs leading-5 ${
             statusMessage.tone === 'success'
@@ -1034,12 +1050,17 @@ export const CsgWorkbench: React.FC = () => {
                     <div
                       key={s.id}
                       onClick={() => setSelectedShapeId(s.id)}
+                      tabIndex={0}
+                      role="group"
+                      aria-label={`${t('选择实体')} ${t(s.name)}`}
+                      onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSelectedShapeId(s.id); } }}
                       className={`group flex items-center justify-between gap-2 p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all ${isSelected ? 'bg-primary-50 text-primary-800 ring-1 ring-primary-100/50 dark:bg-primary-950/20 dark:text-primary-400 dark:ring-primary-900/50' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800'}`}
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {/* Checkbox for tooling selecting */}
                         <input
                           type="checkbox"
+                          aria-label={`${t('工具实体')} ${t(s.name)}`}
                           checked={isBase ? false : !!toolShapeIds[s.id]}
                           disabled={isBase}
                           onChange={(e) => {
@@ -1058,6 +1079,7 @@ export const CsgWorkbench: React.FC = () => {
                         />
                         <input
                           type="text"
+                          aria-label="实体名称"
                           value={s.name}
                           onClick={(e) => e.stopPropagation()}
                           onChange={(e) => renameShape(s.id, e.target.value)}
@@ -1077,6 +1099,7 @@ export const CsgWorkbench: React.FC = () => {
                           }}
                           className={`px-1 py-0.5 rounded text-[9px] font-bold ${isBase ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800'}`}
                           title="设为布尔基准实体"
+                          aria-pressed={isBase}
                         >
                           基准
                         </button>
@@ -1085,6 +1108,7 @@ export const CsgWorkbench: React.FC = () => {
                             e.stopPropagation();
                             toggleVisibility(s.id);
                           }}
+                          aria-label={`${t(s.visible ? '隐藏' : '显示')} ${t(s.name)}`}
                           className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                         >
                           {s.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -1094,6 +1118,7 @@ export const CsgWorkbench: React.FC = () => {
                             e.stopPropagation();
                             deleteShape(s.id);
                           }}
+                          aria-label={`删除 ${s.name}`}
                           className="p-1 rounded text-slate-400 hover:text-red-600"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -1105,15 +1130,48 @@ export const CsgWorkbench: React.FC = () => {
               </div>
             </div>
 
+            {/* Boolean Actions panel */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2">
+              <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                <Settings className="w-3 h-3 text-slate-400" />
+                <span>选择运算</span>
+              </h4>
+              <p className="text-xs leading-5 text-slate-500">基准：{baseShape?.name || '未选择'} · 已选工具：{visibleToolCount}</p>
+              <p className="text-xs leading-5 text-slate-500">合并连接所有实体；相减从基准挖去工具；相交仅保留重叠部分。</p>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  onClick={() => executeCsg('union')}
+                  disabled={!canCalculate}
+                  className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>合并</span>
+                </button>
+                <button
+                  onClick={() => executeCsg('subtract')}
+                  disabled={!canCalculate}
+                  className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+                  title="从选定的基准实体中相减所有勾选的工具实体"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>相减</span>
+                </button>
+                <button
+                  onClick={() => executeCsg('intersect')}
+                  disabled={!canCalculate}
+                  className="bg-primary-600 hover:bg-primary-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>相交</span>
+                </button>
+              </div>
+            </div>
+
             {/* Config Panel for the selected shape */}
             {selectedShape && (
-              <div className="flex-1 space-y-4 min-h-0 overflow-y-auto pr-1">
-                <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between flex-none">
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1.5">
-                    <Settings className="w-3.5 h-3.5 text-primary-600" />
-                    <span>属性配置 ({selectedShape.name})</span>
-                  </h4>
-                </div>
+              <details className="workflow-settings mt-4">
+                <summary>实体尺寸、坐标与导入</summary>
+                <div className="space-y-4 pt-4"><p className="text-xs text-slate-500">当前实体：{selectedShape.name}</p>
 
                 {/* Shape selection procedural */}
                 <div>
@@ -1131,18 +1189,7 @@ export const CsgWorkbench: React.FC = () => {
                   
                   {/* STL Custom upload */}
                   <div className="mt-2">
-                    <label className="flex items-center justify-center gap-2 border border-dashed border-slate-300 hover:border-primary-500 rounded-lg py-1.5 cursor-pointer bg-slate-50 hover:bg-primary-50/20 transition-all dark:bg-slate-800/40 dark:border-slate-700">
-                      <Upload className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 truncate">
-                        {selectedShape.type === 'upload' ? `已载入: ${selectedShape.uploadedFileName.slice(0, 15)}...` : '导入自定义 STL 模型'}
-                      </span>
-                      <input
-                        type="file"
-                        accept=".stl"
-                        className="hidden"
-                        onChange={(e) => handleStlUpload(e, selectedShape.id)}
-                      />
-                    </label>
+                    <FileDropzone compact accept=".stl" title="导入自定义 STL 模型" fileName={selectedShape.type === 'upload' ? selectedShape.uploadedFileName : undefined} disabled={isProcessing} onFiles={files => handleStlUpload(files, selectedShape.id)} />
                   </div>
                 </div>
 
@@ -1299,43 +1346,10 @@ export const CsgWorkbench: React.FC = () => {
                     />
                   </div>
                 </div>
-              </div>
+                </div>
+              </details>
             )}
 
-            {/* Boolean Actions panel */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex-none space-y-2">
-              <h4 className="text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                <Settings className="w-3 h-3 text-slate-400" />
-                <span>场景多物体批量布尔计算</span>
-              </h4>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => executeCsg('union')}
-                  disabled={isProcessing}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>合并</span>
-                </button>
-                <button
-                  onClick={() => executeCsg('subtract')}
-                  disabled={isProcessing}
-                  className="bg-amber-600 hover:bg-amber-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
-                  title="从选定的基准实体中相减所有勾选的工具实体"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>相减</span>
-                </button>
-                <button
-                  onClick={() => executeCsg('intersect')}
-                  disabled={isProcessing}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-colors flex flex-col items-center gap-0.5 cursor-pointer"
-                >
-                  <HelpCircle className="w-3.5 h-3.5" />
-                  <span>相交</span>
-                </button>
-              </div>
-            </div>
           </>
         ) : (
           /* Result Export View */
@@ -1343,7 +1357,7 @@ export const CsgWorkbench: React.FC = () => {
             <div className="space-y-5">
               <div className="bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/50 p-4 rounded-xl">
                 <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-2">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full" />
                   批量布尔运算成功！
                 </h4>
                 <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">

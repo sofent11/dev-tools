@@ -10,7 +10,7 @@ export const Input = React.forwardRef<HTMLInputElement, NativeInputProps>(
     <input
       ref={ref}
       className={twMerge(
-        'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
+        'ui-input h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
         className,
       )}
       {...props}
@@ -24,7 +24,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, NativeTextareaProp
     <textarea
       ref={ref}
       className={twMerge(
-        'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
+        'ui-textarea w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
         className,
       )}
       {...props}
@@ -38,7 +38,7 @@ export const Select = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
     <select
       ref={ref}
       className={twMerge(
-        'h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
+        'ui-select h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-none outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400',
         className,
       )}
       {...props}
@@ -102,7 +102,7 @@ export const Tabs: React.FC<{
   children: React.ReactNode;
   className?: string;
 }> = ({ children, className = '' }) => (
-  <div className={twMerge('flex flex-wrap gap-1 border-b border-slate-200 bg-white px-4', className)}>
+  <div className={twMerge('studio-tabs flex flex-wrap gap-1 border-b border-slate-200 bg-white px-4', className)}>
     {children}
   </div>
 );
@@ -116,8 +116,10 @@ export const TabButton: React.FC<{
   <button
     type="button"
     onClick={onClick}
+    aria-pressed={active}
+    data-active={active}
     className={twMerge(
-      'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+      'studio-tab border-b-2 px-3 py-3 text-sm font-medium transition-colors',
       active
         ? 'border-primary-500 text-primary-700'
         : 'border-transparent text-slate-500 hover:text-slate-900',

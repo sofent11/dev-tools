@@ -148,7 +148,7 @@ export const JwtTool: React.FC = () => {
   try {
     headerObj = JSON.parse(headerInput);
     payloadObj = JSON.parse(payloadInput);
-    
+
     const toDate = (value: unknown) => typeof value === 'number' ? new Date(value * 1000).toLocaleString() : '';
     if (payloadObj) {
       claims = [
@@ -208,7 +208,7 @@ export const JwtTool: React.FC = () => {
       const messageData = enc.encode(`${parts[0]}.${parts[1]}`);
       const signatureBase64Url = parts[2];
       const signatureBase64 = signatureBase64Url.replace(/-/g, '+').replace(/_/g, '/');
-      
+
       const paddedBase64 = signatureBase64.padEnd(signatureBase64.length + (4 - signatureBase64.length % 4) % 4, '=');
       const signatureBinary = atob(paddedBase64);
       const signatureBytes = new Uint8Array(signatureBinary.length);
@@ -239,11 +239,11 @@ export const JwtTool: React.FC = () => {
       }
       const headerB64 = base64UrlEncode(JSON.stringify(headerObj));
       const payloadB64 = base64UrlEncode(JSON.stringify(payloadObj));
-      
+
       const enc = new TextEncoder();
       const messageData = enc.encode(`${headerB64}.${payloadB64}`);
       const keyData = enc.encode(secretKey || 'secret');
-      
+
       const cryptoKey = await window.crypto.subtle.importKey(
         "raw",
         keyData,
@@ -251,16 +251,16 @@ export const JwtTool: React.FC = () => {
         false,
         ["sign"]
       );
-      
+
       const signature = await window.crypto.subtle.sign("HMAC", cryptoKey, messageData);
       const signatureBytes = new Uint8Array(signature);
-      
+
       let signatureBinary = '';
       for (let i = 0; i < signatureBytes.byteLength; i++) {
         signatureBinary += String.fromCharCode(signatureBytes[i]);
       }
       const signatureB64Url = window.btoa(signatureBinary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-      
+
       const newToken = `${headerB64}.${payloadB64}.${signatureB64Url}`;
       setToken(newToken);
       setVerificationResult('valid');
@@ -280,11 +280,11 @@ export const JwtTool: React.FC = () => {
     setCrackedKey(null);
     setAuditProgress(0);
     setAuditMessage('正在启动本地 Worker...');
-    
+
     const dictionary = Array.from(new Set([
-      'secret', '123456', 'admin', 'development', 'jwt', 
-      '12345678', 'password', 'key', 'test', 'demo', 
-      'config', 'root', 'security', 'welcome', 'auth', 
+      'secret', '123456', 'admin', 'development', 'jwt',
+      '12345678', 'password', 'key', 'test', 'demo',
+      'config', 'root', 'security', 'welcome', 'auth',
       'secretkey', 'mysecret', '1234567890',
       ...customDictionary.split(/\r?\n/).map(item => item.trim()).filter(Boolean),
     ]));
@@ -374,7 +374,7 @@ export const JwtTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="JWT 主动安全调试与签名沙箱" description="不仅是一个 JWT 头/载荷解析面板，更是支持实时编辑 Header/Payload 本地密钥一键重签伪造测试的 JWT 攻防沙箱。" />
+      <CardHeader title="JWT 解析与签名调试" description="先查看 Header、Payload 与时间声明，再按需验证签名或编辑后重签。" />
       <CardContent className="flex-1 overflow-auto space-y-6">
         <div>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-350 mb-1">Encoded Token (输入或由下方 re-sign 实时生成)</label>
@@ -395,7 +395,7 @@ export const JwtTool: React.FC = () => {
                 🔴 <b>高危安全警告：</b>此 Token 显式设置了 <code>alg: &apos;none&apos;</code> 签名算法！这意味着任意恶意客户端均可在不提供签名的情况下随意篡改并绕过验证。
               </div>
             )}
-            
+
             {crackedKey && (
               <div className="status-error p-3 text-xs leading-5">
                 🔴 <b>高危安全警告：</b>此 Token 使用了被字典破解出的极弱公共密钥：<span className="font-mono bg-red-100 dark:bg-red-950 font-bold px-2 py-0.5 rounded text-red-700 dark:text-red-400">{crackedKey}</span>！
@@ -415,7 +415,7 @@ export const JwtTool: React.FC = () => {
             )}
           </div>
         )}
-        
+
         {/* Editable Headers & Payload */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -436,12 +436,22 @@ export const JwtTool: React.FC = () => {
           </div>
         </div>
 
+        {claims.length > 0 && (
+          <div className="tool-panel grid gap-3 p-4 md:grid-cols-2">
+            {claims.map(claim => (
+              <div key={claim.label}>
+                <div className="text-xs font-semibold uppercase text-slate-500">{claim.label}</div>
+                <div className="break-all text-sm text-slate-900 dark:text-slate-100 font-mono mt-0.5">{claim.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {/* Verification Board Card */}
-        <div className="tool-panel p-4 space-y-4">
+        <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-700">验证签名与编辑重签</summary><div className="space-y-4 mt-4">
           <h4 className="text-xs font-bold text-slate-700 dark:text-slate-350 uppercase tracking-wider">
-            🛡️ JWT 签名调试、验证与安全爆破沙箱
+            签名调试
           </h4>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
             <div>
               <FieldLabel>签名与验证密钥 (HMAC Secret Key)</FieldLabel>
@@ -472,7 +482,7 @@ export const JwtTool: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_16rem]">
+          <details className="tool-panel p-3" open={isAuditing || undefined}><summary className="cursor-pointer text-xs font-semibold mb-3">高级：本地弱密钥字典审计</summary><div className="grid gap-3 md:grid-cols-[1fr_16rem]">
             <div>
               <FieldLabel>自定义弱密钥字典（每行一个，仅在本地 Worker 中运行）</FieldLabel>
               <textarea
@@ -491,6 +501,7 @@ export const JwtTool: React.FC = () => {
             </div>
           </div>
 
+          </details>
           {verificationResult === 'valid' && (
             <div className="p-3 text-xs leading-5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-bold flex items-center gap-2">
               🟢 签名验证成功！在本地算力下基于当前密钥对 Token 的完整性校验通过。
@@ -508,18 +519,8 @@ export const JwtTool: React.FC = () => {
               ⚠️ 本地校验过程中遇到错误，可能是算法不属于 HMAC-SHA256 导致。
             </div>
           )}
-        </div>
+        </div></details>
 
-        {claims.length > 0 && (
-          <div className="tool-panel grid gap-3 p-4 md:grid-cols-2">
-            {claims.map(claim => (
-              <div key={claim.label}>
-                <div className="text-xs font-semibold uppercase text-slate-500">{claim.label}</div>
-                <div className="break-all text-sm text-slate-900 dark:text-slate-100 font-mono mt-0.5">{claim.value}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
@@ -554,21 +555,21 @@ export const UuidTool: React.FC = () => {
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader 
-        title="UUID 生成器" 
+      <CardHeader
+        title="UUID 生成器"
         description="批量生成随机 Version 4 UUIDs。"
         actions={
-           <Button onClick={generate} icon={<RefreshCcw className="w-4 h-4" />}>重新生成</Button>
+           <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => copyToClipboard(uuids.map(formatUuid).join('\n'), -1)} icon={copiedIndex === -1 ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制全部</Button><Button size="sm" onClick={generate} icon={<RefreshCcw className="w-4 h-4" />}>重新生成</Button></div>
         }
       />
       <CardContent className="flex-1 overflow-auto space-y-4">
         <div className="tool-panel flex flex-wrap items-center gap-4 p-4">
             <label className="text-sm font-medium text-slate-700">数量:</label>
-            <input 
-              type="number" 
-              min="1" 
-              max="100" 
-              value={count} 
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={count}
               onChange={(e) => setCount(Number(e.target.value))}
               className="w-20 p-2 text-sm border border-slate-200 rounded-md"
             />
@@ -581,15 +582,17 @@ export const UuidTool: React.FC = () => {
               大写
             </label>
         </div>
+        <div className="flex flex-wrap gap-2">{[1, 5, 20, 50].map(value => <Button key={value} size="sm" variant={count === value ? 'primary' : 'secondary'} onClick={() => setCount(value)}>{value}</Button>)}</div>
+        <div className="text-xs text-slate-500">已生成：{uuids.length} · 修改格式即时生效，修改数量后重新生成</div>
         <div className="space-y-2">
           {uuids.map((uuid, idx) => (
             <div key={idx} className="tool-panel group flex items-center gap-2 p-3 transition-colors hover:border-primary-200">
               <code className="flex-1 break-all font-mono text-slate-700">{formatUuid(uuid)}</code>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => copyToClipboard(formatUuid(uuid), idx)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                className="text-slate-400 transition-colors"
               >
                 {copiedIndex === idx ? <Check className="w-4 h-4 text-green-600"/> : <Copy className="w-4 h-4"/>}
               </Button>
@@ -613,7 +616,7 @@ export const HashTool: React.FC = () => {
         return;
       }
       const msgBuffer = new TextEncoder().encode(input);
-      
+
       const hashBufferSHA1 = await crypto.subtle.digest('SHA-1', msgBuffer);
       const hashArraySHA1 = Array.from(new Uint8Array(hashBufferSHA1));
       const hashHexSHA1 = hashArraySHA1.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -643,7 +646,7 @@ export const HashTool: React.FC = () => {
         <div className="space-y-1">
             <div className="flex justify-between items-end">
                 <label className="text-xs font-semibold text-slate-500 uppercase">{label}</label>
-                <button onClick={doCopy} className="text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1">
+                <button disabled={!val} onClick={doCopy} className="disabled:opacity-40 text-xs text-primary-600 hover:text-primary-800 flex items-center gap-1">
                     {c ? <><Check className="w-3 h-3"/> 已复制</> : <><Copy className="w-3 h-3"/> 复制</>}
                 </button>
             </div>
@@ -657,24 +660,21 @@ export const HashTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="Hash 生成器" description="生成文本的 MD5、SHA1、SHA256、SHA512 哈希值。" />
-      <CardContent className="flex-1 overflow-auto space-y-6">
-        <div>
+      <CardContent className="flex-1 grid gap-5 overflow-auto lg:grid-cols-2">
+        <div className="space-y-3">
           <label className="block text-sm font-medium text-slate-700 mb-1">输入文本</label>
           <textarea
-            className="w-full h-24 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
+            className="w-full min-h-64 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-y"
             placeholder="在此输入..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
-        </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          MD5 仅适合兼容校验场景，不应用于密码存储或安全签名。
+          <p className="text-xs text-slate-500">{new TextEncoder().encode(input).length} bytes · UTF-8 · 实时计算</p>
         </div>
         <div className="space-y-4">
-            <CopyRow label="MD5" val={hashes.md5} />
-            <CopyRow label="SHA-1" val={hashes.sha1} />
             <CopyRow label="SHA-256" val={hashes.sha256} />
             <CopyRow label="SHA-512" val={hashes.sha512} />
+            <details className="tool-panel p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500">兼容算法 · MD5 / SHA-1</summary><div className="space-y-4 mt-4"><CopyRow label="MD5" val={hashes.md5} /><CopyRow label="SHA-1" val={hashes.sha1} /><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">MD5 仅适合兼容校验场景，不应用于密码存储或安全签名。</div></div></details>
         </div>
       </CardContent>
     </Card>
@@ -714,9 +714,9 @@ export const HmacTool: React.FC = () => {
 
   return (
      <Card className="h-full flex flex-col">
-         <CardHeader title="HMAC Calculator" description="Calculate HMAC-SHA256" />
-         <CardContent className="space-y-4">
-            <div>
+         <CardHeader title="HMAC-SHA256 计算" description="输入消息和密钥，即时生成十六进制签名。" />
+         <CardContent className="grid gap-5 overflow-auto lg:grid-cols-2">
+            <div className="tool-panel p-4 space-y-4"><div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Secret Key</label>
                 <input
                     className="w-full p-2 border rounded"
@@ -734,13 +734,14 @@ export const HmacTool: React.FC = () => {
                     placeholder="Message to sign..."
                 />
             </div>
-            <div>
+            </div><div className="tool-panel p-4 space-y-3">
                  <label className="block text-sm font-medium text-slate-700 mb-1">HMAC-SHA256</label>
                  <div className="relative">
                      <textarea
                         readOnly
                         className="w-full h-24 p-2 bg-slate-100 border rounded resize-none text-slate-700 font-mono"
                         value={hmac}
+                        placeholder="输入消息与密钥后，签名会在这里显示。"
                      />
                      <Button
                         size="sm"
@@ -870,22 +871,22 @@ export const PasswordGenTool: React.FC = () => {
 
     return (
         <Card className="h-full flex flex-col">
-            <CardHeader 
-                title="密码生成与 Zxcvbn 破解时延估算器" 
-                description="生成高强度随机密码，基于 Zxcvbn 熵值算法离线计算破解成本，多维度可视化黑客暴力破解的时延。" 
+            <CardHeader
+                title="密码生成与 Zxcvbn 破解时延估算器"
+                description="生成高强度随机密码，基于 Zxcvbn 熵值算法离线计算破解成本，多维度可视化黑客暴力破解的时延。"
                 actions={<Button size="sm" onClick={generate} icon={<RefreshCcw className="w-4 h-4"/>}>刷新</Button>}
             />
             <CardContent className="flex-1 overflow-auto space-y-6">
                 <RuntimeAssetStatusPanel state={zxcvbnRuntimeState} onRetry={loadZxcvbn} compact />
                 <div className="relative">
-                    <input 
+                    <input
                         type="text"
                         value={password}
                         onChange={e => setPassword(e.target.value)}
                         className="tool-panel flex min-h-[4.5rem] w-full items-center justify-center break-all p-4 text-center font-mono text-xl md:text-2xl tracking-normal text-slate-950 focus:outline-none focus:ring-2 focus:ring-primary-200 bg-white"
                     />
-                    <Button 
-                        size="sm" 
+                    <Button
+                        size="sm"
                         variant="ghost"
                         className="absolute top-2 right-2 bg-white/70 backdrop-blur"
                         onClick={copyPass}
@@ -896,16 +897,17 @@ export const PasswordGenTool: React.FC = () => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Controls */}
-                    <div className="space-y-4">
+                    <div className="tool-panel p-4 space-y-4">
+                        <div className="flex flex-wrap gap-2">{[12, 16, 24, 32].map(value => <Button key={value} size="sm" variant={length === value ? 'primary' : 'secondary'} onClick={() => handleLengthChange(value)}>{value}</Button>)}</div>
                         <div>
                              <label className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
                                  <span>密码长度: {length}</span>
                              </label>
-                             <input 
-                                type="range" 
-                                min="6" 
-                                max="64" 
-                                value={length} 
+                             <input
+                                type="range"
+                                min="6"
+                                max="64"
+                                value={length}
                                 onChange={e => handleLengthChange(Number(e.target.value))}
                                 className="w-full accent-primary-600"
                             />
@@ -914,13 +916,13 @@ export const PasswordGenTool: React.FC = () => {
                         <div className="grid grid-cols-2 gap-3">
                             {Object.keys(options).map(key => (
                                 <label key={key} className="tool-panel flex cursor-pointer items-center gap-2.5 p-2.5 transition-colors hover:bg-white text-xs font-semibold">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         checked={options[key as keyof typeof options]}
                                         onChange={() => handleOptionChange(key as keyof typeof options)}
                                         className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                                     />
-                                    <span className="capitalize text-slate-700">{key}</span>
+                                    <span className="text-slate-700">{{ uppercase: '大写字母', lowercase: '小写字母', numbers: '数字', symbols: '符号' }[key] || key}</span>
                                 </label>
                             ))}
                         </div>
@@ -993,6 +995,8 @@ const OPENPGP_SCRIPT_FALLBACK_URL = `https://unpkg.com/openpgp@${OPENPGP_VERSION
 
 export const PgpKeymasterTool: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'generate' | 'crypto' | 'sign-verify'>('generate');
+  const [cryptoTask, setCryptoTask] = useState<'encrypt' | 'decrypt'>('encrypt');
+  const [signTask, setSignTask] = useState<'sign' | 'verify'>('sign');
   const [openpgpLoaded, setOpenpgpLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -1002,7 +1006,7 @@ export const PgpKeymasterTool: React.FC = () => {
     version: OPENPGP_VERSION,
     source: OPENPGP_SCRIPT_URL,
   });
-  
+
   // Generation state
   const [genName, setGenName] = useState('Alice Vance');
   const [genEmail, setGenEmail] = useState('alice@dev.com');
@@ -1010,14 +1014,14 @@ export const PgpKeymasterTool: React.FC = () => {
   const [genKeyType, setGenKeyType] = useState('ecc'); // 'ecc' or '2048' or '4096'
   const [genPublicKey, setGenPublicKey] = useState('');
   const [genPrivateKey, setGenPrivateKey] = useState('');
-  
+
   // Encryption/Decryption state
   const [cryptoText, setCryptoText] = useState('Hello World! This is an offline PGP secure message.');
   const [cryptoPubKey, setCryptoPubKey] = useState('');
   const [cryptoPrivKey, setCryptoPrivKey] = useState('');
   const [cryptoPassphrase, setCryptoPassphrase] = useState('');
   const [cryptoResult, setCryptoResult] = useState('');
-  
+
   // Sign/Verify state
   const [signText, setSignText] = useState('This message is signed by Alice to confirm identity.');
   const [signPrivKey, setSignPrivKey] = useState('');
@@ -1072,11 +1076,11 @@ export const PgpKeymasterTool: React.FC = () => {
       setError('');
       const openpgp = cryptoWindow().openpgp;
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
-      
+
       const options = genKeyType === 'ecc'
         ? { type: 'ecc' as const, curve: 'curve25519', userIDs: [{ name: genName, email: genEmail }], passphrase: genPassphrase }
         : { type: 'rsa' as const, rsaBits: Number(genKeyType), userIDs: [{ name: genName, email: genEmail }], passphrase: genPassphrase };
-        
+
       const { privateKey, publicKey } = await openpgp.generateKey(options);
       setGenPublicKey(publicKey);
       setGenPrivateKey(privateKey);
@@ -1113,7 +1117,7 @@ export const PgpKeymasterTool: React.FC = () => {
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.createMessage({ text: cryptoText });
       const publicKeyObj = await openpgp.readKey({ armoredKey: cryptoPubKey });
-      
+
       const encrypted = await openpgp.encrypt({
         message,
         encryptionKeys: publicKeyObj
@@ -1151,14 +1155,14 @@ export const PgpKeymasterTool: React.FC = () => {
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.readMessage({ armoredMessage: cryptoText });
       let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: cryptoPrivKey });
-      
+
       if (cryptoPassphrase) {
         privateKeyObj = await openpgp.decryptKey({
           privateKey: privateKeyObj,
           passphrase: cryptoPassphrase
         });
       }
-      
+
       const { data: decrypted } = await openpgp.decrypt({
         message,
         decryptionKeys: privateKeyObj
@@ -1196,14 +1200,14 @@ export const PgpKeymasterTool: React.FC = () => {
       if (!openpgp) throw new Error('OpenPGP library is not loaded');
       const message = await openpgp.createMessage({ text: signText });
       let privateKeyObj = await openpgp.readPrivateKey({ armoredKey: signPrivKey });
-      
+
       if (signPassphrase) {
         privateKeyObj = await openpgp.decryptKey({
           privateKey: privateKeyObj,
           passphrase: signPassphrase
         });
       }
-      
+
       const signature = await openpgp.sign({
         message,
         signingKeys: privateKeyObj,
@@ -1244,7 +1248,7 @@ export const PgpKeymasterTool: React.FC = () => {
       const message = await openpgp.createMessage({ text: signText });
       const signatureObj = await openpgp.readSignature({ armoredSignature: verifySignature });
       const publicKeyObj = await openpgp.readKey({ armoredKey: verifyPubKey });
-      
+
       const verificationResult = await openpgp.verify({
         message,
         signature: signatureObj,
@@ -1305,12 +1309,12 @@ export const PgpKeymasterTool: React.FC = () => {
     <Card className="flex h-full flex-col">
       <CardHeader
         title="GPG / PGP 离线安全密钥加解密中心"
-        description="100% 浏览器本地离线运行的 OpenPGP 军事级密码库，支持 ECC/RSA 密钥生成、消息签名、数字签名核验及文本加解密。"
+        description="选择生成密钥、文本加解密或签名核验。密钥通过显式操作载入对应任务。"
       />
       <div className="px-4 pt-4">
         <RuntimeAssetStatusPanel state={openpgpRuntimeState} onRetry={loadOpenPgp} compact />
       </div>
-      <div className="flex border-b border-slate-200 dark:border-slate-800 px-4">
+      <div className="flex flex-wrap border-b border-slate-200 dark:border-slate-800 px-4">
         {([
           ['generate', '生成密钥对'],
           ['crypto', '文本加密 / 解密'],
@@ -1348,7 +1352,7 @@ export const PgpKeymasterTool: React.FC = () => {
         </div>
 
         {activeTab === 'generate' && (
-          <div className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-6 h-full min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-[20rem_minmax(0,1fr)] gap-5 min-h-[28rem]">
             {/* Gen Left Form */}
             <div className="space-y-4">
               <div>
@@ -1387,7 +1391,7 @@ export const PgpKeymasterTool: React.FC = () => {
             {/* Gen Right Outputs */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col min-h-0 gap-2">
-                <div className="flex justify-between items-center text-xs">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
                   <FieldLabel>公钥 (Public Key)</FieldLabel>
                   <div className="flex gap-1.5">
                     <Button size="xs" variant="secondary" onClick={() => copyGenPub(genPublicKey)} disabled={!genPublicKey}>
@@ -1404,12 +1408,12 @@ export const PgpKeymasterTool: React.FC = () => {
                 <textarea
                   readOnly
                   className="flex-1 p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[10px] resize-none overflow-auto border border-slate-700"
-                  value={genPublicKey || '点击左侧生成密钥对...'}
+                  value={genPublicKey} placeholder="生成后的公钥会显示在这里，可复制、下载或载入加解密。"
                 />
               </div>
 
               <div className="flex flex-col min-h-0 gap-2">
-                <div className="flex justify-between items-center text-xs">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
                   <FieldLabel>加密私钥 (Protected Private Key)</FieldLabel>
                   <div className="flex gap-1.5">
                     <Button size="xs" variant="secondary" onClick={() => copyGenPriv(genPrivateKey)} disabled={!genPrivateKey}>
@@ -1426,7 +1430,7 @@ export const PgpKeymasterTool: React.FC = () => {
                 <textarea
                   readOnly
                   className="flex-1 p-3 bg-slate-900 text-slate-100 rounded-xl font-mono text-[10px] resize-none overflow-auto border border-slate-700"
-                  value={genPrivateKey || '点击左侧生成密钥对...'}
+                  value={genPrivateKey} placeholder="生成后的加密私钥会显示在这里，可复制、下载或载入签名。"
                 />
               </div>
             </div>
@@ -1434,9 +1438,10 @@ export const PgpKeymasterTool: React.FC = () => {
         )}
 
         {activeTab === 'crypto' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 min-h-[28rem]">
             {/* Input message and keys */}
             <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex gap-2"><Button size="sm" variant={cryptoTask === 'encrypt' ? 'primary' : 'secondary'} onClick={() => setCryptoTask('encrypt')}>加密</Button><Button size="sm" variant={cryptoTask === 'decrypt' ? 'primary' : 'secondary'} onClick={() => setCryptoTask('decrypt')}>解密</Button></div>
               <div className="flex flex-col min-h-0 flex-1 gap-1.5">
                 <FieldLabel>输入文本消息 (待加密明文 / 待解密密文)</FieldLabel>
                 <textarea
@@ -1446,8 +1451,8 @@ export const PgpKeymasterTool: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex flex-col min-h-[8rem]">
+              <div className="grid gap-3">
+                <div className={cryptoTask === 'encrypt' ? 'flex flex-col min-h-[8rem]' : 'hidden'}>
                   <FieldLabel>收件人公钥 (用于加密)</FieldLabel>
                   <textarea
                     className="flex-1 p-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/30 font-mono text-[9px] focus:outline-none resize-none overflow-auto"
@@ -1456,7 +1461,7 @@ export const PgpKeymasterTool: React.FC = () => {
                     placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----..."
                   />
                 </div>
-                <div className="flex flex-col min-h-[8rem] gap-2">
+                <div className={cryptoTask === 'decrypt' ? 'flex flex-col min-h-[8rem] gap-2' : 'hidden'}>
                   <div className="flex-1 flex flex-col min-h-0">
                     <FieldLabel>签署私钥 (用于解密)</FieldLabel>
                     <textarea
@@ -1479,10 +1484,10 @@ export const PgpKeymasterTool: React.FC = () => {
               </div>
 
               <div className="flex gap-3">
-                <Button className="flex-1" onClick={handleEncrypt} disabled={isLoading || !openpgpLoaded}>
+                <Button className={cryptoTask === 'encrypt' ? 'flex-1' : 'hidden'} onClick={handleEncrypt} disabled={isLoading || !openpgpLoaded}>
                   <Lock className="w-4 h-4 mr-1.5" /> 加密消息 (Encrypt)
                 </Button>
-                <Button className="flex-1" variant="secondary" onClick={handleDecrypt} disabled={isLoading || !openpgpLoaded}>
+                <Button className={cryptoTask === 'decrypt' ? 'flex-1' : 'hidden'} variant="secondary" onClick={handleDecrypt} disabled={isLoading || !openpgpLoaded}>
                   <Unlock className="w-4 h-4 mr-1.5" /> 解密消息 (Decrypt)
                 </Button>
                 <Button variant="ghost" onClick={clearSensitivePgpInputs}>
@@ -1493,7 +1498,7 @@ export const PgpKeymasterTool: React.FC = () => {
 
             {/* Results pane */}
             <div className="flex flex-col gap-2 min-h-0">
-              <div className="flex justify-between items-center text-xs">
+              <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
                 <FieldLabel>加解密计算结果</FieldLabel>
                 <Button size="xs" variant="secondary" onClick={() => copyCryptoResult(cryptoResult)} disabled={!cryptoResult}>
                   {cryptoResultCopied ? '已复制' : '复制结果'}
@@ -1509,9 +1514,10 @@ export const PgpKeymasterTool: React.FC = () => {
         )}
 
         {activeTab === 'sign-verify' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 h-full min-h-0">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 min-h-[28rem]">
             {/* Sign & Verify forms */}
             <div className="flex flex-col gap-4 min-h-0">
+              <div className="flex gap-2"><Button size="sm" variant={signTask === 'sign' ? 'primary' : 'secondary'} onClick={() => setSignTask('sign')}>制作签名</Button><Button size="sm" variant={signTask === 'verify' ? 'primary' : 'secondary'} onClick={() => setSignTask('verify')}>核验签名</Button></div>
               <div className="flex flex-col min-h-0 flex-1 gap-1.5">
                 <FieldLabel>待处理的文本消息 (Message)</FieldLabel>
                 <textarea
@@ -1521,9 +1527,9 @@ export const PgpKeymasterTool: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-4">
                 {/* Sign inputs */}
-                <div className="space-y-2.5">
+                <div className={signTask === 'sign' ? 'space-y-2.5' : 'hidden'}>
                   <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-primary-500" />
                     <span>制作数字签名</span>
@@ -1550,7 +1556,7 @@ export const PgpKeymasterTool: React.FC = () => {
                 </div>
 
                 {/* Verify inputs */}
-                <div className="space-y-2.5">
+                <div className={signTask === 'verify' ? 'space-y-2.5' : 'hidden'}>
                   <h5 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Unlock className="w-3.5 h-3.5 text-emerald-500" />
                     <span>核验数字签名</span>
@@ -1577,7 +1583,7 @@ export const PgpKeymasterTool: React.FC = () => {
             {/* Results pane */}
             <div className="flex flex-col gap-4 min-h-0">
               <div className="flex-1 flex flex-col gap-2 min-h-0">
-                <div className="flex justify-between items-center text-xs">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
                   <FieldLabel>脱水数字签名 (Armored Detached Signature)</FieldLabel>
                   <Button size="xs" variant="secondary" onClick={() => copySignature(signResultSignature)} disabled={!signResultSignature}>
                     {signatureCopied ? '已复制' : '复制签名'}

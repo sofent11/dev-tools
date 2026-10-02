@@ -1,9 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { Copy, Check, ShieldAlert, ArrowLeftRight, Sparkles, RefreshCw, FileUp, Binary, ChevronLeft, ChevronRight, FileCode } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../ui/Card';
+import { ShieldAlert, FileUp, Binary } from 'lucide-react';
+import { Card, CardContent } from '../ui/Card';
 import { ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
 import { useScratchpadStore } from './shared/scratchpadStore';
 import { notifyToast } from './shared/notifyToast';
+import { Button } from '../ui/Button';
+import { ContentEditor, ContentToolbar } from './shared/ContentWorkflow';
 
 type DecodeMode = 'base64' | 'url' | 'html' | 'unicode' | 'hex';
 
@@ -86,17 +88,6 @@ const maskSensitiveData = (text: string): string => {
   return result;
 };
 
-// Clipboard Hook Helper
-const useCopyToClipboard = () => {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const copy = async (text: string, id: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    window.setTimeout(() => setCopiedId(null), 1500);
-  };
-  return { copiedId, copy };
-};
-
 // Magic Number Detector for Hex Viewer
 const detectMagicMime = (bytes: Uint8Array): { mime: string; label: string } => {
   if (bytes.length < 4) return { mime: 'application/octet-stream', label: '未知二进制文件' };
@@ -126,21 +117,23 @@ const DEFAULT_INPUT = '测试客户姓名: 张三丰, 电话: 13812345678, 邮�
 
 export const StringEscaper: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'cascade' | 'decoder' | 'hexViewer'>('cascade');
-  const [input, setInput] = useState(DEFAULT_INPUT);
-  const { copiedId, copy } = useCopyToClipboard();
+  const [input, setInput] = useState('');
+  const [selectedEncoding, setSelectedEncoding] = useState<'b64' | 'url' | 'html' | 'unicode' | 'hex'>('html');
+  const [maskPreview, setMaskPreview] = useState<string | null>(null);
   
   // Local values initialized dynamically to match default input
-  const [b64Val, setB64Val] = useState(() => safeBtoa(DEFAULT_INPUT));
-  const [urlVal, setUrlVal] = useState(() => encodeURIComponent(DEFAULT_INPUT));
-  const [htmlVal, setHtmlVal] = useState(() => escapeHtml(DEFAULT_INPUT));
-  const [unicodeVal, setUnicodeVal] = useState(() => escapeUnicode(DEFAULT_INPUT));
-  const [hexVal, setHexVal] = useState(() => escapeHex(DEFAULT_INPUT));
+  const [b64Val, setB64Val] = useState('');
+  const [urlVal, setUrlVal] = useState('');
+  const [htmlVal, setHtmlVal] = useState('');
+  const [unicodeVal, setUnicodeVal] = useState('');
+  const [hexVal, setHexVal] = useState('');
 
   const [errors, setErrors] = useState<Record<string, boolean>>({});
 
   // Centralized synchronization helper
   const updateInputAndSync = (val: string) => {
     setInput(val);
+    setMaskPreview(null);
     setB64Val(safeBtoa(val));
     setUrlVal(encodeURIComponent(val));
     setHtmlVal(escapeHtml(val));
@@ -205,8 +198,10 @@ export const StringEscaper: React.FC = () => {
   const [decodeInput, setDecodeInput] = useState('');
   const [decodeMode, setDecodeMode] = useState<DecodeMode>('base64');
   const [decodeOutput, setDecodeOutput] = useState('');
+  const [decodeError, setDecodeError] = useState('');
 
   const handleDecode = () => {
+    setDecodeError('');
     try {
       if (decodeMode === 'base64') {
         setDecodeOutput(decodeURIComponent(escape(window.atob(decodeInput))));
@@ -225,13 +220,13 @@ export const StringEscaper: React.FC = () => {
         ));
       }
     } catch {
-      setDecodeOutput('[错误: 解码失败，请检查输入格式是否正确]');
+      setDecodeOutput('');
+      setDecodeError('解码失败，请检查输入格式是否正确。');
     }
   };
 
   const handleMask = () => {
-    const masked = maskSensitiveData(input);
-    updateInputAndSync(masked);
+    setMaskPreview(maskSensitiveData(input));
   };
 
   // --- Hex Viewer States & Handlers ---
@@ -397,342 +392,33 @@ export const StringEscaper: React.FC = () => {
 
   const totalPages = hexBytes ? Math.ceil(hexBytes.length / bytesPerPage) : 0;
 
-  return (
-    <Card className="h-full flex flex-col min-h-0 bg-slate-900 border-slate-800 text-slate-100">
-      <CardHeader
-        title="五向级联转义与二进制极客中心"
-        description="支持 5 编码双向级联转解、本地敏感数据一键离线脱敏掩码，以及高级本地二进制 Hex 查看器。"
-        actions={
-          <div className="flex gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
-            <button
-              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 ${activeTab === 'cascade' ? 'bg-primary-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-              onClick={() => setActiveTab('cascade')}
-            >
-              <ArrowLeftRight className="w-3.5 h-3.5" />
-              <span>实时双向级联</span>
-            </button>
-            <button
-              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 ${activeTab === 'decoder' ? 'bg-primary-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-              onClick={() => setActiveTab('decoder')}
-            >
-              <FileCode className="w-3.5 h-3.5" />
-              <span>单向反转义解码</span>
-            </button>
-            <button
-              className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all flex items-center gap-1 ${activeTab === 'hexViewer' ? 'bg-primary-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
-              onClick={() => setActiveTab('hexViewer')}
-            >
-              <Binary className="w-3.5 h-3.5" />
-              <span>极客 Hex 查看器</span>
-            </button>
-          </div>
-        }
-      />
-      <CardContent className="flex-1 flex flex-col gap-5 overflow-auto p-6 min-h-0">
-        
-        {activeTab === 'cascade' ? (
-          // Tab 1: Real-time Cascader and Sensitive Masking
-          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 min-h-0">
-            
-            {/* Left Column: Input and Data Masking Controls (5 cols equivalent) */}
-            <div className="lg:col-span-5 flex flex-col gap-4 pr-0 lg:pr-3 lg:border-r lg:border-slate-800 min-h-[220px]">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-slate-400 uppercase tracking-wider">输入原始字符串 (同步编辑)</span>
-                <div className="flex items-center gap-2">
-                  <ScratchpadPicker
-                    placeholder="从暂存箱载入..."
-                    filter={isScratchpadTextLike}
-                    onLoad={content => {
-                      if (typeof content === 'string') updateInputAndSync(content);
-                    }}
-                  />
-                  <span className="text-slate-500 font-mono">{input.length} 字符</span>
-                </div>
-              </div>
-              <textarea
-                className="flex-1 w-full p-4 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all min-h-[150px]"
-                value={input}
-                onChange={e => updateInputAndSync(e.target.value)}
-                placeholder="输入文本，例如包含姓名、手机、银行卡、身份证等信息..."
-              />
-              <div className="grid grid-cols-2 gap-2.5 flex-none">
-                <button
-                  onClick={handleMask}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-rose-500"
-                >
-                  <ShieldAlert className="w-4 h-4" />
-                  <span>隐私脱敏掩码</span>
-                </button>
-                <button
-                  onClick={() => updateInputAndSync('')}
-                  className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-slate-700"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  <span>清空</span>
-                </button>
-              </div>
-              
-              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2.5 text-[10px] text-slate-400 flex-none leading-normal">
-                <p className="font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  双向实时级联功能
-                </p>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li><strong>右侧任意卡片可直接修改</strong>，反解成功的字符串将实时回流至其它所有卡片。</li>
-                  <li><strong>脱敏规则</strong>: 支持手机号、身份证、银行卡、电子邮箱及百家姓人名的本地精准脱敏。</li>
-                  <li className="text-amber-500/90 font-semibold">100% 纯本地离线处理，保障数据与网络绝对安全隐私。</li>
-                </ul>
-              </div>
-            </div>
-
-            {/* Right Column: 5-way synchronized encodings (7 cols equivalent) */}
-            <div className="lg:col-span-7 flex flex-col gap-4 overflow-y-auto pr-1">
-              <span className="font-bold text-slate-400 uppercase tracking-wider text-xs block mb-1">
-                五向实时可编辑转义卡片 (编辑卡片自动双向同步)
-              </span>
-              
-              {[
-                { label: 'Base64 编码 (Base64)', value: b64Val, id: 'b64' as const },
-                { label: 'URL 编码 (Percent-Encoding)', value: urlVal, id: 'url' as const },
-                { label: 'HTML 实体转义 (HTML Entities)', value: htmlVal, id: 'html' as const },
-                { label: 'Unicode 转义 (Unicode \\u)', value: unicodeVal, id: 'unicode' as const },
-                { label: 'Hex 字符转义 (Hex \\x)', value: hexVal, id: 'hex' as const }
-              ].map(enc => {
-                const isError = !!errors[enc.id];
-                return (
-                  <div 
-                    key={enc.id} 
-                    className={`p-3 border rounded-xl bg-slate-950/80 flex flex-col gap-2 relative group transition-colors ${
-                      isError ? 'border-rose-500 hover:border-rose-400' : 'border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{enc.label}</span>
-                        {isError && (
-                          <span className="text-[9px] bg-rose-950 border border-rose-800 text-rose-400 px-1.5 py-0.5 rounded font-bold">
-                            格式错误/解码失败
-                          </span>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => copy(enc.value, enc.id)}
-                        disabled={!enc.value}
-                        className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                      >
-                        {copiedId === enc.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                    <textarea
-                      rows={2}
-                      className="w-full font-mono text-xs text-emerald-400 bg-slate-900/40 p-2.5 rounded-lg border border-slate-900 focus:outline-none focus:border-primary-500 resize-none leading-relaxed"
-                      value={enc.value}
-                      onChange={e => handleFieldEdit(enc.id, e.target.value)}
-                      placeholder="等待主输入框输入，或直接在此编辑修改..."
-                    />
-                  </div>
-                );
-              })}
-            </div>
-
-          </div>
-        ) : activeTab === 'decoder' ? (
-          // Tab 2: Manual Decoder Studio
-          <div className="flex-1 flex flex-col gap-4 min-h-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-1/2 min-h-[160px]">
-              <div className="flex flex-col min-h-0">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">待解码的字符串</span>
-                <textarea
-                  className="flex-1 w-full p-4 rounded-xl border border-slate-800 bg-slate-950 font-mono text-xs text-slate-300 focus:outline-none focus:border-primary-500 resize-none leading-relaxed transition-all overflow-auto"
-                  value={decodeInput}
-                  onChange={e => setDecodeInput(e.target.value)}
-                  placeholder="请输入需要解码反转义的文本段落..."
-                />
-              </div>
-              <div className="flex flex-col min-h-0">
-                <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">选择解码解析算法</span>
-                <div className="p-4 border border-slate-800 rounded-xl bg-slate-950 flex flex-col justify-between flex-1">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                    {([
-                      { value: 'base64', label: 'Base64 解码' },
-                      { value: 'url', label: 'URL 解码' },
-                      { value: 'html', label: 'HTML 实体还原' },
-                      { value: 'unicode', label: 'Unicode 还原' },
-                      { value: 'hex', label: 'Hex 还原' }
-                    ] satisfies { value: DecodeMode; label: string }[]).map(opt => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setDecodeMode(opt.value)}
-                        className={`py-2 px-3 rounded-lg border text-xs font-semibold text-center transition-all ${decodeMode === opt.value ? 'bg-primary-600 border-primary-600 text-white shadow-md' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    <button
-                      onClick={handleDecode}
-                      disabled={!decodeInput}
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-primary-500 disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <ArrowLeftRight className="w-4 h-4" />
-                      <span>执行反转义解码</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDecodeInput('');
-                        setDecodeOutput('');
-                      }}
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs select-none shadow-md transition-all active:scale-95 border border-slate-700"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span>清空输入</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 flex flex-col min-h-[140px] relative">
-              <span className="font-bold text-slate-400 uppercase tracking-wider text-xs mb-1">反转义解码结果 (Decoded Output)</span>
-              <div className="flex-1 w-full bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400/90 overflow-auto whitespace-pre-wrap break-all leading-relaxed shadow-inner">
-                {decodeOutput || <span className="text-slate-600 italic">等待执行解码结果...</span>}
-              </div>
-              {decodeOutput && (
-                <button
-                  onClick={() => copy(decodeOutput, 'decode-out')}
-                  className="absolute top-8 right-3 p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400 hover:text-slate-200 transition-all shadow-md"
-                >
-                  {copiedId === 'decode-out' ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                </button>
-              )}
-            </div>
-          </div>
-        ) : (
-          // Tab 3: Hex Viewer
-          <div className="flex-1 flex flex-col gap-4 min-h-0">
-            {!hexBytes ? (
-              // Drag and drop box
-              <div
-                onDragOver={handleDragOver}
-                onDrop={handleDrop}
-                className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-800 hover:border-primary-500 rounded-2xl bg-slate-950/40 p-10 text-center transition-all cursor-pointer group min-h-[250px]"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <input
-                  type="file"
-                  className="hidden"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                />
-                <FileUp className="w-12 h-12 text-slate-500 group-hover:text-primary-400 group-hover:scale-110 transition-all mb-4" />
-                <h3 className="text-sm font-bold text-slate-300 group-hover:text-white">拖放任意文件至此，或点击本地上传</h3>
-                <p className="text-xs text-slate-500 mt-2 max-w-sm">
-                  支持图片、文档、压缩包、可执行文件等。100% 纯浏览器本地离线解析，无任何网络上传，安全快捷。
-                </p>
-              </div>
-            ) : (
-              // Main Hex Viewer UI
-              <div className="flex-1 flex flex-col gap-4 min-h-0">
-                {/* Meta details panel */}
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-950 border border-slate-800 rounded-xl text-xs">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-primary-950/60 p-2 rounded-lg border border-primary-900/60 text-primary-400 shrink-0">
-                      <Binary className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-slate-200 truncate max-w-xs md:max-w-md">{hexFile?.name}</h4>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        大小: <span className="font-mono text-slate-400 font-bold">{(hexFile?.size || 0).toLocaleString()} 字节</span> • 
-                        魔数检测类型: <span className="text-emerald-400 font-bold">{detectedMeta.label} ({detectedMeta.mime})</span>
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={sendHexToScratchpad}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] shadow transition-all active:scale-95"
-                    >
-                      送入暂存箱
-                    </button>
-                    <button
-                      onClick={clearHexFile}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[10px] transition-all border border-slate-700"
-                    >
-                      重新上传
-                    </button>
-                  </div>
-                </div>
-
-                {/* Hex Byte Table Area */}
-                <div className="flex-1 bg-slate-950/90 border border-slate-800 rounded-xl overflow-auto p-4 min-h-0 flex flex-col">
-                  {/* Grid Header */}
-                  <div className="flex items-center pb-2 border-b border-slate-800 font-mono text-[10px] font-bold text-slate-500 tracking-wider uppercase shrink-0">
-                    <div className="w-20 shrink-0">偏移量</div>
-                    <div className="flex gap-1.5 px-3 border-r border-slate-800 shrink-0">
-                      {Array.from({ length: 16 }).map((_, i) => (
-                        <span key={i} className="w-6 text-center select-none">{i.toString(16).toUpperCase().padStart(2, '0')}</span>
-                      ))}
-                    </div>
-                    <div className="px-3 grow select-none">ASCII 明文解码</div>
-                  </div>
-
-                  {/* Hex Matrix Lines */}
-                  <div className="flex-1 overflow-y-auto mt-2 space-y-0.5 pr-2 scrollbar-thin">
-                    {renderHexRows()}
-                  </div>
-                </div>
-
-                {/* Pagination Controls */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs flex-none">
-                    <span className="text-slate-400 font-medium">
-                      第 <span className="font-mono text-white font-bold">{hexPage + 1}</span> / <span className="font-mono text-slate-400">{totalPages}</span> 页 
-                      <span className="text-slate-600 ml-2 hidden sm:inline">
-                        (范围: 0x{(hexPage * bytesPerPage).toString(16).toUpperCase()} - 0x{Math.min((hexPage + 1) * bytesPerPage - 1, (hexBytes?.length || 0) - 1).toString(16).toUpperCase()})
-                      </span>
-                    </span>
-
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1">
-                        <button
-                          disabled={hexPage === 0}
-                          onClick={() => setHexPage(p => Math.max(0, p - 1))}
-                          className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <button
-                          disabled={hexPage >= totalPages - 1}
-                          onClick={() => setHexPage(p => Math.min(totalPages - 1, p + 1))}
-                          className="p-1.5 rounded-lg border border-slate-800 hover:border-slate-700 bg-slate-900 text-slate-400 hover:text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-500 text-[10px]">跳转:</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max={totalPages - 1}
-                          value={hexPage}
-                          onChange={e => setHexPage(Number(e.target.value))}
-                          className="w-24 sm:w-32 accent-primary-500 bg-slate-800 rounded-lg cursor-pointer h-1.5"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-      </CardContent>
-    </Card>
-  );
+  const encodings = [
+    { label: 'Base64', value: b64Val, id: 'b64' as const },
+    { label: 'URL 编码', value: urlVal, id: 'url' as const },
+    { label: 'HTML 实体', value: htmlVal, id: 'html' as const },
+    { label: 'Unicode \\u', value: unicodeVal, id: 'unicode' as const },
+    { label: 'Hex \\x', value: hexVal, id: 'hex' as const },
+  ];
+  const encoding = encodings.find(item => item.id === selectedEncoding)!;
+  const clearDecoder = () => { setDecodeInput(''); setDecodeOutput(''); setDecodeError(''); };
+  return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 space-y-4 overflow-auto">
+    <div className="flex flex-wrap gap-2 border-b pb-3">{[{ id: 'cascade' as const, label: '编码与转义' }, { id: 'decoder' as const, label: '解码与还原' }, { id: 'hexViewer' as const, label: '文件字节' }].map(tab => <Button key={tab.id} size="sm" variant={activeTab === tab.id ? 'primary' : 'ghost'} onClick={() => setActiveTab(tab.id)}>{tab.label}</Button>)}</div>
+    {activeTab === 'cascade' ? <div className="space-y-4">
+      <ContentToolbar onSample={() => updateInputAndSync(DEFAULT_INPUT)} onClear={() => updateInputAndSync('')} status="双向实时同步"><label className="flex items-center gap-2 text-sm">输出编码<select aria-label="输出编码" className="rounded-lg border p-2" value={selectedEncoding} onChange={event => setSelectedEncoding(event.target.value as typeof selectedEncoding)}>{encodings.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label><Button size="sm" variant="secondary" onClick={handleMask} disabled={!input} icon={<ShieldAlert className="h-4 w-4" />}>预览脱敏</Button></ContentToolbar>
+      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="原始字符串" value={input} onChange={updateInputAndSync} placeholder="输入原始文本，或编辑右侧编码进行还原。" /><ContentEditor label={`${encoding.label} 输出 · 可编辑`} value={encoding.value} onChange={value => handleFieldEdit(encoding.id, value)} output error={errors[encoding.id] ? '格式错误或解码失败，请检查当前编码。' : ''} placeholder="编辑编码结果，会还原并同步原始文本。" /></div>
+      {selectedEncoding === 'hex' && Array.from(input).some(character => character.charCodeAt(0) > 255) && <p className="text-xs text-amber-700">Hex 转义仅适用于 U+0000–U+00FF；中文请选择 Unicode 转义。</p>}
+      {maskPreview !== null && <div className="tool-panel space-y-3 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold">脱敏预览</span><div className="flex gap-2"><Button size="sm" variant="ghost" onClick={() => setMaskPreview(null)}>取消</Button><Button size="sm" onClick={() => updateInputAndSync(maskPreview)}>应用脱敏结果</Button></div></div><pre className="whitespace-pre-wrap break-all font-mono text-xs">{maskPreview}</pre><p className="text-xs text-slate-500">规则可能误判人名；检查预览后再应用。</p></div>}
+      <details className="tool-panel p-3"><summary className="cursor-pointer text-sm font-medium">比较全部编码 · 每个结果都可编辑</summary><div className="mt-3 grid gap-4 lg:grid-cols-2">{encodings.map(item => <ContentEditor key={item.id} label={item.label} value={item.value} onChange={value => handleFieldEdit(item.id, value)} output error={errors[item.id] ? '格式错误或解码失败。' : ''} />)}</div></details>
+      <details><summary className="cursor-pointer text-xs text-slate-500">从暂存箱载入</summary><div className="mt-2"><ScratchpadPicker label="原始文本" placeholder="从暂存箱载入..." filter={isScratchpadTextLike} onLoad={async content => updateInputAndSync(typeof content === 'string' ? content : await new Blob([content]).text())} /></div></details>
+    </div> : activeTab === 'decoder' ? <div className="space-y-4">
+      <ContentToolbar onSample={() => { setDecodeMode('base64'); setDecodeInput('SGVsbG8sIOS4lueVjCE='); setDecodeOutput(''); setDecodeError(''); }} onClear={clearDecoder}><label className="flex items-center gap-2 text-sm">输入编码<select aria-label="输入编码" className="rounded-lg border p-2" value={decodeMode} onChange={event => { setDecodeMode(event.target.value as DecodeMode); setDecodeOutput(''); setDecodeError(''); }}><option value="base64">Base64</option><option value="url">URL</option><option value="html">HTML 实体</option><option value="unicode">Unicode</option><option value="hex">Hex</option></select></label><Button onClick={handleDecode} disabled={!decodeInput}>解码</Button></ContentToolbar>
+      <div className="grid gap-4 lg:grid-cols-2"><ContentEditor label="待解码字符串" value={decodeInput} onChange={value => { setDecodeInput(value); setDecodeOutput(''); setDecodeError(''); }} error={decodeError} placeholder="粘贴编码内容并选择对应的输入编码。" /><ContentEditor label="还原文本" value={decodeOutput} output placeholder="解码成功后显示原始文本。" onUseResult={() => { updateInputAndSync(decodeOutput); setActiveTab('cascade'); }} /></div>
+    </div> : <div className="space-y-4">
+      {!hexBytes ? <div onDragOver={handleDragOver} onDrop={handleDrop} className="flex min-h-64 flex-col items-center justify-center rounded-xl border-2 border-dashed p-8 text-center"><FileUp className="mb-3 h-8 w-8 text-primary-500" /><h3 className="text-sm font-semibold">拖放文件查看字节</h3><p className="mt-2 text-xs text-slate-500">文件在浏览器本地解析。</p><Button className="mt-4" onClick={() => fileInputRef.current?.click()}>选择文件</Button><input type="file" className="hidden" ref={fileInputRef} onChange={handleFileChange} /></div> : <>
+        <ContentToolbar onClear={clearHexFile} status={`${hexBytes.length.toLocaleString()} 字节 · ${detectedMeta.label}`}><Binary className="h-4 w-4 text-primary-600" /><span className="min-w-0 break-all text-sm font-medium">{hexFile?.name}</span><Button size="sm" variant="secondary" onClick={sendHexToScratchpad}>暂存 Hex</Button></ContentToolbar>
+        <div className="min-h-64 overflow-auto rounded-xl border border-slate-800 bg-slate-950 p-4"><div className="min-w-[760px]"><div className="mb-3 flex gap-6 border-b border-slate-700 pb-2 font-mono text-xs text-slate-400"><span className="w-20">偏移量</span><span className="w-[28rem]">十六进制字节</span><span>ASCII</span></div>{renderHexRows()}</div></div>
+        {totalPages > 1 && <div className="flex flex-wrap items-center justify-between gap-2"><span className="font-mono text-xs text-slate-500">{hexPage + 1} / {totalPages}</span><div className="flex gap-2"><Button size="sm" variant="secondary" disabled={hexPage === 0} onClick={() => setHexPage(page => Math.max(0, page - 1))}>上一页</Button><Button size="sm" variant="secondary" disabled={hexPage >= totalPages - 1} onClick={() => setHexPage(page => Math.min(totalPages - 1, page + 1))}>下一页</Button></div></div>}
+      </>}
+    </div>}
+  </CardContent></Card>;
 };

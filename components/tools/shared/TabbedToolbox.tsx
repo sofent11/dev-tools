@@ -1,6 +1,5 @@
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState, useTransition } from 'react';
-import { LucideIcon } from 'lucide-react';
-import { twMerge } from 'tailwind-merge';
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useState, useTransition, useRef, useId } from 'react';
+import { LucideIcon, ChevronDown, Search, ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useI18n } from '../../../src/i18n';
 
 type EmptyProps = Record<string, never>;
@@ -58,6 +57,11 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
 }) => {
   const { t } = useI18n();
   const [isPending, startTransition] = useTransition();
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [toolSearch, setToolSearch] = useState('');
+  const catalogId = useId();
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const tabLookup = useMemo(() => new Map(tools.map(tool => [tool.id, tool])), [tools]);
   const isValidTab = useCallback((tabId: string | null | undefined) => {
     if (!tabId) return false;
@@ -65,9 +69,11 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   }, [tabLookup]);
 
   const getTabFromLocation = useCallback(() => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash && isValidTab(decodeURIComponent(hash))) {
-      return decodeURIComponent(hash);
+    const rawHash = window.location.hash.replace(/^#/, '');
+    let hash = rawHash;
+    try { hash = decodeURIComponent(rawHash); } catch { /* Fall back to the default tab for invalid encodings. */ }
+    if (hash && isValidTab(hash)) {
+      return hash;
     }
 
     const params = new URLSearchParams(window.location.search);
@@ -114,6 +120,8 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
       setActiveTabId(id);
     });
     syncLocation(id, false);
+    setCatalogOpen(false);
+    setToolSearch('');
   }, [activeTabId, isValidTab, syncLocation]);
 
   useEffect(() => {
@@ -137,101 +145,67 @@ export const TabbedToolbox: React.FC<TabbedToolboxProps> = ({
   const activeTool = tabLookup.get(activeTabId) || tools[0];
   const ActiveComponent = activeTool?.component;
 
+  const activeIndex = tools.findIndex(tool => tool.id === activeTool?.id);
+  const visibleTools = tools.filter(tool => `${t(tool.name)} ${t(tool.description || '')} ${tool.name} ${tool.id}`.toLowerCase().includes(toolSearch.toLowerCase().trim()));
+
+  useEffect(() => {
+    if (!catalogOpen) return;
+    searchRef.current?.focus();
+    const closeOutside = (event: MouseEvent) => {
+      if (!pickerRef.current?.contains(event.target as Node)) setCatalogOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setCatalogOpen(false);
+        pickerRef.current?.querySelector<HTMLButtonElement>('[aria-controls]')?.focus();
+      }
+    };
+    window.addEventListener('mousedown', closeOutside);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('mousedown', closeOutside);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [catalogOpen]);
+
   return (
-    <div className="flex h-full flex-col min-h-0 bg-[var(--surface-canvas)]">
-      <div className="flex-none border-b border-slate-200 bg-white/50 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/50 sticky top-0 z-20">
-        <div className="px-4 py-3 md:hidden">
-          <label className="sr-only" htmlFor="studio-tool-select">{t('选择工具')}</label>
-          <select
-            id="studio-tool-select"
-            value={activeTabId}
-            onChange={event => handleTabSelect(event.target.value)}
-            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900 outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
-          >
-            {tools.map(tool => (
-              <option key={tool.id} value={tool.id}>{t(tool.name)}</option>
-            ))}
-          </select>
-        </div>
-        <div className="hidden items-center justify-between px-6 py-2 overflow-x-auto scrollbar-none md:flex">
-          <div className="flex gap-2 min-w-max py-1">
-            {tools.map(tool => {
-              const isActive = tool.id === activeTabId;
-              const Icon = tool.icon;
-              return (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onMouseEnter={() => tool.component.preload?.()}
-                  onFocus={() => tool.component.preload?.()}
-                  onClick={() => handleTabSelect(tool.id)}
-                  className={twMerge(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 select-none",
-                    isActive
-                      ? "bg-primary-50 text-primary-700 shadow-sm ring-1 ring-primary-100 dark:bg-primary-950/40 dark:text-primary-400 dark:ring-primary-900/50"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/50 dark:hover:text-slate-200"
-                  )}
-                  title={t(tool.description || '')}
-                >
-                  <Icon className={twMerge(
-                    "w-4 h-4 transition-transform duration-200 group-hover:scale-110",
-                    isActive ? "text-primary-600 dark:text-primary-400" : "text-slate-400 dark:text-slate-500"
-                  )} />
-                  <span>{t(tool.name)}</span>
-                </button>
-              );
-            })}
+    <div className="studio-shell flex h-full min-h-0 flex-col" aria-busy={isPending}>
+      <div className="studio-picker" ref={pickerRef}>
+        <div className="studio-picker-bar">
+          <div className="studio-mobile-select md:hidden">
+            <label className="sr-only" htmlFor="studio-tool-select">{t('选择工具')}</label>
+            <select id="studio-tool-select" value={activeTool.id} onChange={event => handleTabSelect(event.target.value)}>
+              {tools.map(tool => <option key={tool.id} value={tool.id}>{t(tool.name)}</option>)}
+            </select>
           </div>
+          <button className="studio-current hidden md:flex" aria-expanded={catalogOpen} aria-controls={catalogId} onClick={() => setCatalogOpen(value => !value)}>
+            <span className="studio-current-icon"><activeTool.icon className="h-4 w-4" /></span>
+            <span><strong>{t(activeTool.name)}</strong><small>{t(activeTool.description || title)}</small></span>
+            <ChevronDown className={`h-4 w-4 shrink-0 ${catalogOpen ? 'rotate-180' : ''}`} />
+          </button>
+          <div className="studio-picker-actions">
+            <span className="studio-page-count">{String(activeIndex + 1).padStart(2, '0')} / {String(tools.length).padStart(2, '0')}</span>
+            <button aria-label={t('上一个工具')} title={t('上一个工具')} disabled={activeIndex <= 0} onClick={() => handleTabSelect(tools[activeIndex - 1].id)}><ArrowLeft className="h-4 w-4" /></button>
+            <button aria-label={t('下一个工具')} title={t('下一个工具')} disabled={activeIndex >= tools.length - 1} onClick={() => handleTabSelect(tools[activeIndex + 1].id)}><ArrowRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+        {catalogOpen && <section className="studio-catalog" id={catalogId} aria-label={t('工作室工具目录')}>
+          <div className="studio-catalog-search"><Search className="h-4 w-4" /><input ref={searchRef} value={toolSearch} onChange={event => setToolSearch(event.target.value)} placeholder={t('查找当前工作室的工具...')} aria-label={t('查找当前工作室的工具')} /><button aria-label={t('关闭工具目录')} onClick={() => setCatalogOpen(false)}><X className="h-4 w-4" /></button></div>
+          <div className="studio-catalog-grid">{visibleTools.map(tool => <button key={tool.id} aria-pressed={tool.id === activeTool.id} onClick={() => { if (tool.id === activeTool.id) setCatalogOpen(false); else handleTabSelect(tool.id); }}>
+            <tool.icon className="h-4 w-4" /><span><strong>{t(tool.name)}</strong><small>{t(tool.description || '')}</small></span>
+          </button>)}</div>
+          {!visibleTools.length && <p className="p-5 text-center text-sm text-slate-500">{t('未找到相关工具')}</p>}
+        </section>}
+      </div>
+      <div className="studio-content flex-1 min-h-0 overflow-y-auto">
+        <div className="studio-page h-full min-h-0 flex flex-col" key={activeTool.id}>
+          {isPending && <div className="workflow-notice" role="status">{t('正在加载')} {t(activeTool.name)}...</div>}
+          {ActiveComponent ? <Suspense fallback={
+            <div className="workspace-loading"><span className="mr-3 h-5 w-5 animate-spin rounded-full border-2 border-primary-500 border-t-transparent" />{t('正在加载')} {t(activeTool.name)}...</div>
+          }><ActiveComponent /></Suspense> : <div className="workspace-loading">{t('未加载工具组件')}</div>}
         </div>
       </div>
-
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
-        <div className="h-full min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col">
-          <details className="mb-4 flex-none rounded-lg border border-slate-100 bg-slate-50/50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/50 md:hidden">
-            <summary className="cursor-pointer font-semibold text-slate-900 dark:text-slate-100">
-              {t(activeTool.name)}
-            </summary>
-            <p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">
-              {t(description)} · {t(activeTool.description || activeTool.name)}
-            </p>
-          </details>
-          <div className="mb-4 hidden flex-none rounded-xl border border-slate-100 bg-slate-50/50 p-4 dark:border-slate-800 dark:bg-slate-900/50 md:block">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary-500" />
-              {t(title)} • {t(activeTool.name)}
-            </h2>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t(description)} — {t('当前工具')}：{t(activeTool.description || activeTool.name)}
-            </p>
-          </div>
-
-          <div className="flex-1 min-h-0">
-            {isPending && (
-              <div className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-                {t('正在加载')} {t(activeTool.name)}...
-              </div>
-            )}
-            {ActiveComponent ? (
-              <Suspense
-                fallback={
-                  <div className="flex h-full min-h-[25rem] items-center justify-center rounded-xl border border-slate-200/60 bg-white/50 dark:border-slate-800/60 dark:bg-slate-900/50 text-sm font-medium text-slate-500 backdrop-blur-sm">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-500 border-t-transparent" />
-                      <span>{t('正在加载')} {t(activeTool.name)}...</span>
-                    </div>
-                  </div>
-                }
-              >
-                <ActiveComponent />
-              </Suspense>
-            ) : (
-              <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900 text-sm text-slate-400">
-                {t('未加载工具组件')}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <span className="sr-only">{t(description)}</span>
     </div>
   );
 };

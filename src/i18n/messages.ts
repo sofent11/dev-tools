@@ -1,3 +1,8 @@
+import { CONTENT_UX_MESSAGES } from './contentUx';
+import { repositoryUxMessages } from './repositoryUx';
+import { utilityUx } from './utilityUx';
+import { MEDIA_UX_MESSAGES } from './mediaUx';
+
 export type Locale = 'zh-CN' | 'en-US';
 
 export const LOCALES: { code: Locale; label: string; shortLabel: string }[] = [
@@ -8,7 +13,14 @@ export const LOCALES: { code: Locale; label: string; shortLabel: string }[] = [
 export const DEFAULT_LOCALE: Locale = 'zh-CN';
 
 const enExact: Record<string, string> = {
+  ...CONTENT_UX_MESSAGES,
+  ...repositoryUxMessages,
+  ...utilityUx,
+  ...MEDIA_UX_MESSAGES,
   '程序员百宝箱': 'Dev Toolbox',
+  '工具目录': 'Tool catalog',
+  '搜索工具': 'Search tools',
+  '暂存箱': 'Scratchpad',
   '个开发效率工具': 'developer tools',
   '搜索工具...': 'Search tools...',
   '未找到相关工具': 'No matching tools found',
@@ -25,7 +37,6 @@ const enExact: Record<string, string> = {
   '临时保存文本/代码，打通所有 Studio': 'Temporarily save text and code across all studios',
   '常规模式': 'Normal mode',
   '开启打包多选': 'Select multiple for ZIP',
-  '取消': 'Cancel',
   '全选': 'Select all',
   '暂存箱暂无内容': 'The scratchpad is empty',
   '您可以在 Mock数据、图片转换 等工具中直接点击“送入暂存箱”将数据保存到此处。': 'Use “Send to scratchpad” in tools such as mock data or image conversion to save data here.',
@@ -35,7 +46,6 @@ const enExact: Record<string, string> = {
   '复制': 'Copy',
   '下载': 'Download',
   '删除': 'Delete',
-  '清空': 'Clear',
   '暂存': 'Stash',
   '敏感': 'Sensitive',
   '自动过期': 'auto-expiring',
@@ -389,7 +399,6 @@ const enExact: Record<string, string> = {
   'Markdown 预览': 'Markdown Preview',
   'Markdown 转 HTML': 'Markdown to HTML',
   'Markdown 转 HTML 实时预览': 'Live Markdown to HTML preview',
-  '实时预览': 'Live preview',
   'HTML 转 Markdown': 'HTML to Markdown',
   'HTML 片段转 Markdown': 'HTML snippet to Markdown',
   'HTML 格式化/压缩器': 'HTML Formatter / Minifier',
@@ -491,7 +500,6 @@ const enExact: Record<string, string> = {
 
   '送入暂存箱': 'Send to Scratchpad',
   '暂存 HTML': 'Stash HTML',
-  '复制结果': 'Copy result',
   'Copy结果': 'Copy result',
   '复制优化代码': 'Copy optimized code',
   'Copy优化代码': 'Copy optimized code',
@@ -503,8 +511,6 @@ const enExact: Record<string, string> = {
   '在不同命名规范之间转换文本（驼峰、下划线、连字符等）。': 'Convert text between naming conventions such as camelCase, snake_case, and kebab-case.',
   '轻量格式化 HTML，或压缩基础空白chars。': 'Lightly format HTML or minify basic whitespace characters.',
   '轻量格式化 HTML，或压缩基础空白字符。': 'Lightly format HTML or minify basic whitespace characters.',
-  '压缩': 'Minify',
-  '格式化': 'Format',
 
   '解析两段 JSON，忽略格式差异并按键值树展示增删改。支持点击节点实时双向合并及导出 RFC 6902 Patch 补丁。': 'Parse two JSON documents, ignore formatting differences, show add/remove/change nodes in a key tree, support two-way merge, and export RFC 6902 Patch operations.',
   '左侧 JSON': 'Left JSON',
@@ -518,7 +524,6 @@ const enExact: Record<string, string> = {
 
   '正则表达式测试': 'Regex Tester',
   '实时测试 JS 正则表达式匹配结果。': 'Test JavaScript regular expression matches in real time.',
-  '测试文本': 'Test text',
   '匹配结果': 'Match results',
   '个匹配': 'matches',
 
@@ -723,7 +728,6 @@ const enExact: Record<string, string> = {
   '定制文字': 'Custom text',
   '艺术字形选择': 'Artistic font selection',
   '款可用': 'available',
-  '全部': 'All',
   '高雅': 'Elegant',
   '手写': 'Handwritten',
   '卡通': 'Cute',
@@ -732,8 +736,6 @@ const enExact: Record<string, string> = {
   '增加线条粗细以满足工艺最小线宽要求': 'Increase stroke thickness to meet minimum manufacturing line width.',
   '自动压缩字距以连通': 'Auto-compress letter spacing for connectivity',
   '最大压缩量': 'Maximum compression',
-  '桥接最大间隙': 'Maximum bridge gap',
-  '最小连桥宽度': 'Minimum bridge width',
   '首饰厚度 (Thickness)': 'Jewelry thickness',
   '首饰连接挂耳 / 吊坠孔': 'Jewelry bail / pendant hole',
   '首饰连接挂件 & 一体化底框': 'Jewelry connector & integrated backing',
@@ -741,7 +743,6 @@ const enExact: Record<string, string> = {
   '底框底板样式': 'Backing plate style',
   '文字材质 (Text)': 'Text material',
   '单位换算 (units/mm)': 'Unit scale (units/mm)',
-  '扁平化误差': 'Flattening tolerance',
   '3D 立体模型参数': '3D model parameters',
   '矢量图纸导出 (2D CAD)': 'Vector drawing export (2D CAD)',
   '三维实体导出 (3D Print)': 'Solid model export (3D Print)',
@@ -752,7 +753,6 @@ const enExact: Record<string, string> = {
   '字节': 'bytes',
   '字号 (Size)': 'Font size',
   '字距 (Letter Spacing)': 'Letter spacing',
-  '应用字距': 'Applied letter spacing',
   '尚未开始。': 'Not started yet.',
   '联动分屏模式 • 左侧 2D 矢量平面 (可拖拽旋转) • 右侧 3D 金属模型 (拖拽旋转)': 'Linked split view • left 2D vector plane (drag to rotate) • right 3D metal model (drag to rotate)',
   '智能几何练习': 'Smart Geometry Practice',
@@ -817,7 +817,6 @@ const enExact: Record<string, string> = {
   '对称分组加密': 'Symmetric Block Encryption',
 
   '重试': 'Retry',
-  '预览': 'Preview',
   '生成': 'Generate',
   '刷新': 'Refresh',
   '数量': 'Count',
@@ -867,8 +866,6 @@ const enExact: Record<string, string> = {
   '统计chars数、字数、行数等信息。': 'Count characters, words, lines, and other text metrics.',
   'chars总数': 'Total characters',
   '非空chars': 'Non-space characters',
-  '单词数': 'Words',
-  '行数': 'Lines',
   'Text差异比对分析': 'Text diff analysis',
   '支持 Side-by-Side 分栏与 Unified 合并双布局切换，配备智能单词/chars级 (Word-level) 高对比度行内增删高亮，经长Text Chunk 渲染优化。': 'Switch between side-by-side and unified layouts, with high-contrast inline word/character diff highlights optimized for long text chunks.',
   'React 代码示例': 'React code example',
@@ -880,8 +877,6 @@ const enExact: Record<string, string> = {
   '单栏合并 (Unified)': 'Unified',
   '行': 'Line',
   '在浏览本地把 HTML 片段转换为 Markdown。': 'Convert HTML snippets to Markdown locally in the browser.',
-  'HTML 输入': 'HTML input',
-  'Markdown 输出': 'Markdown output',
 
   '把任意File转换为 Data URL 和纯 Base64，All在浏览内完成。': 'Convert any file to a Data URL or plain Base64 entirely in the browser.',
   '选择一个文件': 'Choose a file',
@@ -967,7 +962,6 @@ const enExact: Record<string, string> = {
 
   '文件信息': 'File information',
   '本地读取文件元信息，可按需计算 SHA-256。': 'Read file metadata locally and calculate SHA-256 on demand.',
-  '计算 SHA-256': 'Calculate SHA-256',
   '选择File，不会Upload到服务': 'Choose a file; it will not be uploaded',
   '文件名提取': 'Filename extraction',
   '从路径、URL 或批量文本中提取文件名、主名和扩展名。': 'Extract filenames, base names, and extensions from paths, URLs, or batch text.',
@@ -1084,32 +1078,23 @@ const enExact: Record<string, string> = {
   '选择 STL 文件': 'Choose STL file',
   '支持 ASCII / 二进制 STL': 'Supports ASCII and binary STL',
   '选择 STL 文件开始': 'Choose an STL file to start',
-  '目标三角面数上限': 'Target triangle limit',
   '150,000 面': '150,000 faces',
-  '焊接容差': 'Weld tolerance',
   '0 为脚本同款精确去重': '0 uses exact de-duplication like the script',
   '降面误差': 'Decimation error',
-  'meshoptimizer 相对误差': 'meshoptimizer relative error',
   '只保留最大连通块': 'Keep only the largest connected component',
   '清除扫描或生成模型里常见的小碎片。': 'Remove small fragments common in scanned or generated models.',
   '超过目标时自动降面': 'Auto-decimate when above target',
   '使用 meshoptimizer，结果可能受原模型拓扑限制。': 'Uses meshoptimizer; results may be limited by the original topology.',
-  '尝试补小孔': 'Try filling small holes',
   '对齐 Trimesh fill_holes 的轻量范围，仅补单三角孔和单四边孔。': 'A lightweight Trimesh fill_holes-style pass that only fills single-triangle and single-quad holes.',
-  '添加圆形底座': 'Add circular base',
   '按 Python 脚本同款比例生成，直接合并到 STL。': 'Generated with the same proportions as the Python script and merged directly into the STL.',
   '预览渲染材质': 'Preview render material',
   '开启坏面霓虹诊断模式': 'Enable neon bad-face diagnostic mode',
   '自动在 3D 视口中以高对比度亮红线标出未闭合边界与缺陷缝隙。': 'Automatically marks open boundaries and defect seams in the 3D viewport with high-contrast red lines.',
-  '开启壁厚热力图': 'Enable wall-thickness heatmap',
   '在 Worker 中采样估算薄壁风险：红色低于阈值，橙色接近阈值，绿色相对安全。': 'Estimate thin-wall risk in a Worker: red is below threshold, orange is near threshold, and green is relatively safe.',
   '壁厚分析模式': 'Wall-thickness analysis mode',
   '壁厚风险阈值': 'Wall-thickness risk threshold',
   '环境光预设': 'Environment light preset',
-  '柔和阴影': 'Soft shadows',
   '为 PBR 预览启用更有空间感的阴影表现。': 'Enable more spatial shadows for the PBR preview.',
-  '开始处理': 'Start processing',
-  '模型预览与报告': 'Model preview and report',
   '可旋转查看修复结果；报告展示拓扑风险，不把轻量清理误报为完整修复。': 'Rotate to inspect the repaired result; the report shows topology risks and does not present lightweight cleanup as full repair.',
   '等待 STL 模型': 'Waiting for STL model',
   '上传并处理后会显示可旋转预览': 'Upload and process to show a rotatable preview',
@@ -1119,26 +1104,15 @@ const enExact: Record<string, string> = {
   '孔数量': 'Hole count',
   '少': 'Few',
   '大孔': 'Large holes',
-  '标准': 'Standard',
-  '均衡': 'Balanced',
   '多': 'Many',
-  '密集': 'Dense',
-  '厚度': 'Thickness',
-  '平面': 'Flat',
-  '细': 'Thin',
   '轻量': 'Lightweight',
   '稳妥': 'Robust',
-  '粗': 'Thick',
   '强烈': 'Strong',
   '混合': 'Mixed',
-  '镂空': 'Lattice',
   '原模': 'Original model',
   'No.一版Generate Voronoi 风格表面杆件，不做实体布尔挖孔；Export结果请在打印前复检。': 'First version generates Voronoi-style surface struts without solid boolean cutouts; review exported results before printing.',
-  '生成镂空': 'Generate lattice',
-  '镂空预览与报告': 'Lattice preview and report',
   '可旋转查看原模与镂空结果；参数变化后Regenerate即可更新Export。': 'Rotate to inspect the original and lattice result; regenerate after parameter changes to update the export.',
   '上传并生成后会显示可旋转镂空预览': 'Upload and generate to show a rotatable lattice preview',
-  '暂无生成报告': 'No generation report yet',
   '完成处理后会列出采样点、杆件数、输出面数和导出风险。': 'After processing, sampled points, strut count, output faces, and export risks will be listed.',
 
   '移动': 'Move',
@@ -1247,7 +1221,6 @@ const enExact: Record<string, string> = {
   '🇦🇺 悉尼 (Australia/Sydney)': 'Sydney (Australia/Sydney)',
   '🌐 协调世界时 (UTC)': 'Coordinated Universal Time (UTC)',
   '请输入文字...': 'Enter text...',
-  '黄金 (Gold)': 'Gold',
   '白金 (Platinum)': 'Platinum',
   '玫瑰金 (Rose)': 'Rose gold',
   '纯银 (Silver)': 'Silver',
@@ -1269,13 +1242,10 @@ const enExact: Record<string, string> = {
   '🥈 抛光白银 (Silver PBR)': 'Polished Silver (Silver PBR)',
   '🍀 冰种温润翡翠 (Jade SSS)': 'Warm Ice Jade (Jade SSS)',
   '💎 钢化玻璃 (Glass Refract)': 'Tempered Glass (Glass Refract)',
-  '快速采样 (推荐)': 'Fast sampling (recommended)',
   '精细采样 (较慢)': 'Precise sampling (slower)',
   '精Thin采样 (较慢)': 'Precise sampling (slower)',
-  '明亮工作室': 'Bright studio',
   '暖金展示台': 'Warm gold display',
   '冷蓝工程灯': 'Cool blue engineering light',
-  '深色高对比': 'Dark high contrast',
   '基准实体不可勾选': 'Base solid cannot be selected',
   '勾选作为布尔工具': 'Select as boolean tool',
   '默认风格': 'Default style',
@@ -1430,6 +1400,8 @@ const reverseExact = Object.fromEntries(
   Object.entries(enExact).map(([zh, en]) => [en, zh]),
 ) as Record<string, string>;
 
+const enExactEntries = Object.entries(enExact).sort((a, b) => b[0].length - a[0].length);
+
 const hasHan = (value: string) => /[\p{Script=Han}]/u.test(value);
 
 const preserveOuterWhitespace = (source: string, translated: string) => {
@@ -1452,7 +1424,7 @@ export const translateText = (value: string, locale: Locale): string => {
 
   let translated = value;
   let matchedKnownUiPhrase = false;
-  for (const [source, replacement] of Object.entries(enExact).sort((a, b) => b[0].length - a[0].length)) {
+  for (const [source, replacement] of enExactEntries) {
     if (translated.includes(source)) {
       translated = translated.split(source).join(replacement);
       matchedKnownUiPhrase = true;

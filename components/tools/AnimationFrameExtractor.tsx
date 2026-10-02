@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
-  FileVideo, 
   Download, 
   Play, 
   Pause, 
@@ -20,6 +19,7 @@ import { Button } from '../ui/Button';
 import { loadScriptWithCache, type RemoteRuntimeEvent } from './shared/cdnCacheManager';
 import { useScratchpadStore } from './shared/scratchpadStore';
 import { notifyToast } from './shared/notifyToast';
+import { FileDropzone, WorkflowSteps } from './shared/WorkflowUi';
 
 const SCRIPT_URLS = {
   lottie: 'https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js',
@@ -317,8 +317,8 @@ export const AnimationFrameExtractor: React.FC = () => {
   };
 
   // Main file uploader parser
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = e.target.files?.[0];
+  const handleFileChange = async (files: File[]) => {
+    const uploadedFile = files[0];
     if (!uploadedFile) return;
 
     cleanUpPlayer();
@@ -693,22 +693,8 @@ export const AnimationFrameExtractor: React.FC = () => {
       />
       <CardContent className="flex-1 flex flex-col gap-6 overflow-auto min-h-0">
         
-        {/* Upload Zone */}
-        <div className="relative flex-none p-6 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-xl bg-slate-50 dark:bg-slate-900/40 flex flex-col items-center justify-center gap-3 text-center hover:bg-slate-100 dark:hover:bg-slate-900/60 transition-colors shadow-xs">
-          <div className="p-3 bg-white dark:bg-slate-950 rounded-full shadow-md">
-            <FileVideo className="w-8 h-8 text-primary-500 animate-bounce" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">上传 GIF / APNG / WebP 动图 或 Lottie JSON 文件</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">本地读取，完全保护个人创意安全，无需传输服务器</p>
-          </div>
-          <input
-            type="file"
-            accept=".gif,.apng,.png,.webp,.json,image/gif,image/png,image/webp,application/json"
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            onChange={handleFileChange}
-          />
-        </div>
+        <WorkflowSteps steps={['选择动画', '浏览时间轴', '导出帧']} active={frameBatch ? 2 : totalFrames ? 1 : 0} />
+        <FileDropzone accept=".gif,.apng,.png,.webp,.json,image/gif,image/png,image/webp,application/json" fileName={file?.name} disabled={isExtracting || !!frameBatch} onFiles={handleFileChange} title="选择 GIF / APNG / WebP / Lottie 文件" hint="本地提取动画帧，支持时间轴预览和 ZIP 导出" />
 
         {/* Dynamic loading states */}
         {isExtracting && (
@@ -778,6 +764,7 @@ export const AnimationFrameExtractor: React.FC = () => {
 
                 <div className="flex items-center gap-3">
                   <input
+                    aria-label="动画时间轴"
                     type="range"
                     min="0"
                     max={totalFrames - 1}
@@ -787,6 +774,14 @@ export const AnimationFrameExtractor: React.FC = () => {
                   />
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>时间位置 <strong data-i18n-skip className="font-mono">{(frames.length ? frames.slice(0, currentFrame).reduce((sum, frame) => sum + frame.delayMs, 0) / 1000 : currentFrame / fps).toFixed(2)} s</strong></span>
+                  <label className="flex items-center gap-2">跳转到帧<input aria-label="跳转到帧" type="number" min={1} max={totalFrames} className="w-20 rounded border border-slate-200 bg-transparent px-2 py-1 font-mono" value={currentFrame + 1} onChange={event => {
+                    const next = Math.max(0, Math.min(totalFrames - 1, Math.round(Number(event.target.value) || 1) - 1));
+                    setIsPlaying(false); setCurrentFrame(next);
+                    if (fileType === 'lottie') renderLottieFrame(next); else renderGifFrame(next);
+                  }} /></label>
+                </div>
                 {/* Control Panel Buttons */}
                 <div className="flex justify-center items-center gap-3 pt-2">
                   <button

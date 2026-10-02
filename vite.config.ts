@@ -14,9 +14,11 @@ export default defineConfig(() => {
           tailwindcss(),
       ],
       resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
-        }
+        alias: [
+          { find: '@', replacement: path.resolve(__dirname, '.') },
+          // Use the modular browser-compatible entry so ZIP and PDF share pako.
+          { find: /^jszip$/, replacement: path.resolve(__dirname, 'node_modules/jszip/lib/index.js') },
+        ]
       },
       build: {
         chunkSizeWarningLimit: 650,

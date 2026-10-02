@@ -2,9 +2,17 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_LOCALE, LOCALES, type Locale, translateText } from './messages';
 import { I18nContext, type I18nContextValue } from './context';
 
-const textNodeOriginals = new WeakMap<Text, string>();
-const elementAttributeOriginals = new WeakMap<Element, Map<string, string>>();
-const optionTextOriginals = new WeakMap<HTMLOptionElement, string>();
+type LocalizedValue = { original: string; rendered: string };
+const textNodeOriginals = new WeakMap<Text, LocalizedValue>();
+const elementAttributeOriginals = new WeakMap<Element, Map<string, LocalizedValue>>();
+const optionTextOriginals = new WeakMap<HTMLOptionElement, LocalizedValue>();
+
+// React can reuse a DOM node for a new value. Only reuse its source text while
+// the DOM still contains our last translation or that source itself.
+const resolveLocalizedValue = (value: string, previous: LocalizedValue | undefined, locale: Locale): LocalizedValue => {
+  const original = previous && (value === previous.original || value === previous.rendered) ? previous.original : value;
+  return { original, rendered: hasHan(original) ? translateText(original, locale) : original };
+};
 const TRANSLATABLE_ATTRIBUTES = ['aria-label', 'aria-valuetext', 'placeholder', 'title'];
 const I18N_SCOPE_SELECTOR = '[data-i18n-root], main';
 const TEXT_SKIP_SELECTOR = [
@@ -55,73 +63,34 @@ const shouldSkipAttributeElement = (element: Element | null) =>
   Boolean(element?.closest(ATTRIBUTE_SKIP_SELECTOR));
 
 const localizeTextNode = (node: Text, locale: Locale) => {
-  const parent = node.parentElement;
-  if (!parent || shouldSkipTextElement(parent)) return;
-  if (locale === 'zh-CN' && hasHan(node.data)) {
-    textNodeOriginals.set(node, node.data);
-    return;
-  }
-
-  const existingOriginal = textNodeOriginals.get(node);
-  const original = existingOriginal ?? node.data;
-  if (!hasHan(original)) return;
-
-  if (!existingOriginal) {
-    textNodeOriginals.set(node, original);
-  }
-
-  const next = locale === 'zh-CN' ? original : translateText(original, locale);
-  if (node.data !== next) node.data = next;
+  if (!node.parentElement || shouldSkipTextElement(node.parentElement)) return;
+  const next = resolveLocalizedValue(node.data, textNodeOriginals.get(node), locale);
+  textNodeOriginals.set(node, next);
+  if (node.data !== next.rendered) node.data = next.rendered;
 };
 
 const localizeElementAttributes = (element: Element, locale: Locale) => {
   if (shouldSkipAttributeElement(element)) return;
-
+  const originals = elementAttributeOriginals.get(element) ?? new Map<string, LocalizedValue>();
+  elementAttributeOriginals.set(element, originals);
   for (const attr of TRANSLATABLE_ATTRIBUTES) {
     const value = element.getAttribute(attr);
-    const originals = elementAttributeOriginals.get(element);
-    const original = originals?.get(attr) ?? value;
-    if (!original) continue;
-
-    if (locale === 'zh-CN' && hasHan(value)) {
-      const nextOriginals = originals ?? new Map<string, string>();
-      nextOriginals.set(attr, value);
-      elementAttributeOriginals.set(element, nextOriginals);
-      continue;
-    }
-
-    if (!hasHan(original)) continue;
-
-    if (!originals?.has(attr)) {
-      const nextOriginals = originals ?? new Map<string, string>();
-      nextOriginals.set(attr, original);
-      elementAttributeOriginals.set(element, nextOriginals);
-    }
-
-    const next = locale === 'zh-CN' ? original : translateText(original, locale);
-    if (value !== next) element.setAttribute(attr, next);
+    if (value === null) { originals.delete(attr); continue; }
+    const next = resolveLocalizedValue(value, originals.get(attr), locale);
+    originals.set(attr, next);
+    if (value !== next.rendered) element.setAttribute(attr, next.rendered);
   }
 };
 
 const localizeOptionText = (element: Element, locale: Locale) => {
-  if (!(element instanceof HTMLOptionElement)) return;
-
+  if (!(element instanceof HTMLOptionElement) || shouldSkipTextElement(element)) return;
   const value = element.textContent ?? '';
-  if (locale === 'zh-CN' && hasHan(value)) {
-    optionTextOriginals.set(element, value);
-    return;
+  const next = resolveLocalizedValue(value, optionTextOriginals.get(element), locale);
+  optionTextOriginals.set(element, next);
+  if (value !== next.rendered) {
+    if (element.childNodes.length === 1 && element.firstChild instanceof Text) element.firstChild.data = next.rendered;
+    else element.textContent = next.rendered;
   }
-
-  const existingOriginal = optionTextOriginals.get(element);
-  const original = existingOriginal ?? value;
-  if (!hasHan(original)) return;
-
-  if (!existingOriginal) {
-    optionTextOriginals.set(element, original);
-  }
-
-  const next = locale === 'zh-CN' ? original : translateText(original, locale);
-  if (element.textContent !== next) element.textContent = next;
 };
 
 const walkAndLocalize = (root: ParentNode, locale: Locale) => {

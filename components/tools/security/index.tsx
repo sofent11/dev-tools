@@ -15,8 +15,8 @@ export const BasicAuthTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="Basic Auth 生成器" description="生成 HTTP Basic Authentication Header，纯本地文本处理。" />
-      <CardContent className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-5">
-        <div className="grid gap-4 md:grid-cols-2">
+      <CardContent className="grid gap-5 overflow-auto lg:grid-cols-2 content-start">
+        <div className="tool-panel p-5 space-y-4">
           <div>
             <FieldLabel>用户名</FieldLabel>
             <Input value={username} onChange={event => setUsername(event.target.value)} />
@@ -26,13 +26,12 @@ export const BasicAuthTool: React.FC = () => {
             <Input type="password" value={password} onChange={event => setPassword(event.target.value)} />
           </div>
         </div>
-        <div>
-          <FieldLabel>Header</FieldLabel>
+        <div className="tool-panel p-5 space-y-4">
+          <FieldLabel hint="可直接用于 HTTP 请求">Authorization Header</FieldLabel>
           <div className="tool-panel break-all p-4 font-mono text-sm text-slate-900">{header}</div>
-        </div>
         <Button className="self-start" icon={copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} onClick={() => copy(header)}>
           {copied ? '已复制' : '复制 Header'}
-        </Button>
+        </Button></div>
       </CardContent>
     </Card>
   );
@@ -108,7 +107,7 @@ const parsePem = (pem: string): PemParseResult => {
     algorithm = 'RSA';
     blocksCount = rsaMatches.length;
     body = rsaMatches[0].replace(/-----BEGIN RSA PRIVATE KEY-----|-----END RSA PRIVATE KEY-----|\s/g, '');
-    
+
     try {
       const binary = atob(body);
       const bytes = new Uint8Array(binary.length);
@@ -149,7 +148,7 @@ const parsePem = (pem: string): PemParseResult => {
     algorithm = 'ECDSA / EC';
     blocksCount = ecMatches.length;
     body = ecMatches[0].replace(/-----BEGIN EC PRIVATE KEY-----|-----END EC PRIVATE KEY-----|\s/g, '');
-    
+
     keySize = 256;
     if (body.length > 500) keySize = 384;
     if (body.length > 800) keySize = 521;
@@ -266,32 +265,32 @@ export const CertificateParserTool: React.FC = () => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader title="证书/密钥文本解析与一致性校验" description="解析 PEM 格式证书、RSA/EC 私钥结构，并支持 SSL 数字证书公私钥对一致性离线断言配对校验。" />
-      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[1fr_24rem]">
+      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-[1.3fr_1fr]">
         <div className="flex min-h-0 flex-col gap-4">
           <div className="flex-1 flex min-h-0 flex-col gap-2">
             <FieldLabel hint="支持 CERTIFICATE, CERTIFICATE REQUEST 等 PEM 文本">X.509 公钥证书 (Certificate PEM)</FieldLabel>
-            <Textarea className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" value={pem} onChange={event => setPem(event.target.value)} />
+            <Textarea className="min-h-64 flex-1 resize-y font-mono text-xs leading-5" value={pem} onChange={event => setPem(event.target.value)} />
           </div>
-          <div className="flex-1 flex min-h-0 flex-col gap-2">
+          <details className="tool-panel p-4" open={!!privateKeyPem || undefined}><summary className="cursor-pointer text-sm font-semibold text-slate-600">可选：校验证书与私钥配对</summary><div className="flex min-h-0 flex-col gap-2 mt-4">
             <FieldLabel hint="支持 RSA / PKCS#8 格式私钥对配对一致性校验">配套私钥 (Private Key PEM - 用于配对验证)</FieldLabel>
-            <Textarea 
-              className="min-h-0 flex-1 resize-none font-mono text-xs leading-5" 
-              value={privateKeyPem} 
-              onChange={event => setPrivateKeyPem(event.target.value)} 
+            <Textarea
+              className="min-h-40 resize-y font-mono text-xs leading-5"
+              value={privateKeyPem}
+              onChange={event => setPrivateKeyPem(event.target.value)}
               placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...粘贴配套私钥块以验证与证书公钥是否匹配...&#10;-----END RSA PRIVATE KEY-----"
             />
-          </div>
+          </div></details>
         </div>
         <div className="app-scrollbar overflow-auto space-y-3 pr-1">
           {matchStatus !== 'none' && (
             <div className={`p-4 rounded-xl border ${
-              matchStatus === 'matched' 
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400' 
+              matchStatus === 'matched'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/20 dark:border-emerald-900/40 dark:text-emerald-400'
                 : 'border-rose-200 bg-rose-50 text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400'
             }`}>
               <div className="font-bold text-xs mb-1.5 uppercase">证书配对诊断</div>
               <div className="text-[11px] leading-relaxed font-semibold font-mono">
-                {matchStatus === 'matched' 
+                {matchStatus === 'matched'
                   ? '🟢 配对成功：当前 SSL 数字证书的公钥 Modulus 与所填 PEM 私钥完全配对吻合！可安全部署于网络服务器。'
                   : '❌ 诊断失败：当前 SSL 数字证书的公钥与所填私钥不一致，无法形成完整的 TLS 加密通道通道！'
                 }

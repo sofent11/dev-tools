@@ -6,6 +6,7 @@ import { Button } from '../../ui/Button';
 import { CodePanel, FieldLabel, Input, TabButton, Tabs, Textarea } from '../../ui/ToolUi';
 import { sanitizeSvgMarkup } from '../shared/sanitizeMarkup';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
+import { useI18n } from '../../../src/i18n';
 
 const mimeRows = [
   ['.html', 'text/html'],
@@ -31,15 +32,17 @@ const mimeRows = [
 ];
 
 export const MimeTypeTool: React.FC = () => {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
+  const [family, setFamily] = useState('all');
+  const { copied, copy } = useCopyToClipboard();
 
   const rows = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    if (!normalized) return mimeRows;
     return mimeRows.filter(([extension, mime]) =>
-      extension.toLowerCase().includes(normalized) || mime.toLowerCase().includes(normalized),
+      (family === 'all' || mime.startsWith(`${family}/`)) && (!normalized || extension.toLowerCase().includes(normalized) || mime.toLowerCase().includes(normalized)),
     );
-  }, [query]);
+  }, [query, family]);
 
   return (
     <Card className="h-full flex flex-col">
@@ -49,14 +52,9 @@ export const MimeTypeTool: React.FC = () => {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input className="pl-9" placeholder=".svg / json / image" value={query} onChange={event => setQuery(event.target.value)} />
         </div>
-        <div className="grid content-start gap-2 overflow-auto md:grid-cols-2">
-          {rows.map(([extension, mime]) => (
-            <div key={`${extension}-${mime}`} className="tool-panel flex items-center justify-between gap-3 p-3">
-              <code className="text-sm font-semibold text-slate-800">{extension}</code>
-              <code className="break-all text-right text-sm text-primary-700">{mime}</code>
-            </div>
-          ))}
-        </div>
+        <div className="flex flex-wrap gap-2">{[['all','全部'],['text','文本'],['image','图片'],['application','应用'],['video','视频'],['audio','音频']].map(([value,label]) => <Button key={value} size="sm" variant={family === value ? 'primary' : 'secondary'} onClick={() => setFamily(value)}>{label}</Button>)}</div>
+        <div className="flex flex-wrap justify-between items-center gap-2 text-xs text-slate-500"><span>{rows.length} 个匹配类型</span>{copied && <span role="status">MIME 已复制</span>}</div>
+        <div className="tool-panel overflow-auto"><table className="w-full text-left text-sm"><thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="p-3">扩展名</th><th className="p-3">Content-Type</th><th className="p-3"><span className="sr-only">复制</span></th></tr></thead><tbody>{rows.map(([extension,mime]) => <tr key={extension} className="border-t border-slate-100"><td className="p-3 font-mono">{extension}</td><td className="p-3 font-mono break-all">{mime}</td><td className="p-3 text-right"><Button size="sm" variant="ghost" onClick={() => copy(mime)} aria-label={`${t('复制')} ${mime}`} icon={<Copy className="h-4 w-4" />}>复制</Button></td></tr>)}</tbody></table>{!rows.length && <div className="p-8 text-center text-sm text-slate-500">没有匹配类型，尝试扩展名或 MIME 关键词。</div>}</div>
       </CardContent>
     </Card>
   );
@@ -75,34 +73,21 @@ const encodeSvg = (svg: string) =>
     .replace(/>/g, '%3E');
 
 export const SvgToCssTool: React.FC = () => {
-  const [svg, setSvg] = useState('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#2563eb"/></svg>');
+  const [svg, setSvg] = useState('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="#173b33"/></svg>');
+  const [mode, setMode] = useState<'background' | 'mask'>('background');
   const { copied, copy } = useCopyToClipboard();
   const encoded = encodeSvg(svg);
-  const background = `background-image: url("data:image/svg+xml,${encoded}");`;
-  const mask = `mask-image: url("data:image/svg+xml,${encoded}");\n-webkit-mask-image: url("data:image/svg+xml,${encoded}");`;
-
+  const output = mode === 'background' ? `background-image: url("data:image/svg+xml,${encoded}");` : `mask-image: url("data:image/svg+xml,${encoded}");\n-webkit-mask-image: url("data:image/svg+xml,${encoded}");`;
+  const safePreview = useMemo(() => sanitizeSvgMarkup(svg), [svg]);
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="SVG 转 CSS" description="把内联 SVG 转换为 CSS Data URL，可用于 background 或 mask。" />
-      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
-        <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>SVG</FieldLabel>
-          <Textarea className="min-h-0 flex-1 resize-none font-mono" value={svg} onChange={event => setSvg(event.target.value)} />
-        </div>
-        <div className="flex min-h-0 flex-col gap-4">
-          <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <FieldLabel>background-image</FieldLabel>
-              <Button size="sm" variant="secondary" onClick={() => copy(background)}>
-                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              </Button>
-            </div>
-            <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono text-xs" value={background} />
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <FieldLabel>mask-image</FieldLabel>
-            <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono text-xs" value={mask} />
-          </div>
+      <CardHeader title="SVG 转 CSS" description="粘贴 SVG，选择背景或蒙版用途，复制对应 CSS。" />
+      <CardContent className="grid gap-5 overflow-auto lg:grid-cols-2">
+        <div className="flex flex-col gap-3"><FieldLabel hint="实时转换">原始 SVG</FieldLabel><Textarea className="min-h-80 resize-y font-mono text-xs" value={svg} onChange={event => setSvg(event.target.value)} /><Button size="sm" variant="ghost" className="self-start" onClick={() => setSvg('')}>清空</Button></div>
+        <div className="space-y-4 min-w-0"><div className="flex gap-2"><Button size="sm" variant={mode === 'background' ? 'primary' : 'secondary'} onClick={() => setMode('background')}>背景图</Button><Button size="sm" variant={mode === 'mask' ? 'primary' : 'secondary'} onClick={() => setMode('mask')}>蒙版</Button></div>
+          <div className="tool-panel min-h-36 flex items-center justify-center p-6"><div className="h-24 w-24 [&>svg]:w-full [&>svg]:h-full" dangerouslySetInnerHTML={{ __html: safePreview }} /></div>
+          <div className="flex items-center justify-between gap-2"><FieldLabel>{mode === 'background' ? 'background-image' : 'mask-image'}</FieldLabel><Button size="sm" disabled={!svg.trim()} onClick={() => copy(output)} icon={copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}>复制 CSS</Button></div>
+          <Textarea readOnly className="min-h-40 font-mono text-xs bg-slate-50 resize-y" value={svg.trim() ? output : ''} placeholder="输入 SVG，CSS 会在这里显示。" />
         </div>
       </CardContent>
     </Card>
@@ -181,8 +166,9 @@ export const CssGeneratorTool: React.FC = () => {
           <TabButton key={key} active={mode === key} onClick={() => setMode(key)}>{label}</TabButton>
         ))}
       </Tabs>
-      <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
-        <div className="space-y-4">
+      <CardContent className="grid min-h-0 min-w-0 grid-cols-1 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="tool-panel p-4 space-y-4 self-start">
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:4,blur:12,spread:0,opacity:0.12 }); else if (mode === 'gradient') setGradient({ angle:135,from:'#173b33',to:'#d4e35b' }); else if (mode === 'radius') setRadius({ tl:12,tr:12,br:12,bl:12 }); else setGlass({ blur:12,opacity:0.2,border:24 }); }}>轻盈</Button><Button size="sm" variant="secondary" onClick={() => { if (mode === 'shadow') setShadow({ x:0,y:24,blur:48,spread:-12,opacity:0.35 }); else if (mode === 'gradient') setGradient({ angle:45,from:'#ee7959',to:'#f7cc70' }); else if (mode === 'radius') setRadius({ tl:48,tr:8,br:48,bl:8 }); else setGlass({ blur:24,opacity:0.45,border:50 }); }}>鲜明</Button></div>
           {mode === 'shadow' && (
             <>
               <RangeField label="X 偏移" value={shadow.x} min={-80} max={80} onChange={x => setShadow({ ...shadow, x })} />
@@ -227,7 +213,7 @@ export const CssGeneratorTool: React.FC = () => {
             }}
           >
             <div
-              className="flex h-56 w-72 items-center justify-center border border-white/60 text-sm font-semibold text-slate-800"
+              className="flex min-h-56 max-w-full w-72 flex-col justify-center gap-3 border border-white/60 p-8 text-sm text-slate-800"
               style={{
                 ...(mode === 'shadow' ? { boxShadow: `${shadow.x}px ${shadow.y}px ${shadow.blur}px ${shadow.spread}px rgba(15, 23, 42, ${shadow.opacity})`, background: '#ffffff', borderRadius: 18 } : {}),
                 ...(mode === 'gradient' ? { background: `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`, color: '#fff', borderRadius: 18 } : {}),
@@ -235,7 +221,7 @@ export const CssGeneratorTool: React.FC = () => {
                 ...(mode === 'glass' ? { background: `rgba(255,255,255,${glass.opacity})`, backdropFilter: `blur(${glass.blur}px)`, WebkitBackdropFilter: `blur(${glass.blur}px)`, border: `1px solid rgba(255,255,255,${glass.border / 100})`, borderRadius: 18, color: '#fff' } : {}),
               }}
             >
-              Preview
+              <span className="text-xs tracking-widest opacity-70">ATELIER / 01</span><span className="text-3xl font-serif">Design in motion.</span><span className="opacity-70 text-xs leading-5">调整左侧参数，查看真实卡片的视觉效果。</span>
             </div>
           </div>
           <CodePanel className="overflow-auto whitespace-pre-wrap text-xs">{css}</CodePanel>
@@ -314,7 +300,7 @@ function computeDomDiff(before: string, after: string): DiffAudit[] {
         if (tag === 'metadata') msg = `清理了创作软件残留的 <metadata> 元数据节点`;
         if (tag === 'defs') msg = `精简了未被引用的空定义域 <defs> 容器`;
         if (tag === 'desc' || tag === 'title') msg = `移除了对渲染无用的描述性 <${tag}> 标签`;
-        
+
         list.push({
           id: `node-${tag}`,
           type: 'remove-node',
@@ -369,7 +355,7 @@ function computeDomDiff(before: string, after: string): DiffAudit[] {
 export const SvgOptimizerTool: React.FC = () => {
   const [svg, setSvg] = useState(sampleSvg);
   const [multipass, setMultipass] = useState(true);
-  const [previewTab, setPreviewTab] = useState<'render' | 'diff' | 'audit'>('render');
+  const [previewTab, setPreviewTab] = useState<'render' | 'code' | 'diff' | 'audit'>('render');
   const [sliderValue, setSliderValue] = useState<number>(50);
   const { copied, copy } = useCopyToClipboard();
 
@@ -406,7 +392,7 @@ export const SvgOptimizerTool: React.FC = () => {
     <Card className="flex h-full flex-col">
       <CardHeader
         title="SVG 智能压缩与细节差分比对"
-        description="本地清理 SVG 注释与冗余属性，内置 Split-Slider 像素级划水差分镜及冗余 DOM 节点精简审计树。"
+        description="粘贴 SVG，实时压缩；先检查画面，再比较差异、查看代码与精简记录。"
         actions={
           <div className="flex items-center gap-4 text-xs">
             <label className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 font-semibold cursor-pointer">
@@ -422,11 +408,11 @@ export const SvgOptimizerTool: React.FC = () => {
           </div>
         }
       />
-      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-hidden lg:grid-cols-2">
+      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-2">
         {/* Left Side: Original XML Input (Flexible and tall) */}
         <div className="flex min-h-0 flex-col gap-2">
           <FieldLabel hint={`${before} bytes`}>原始 SVG XML 源代码</FieldLabel>
-          <Textarea className="min-h-0 flex-1 font-mono text-xs leading-relaxed" value={svg} onChange={event => setSvg(event.target.value)} />
+          <Textarea className="min-h-80 flex-1 font-mono text-xs leading-relaxed" value={svg} onChange={event => setSvg(event.target.value)} />
         </div>
 
         {/* Right Side: Preview Tabs & Analytics */}
@@ -457,8 +443,9 @@ export const SvgOptimizerTool: React.FC = () => {
           <div className="flex border-b border-slate-200 dark:border-slate-800">
             {([
               ['render', '优化预览'],
-              ['diff', '2D 划水差分拉条'],
-              ['audit', 'DOM 冗余精简树'],
+              ['code', '优化代码'],
+              ['diff', '前后对比'],
+              ['audit', '精简记录'],
             ] as const).map(([tabKey, label]) => (
               <button
                 key={tabKey}
@@ -472,27 +459,21 @@ export const SvgOptimizerTool: React.FC = () => {
 
           {/* Combined Visual workbench container */}
           <div className="min-h-0 flex-1 flex flex-col bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-            {previewTab === 'render' && (
-              <div className="flex-1 flex flex-col min-h-0">
-                <CodePanel className="flex-1 overflow-auto whitespace-pre-wrap text-[10px] font-mono p-4 border-b border-slate-200 dark:border-slate-800 leading-relaxed bg-slate-950 text-emerald-400">
-                  {result.data || '优化结果将在这里显示'}
-                </CodePanel>
-                <div className="bg-white dark:bg-slate-950 p-4 h-32 flex items-center justify-center overflow-auto flex-none" dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }} />
-              </div>
-            )}
+            {previewTab === 'render' && <div className="bg-white dark:bg-slate-950 p-8 min-h-72 flex items-center justify-center overflow-auto flex-1 [&>svg]:max-w-full" dangerouslySetInnerHTML={{ __html: safeOptimizedSvg }} />}
+            {previewTab === 'code' && <CodePanel className="min-h-72 flex-1 overflow-auto whitespace-pre-wrap text-xs font-mono p-4">{result.data || '优化结果将在这里显示'}</CodePanel>}
 
             {previewTab === 'diff' && (
               <div className="flex-1 flex flex-col p-4 relative min-h-0 select-none">
                 <div className="flex-1 relative bg-checkerboard rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex items-center justify-center">
-                  
+
                   {/* Bottom Layer: Before SVG (Original) */}
-                  <div 
+                  <div
                     className="absolute inset-0 flex items-center justify-center p-4 transition-all opacity-40 filter grayscale pointer-events-none"
                     dangerouslySetInnerHTML={{ __html: safeSourceSvg }}
                   />
 
                   {/* Top Layer: After SVG (Optimized) with custom clipping width */}
-                  <div 
+                  <div
                     className="absolute inset-0 flex items-center justify-center p-4 overflow-hidden pointer-events-none bg-checkerboard"
                     style={{
                       clipPath: `inset(0 ${100 - sliderValue}% 0 0)`,
@@ -501,7 +482,7 @@ export const SvgOptimizerTool: React.FC = () => {
                   />
 
                   {/* High quality neon-blue slider hairline indicator */}
-                  <div 
+                  <div
                     className="absolute top-0 bottom-0 w-0.5 bg-sky-500 dark:bg-sky-400 pointer-events-none"
                     style={{ left: `${sliderValue}%` }}
                   >
@@ -514,9 +495,9 @@ export const SvgOptimizerTool: React.FC = () => {
                 {/* Slider inputs control board */}
                 <div className="mt-3 flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl flex-none">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 shrink-0">差分拉条</span>
-                  <input 
-                    type="range" min="0" max="100" 
-                    value={sliderValue} 
+                  <input
+                    type="range" min="0" max="100"
+                    value={sliderValue}
                     onChange={e => setSliderValue(Number(e.target.value))}
                     className="flex-1 h-1 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500"
                   />
@@ -568,32 +549,32 @@ export const HtmlToJsxTool: React.FC = () => {
       const parser = new DOMParser();
       const doc = parser.parseFromString(`<body>${html}</body>`, 'text/html');
       const nodes = Array.from(doc.body.childNodes);
-      
+
       if (nodes.length === 0) return '';
-      
+
       const serializeNode = (node: Node, depth: number): string => {
         const indent = '  '.repeat(depth);
-        
+
         if (node.nodeType === Node.TEXT_NODE) {
           const text = node.nodeValue || '';
           if (!text.trim()) return text;
           return text.replace(/[{}]/g, m => `{'${m}'}`);
         }
-        
+
         if (node.nodeType === Node.COMMENT_NODE) {
           return `${indent}{/* ${node.nodeValue?.trim()} */}`;
         }
-        
+
         if (node.nodeType === Node.ELEMENT_NODE) {
           const el = node as Element;
           const tagName = el.tagName.toLowerCase();
-          
+
           const attrs: string[] = [];
           for (let i = 0; i < el.attributes.length; i++) {
             const attr = el.attributes[i];
             let name = attr.name.toLowerCase();
             const val = attr.value;
-            
+
             if (name === 'class') name = 'className';
             else if (name === 'for') name = 'htmlFor';
             else if (name === 'tabindex') name = 'tabIndex';
@@ -609,7 +590,7 @@ export const HtmlToJsxTool: React.FC = () => {
             } else if (name.includes('-') && !name.startsWith('data-') && !name.startsWith('aria-')) {
               name = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
             }
-            
+
             if (name === 'style') {
               const styleObj: Record<string, string> = {};
               val.split(';').forEach(rule => {
@@ -635,13 +616,13 @@ export const HtmlToJsxTool: React.FC = () => {
               }
             }
           }
-          
+
           const attrsStr = attrs.length > 0 ? ' ' + attrs.join(' ') : '';
           const selfClosing = ['img', 'input', 'br', 'hr', 'meta', 'link', 'area', 'col', 'embed', 'source', 'track', 'wbr'];
           if (selfClosing.includes(tagName) && el.childNodes.length === 0) {
             return `${indent}<${tagName}${attrsStr} />`;
           }
-          
+
           let children = '';
           let hasComplex = false;
           el.childNodes.forEach(child => {
@@ -649,7 +630,7 @@ export const HtmlToJsxTool: React.FC = () => {
             const childStr = serializeNode(child, depth + 1);
             if (childStr) children += childStr;
           });
-          
+
           if (hasComplex) {
             return `${indent}<${tagName}${attrsStr}>\n${children}\n${indent}</${tagName}>`;
           } else {
@@ -658,16 +639,16 @@ export const HtmlToJsxTool: React.FC = () => {
         }
         return '';
       };
-      
+
       const filteredNodes = nodes.filter(n => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && n.nodeValue?.trim()));
-      
+
       let finalJsx = '';
       if (wrapFragment || filteredNodes.length > 1) {
         finalJsx = `<>\n${filteredNodes.map(n => serializeNode(n, 1)).join('\n')}\n</>`;
       } else if (filteredNodes.length === 1) {
         finalJsx = serializeNode(filteredNodes[0], 0);
       }
-      
+
       return finalJsx;
     } catch (e) {
       return '编译 HTML 出错: ' + (e as Error).message;
@@ -697,18 +678,18 @@ export const HtmlToJsxTool: React.FC = () => {
           </div>
         }
       />
-      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-2">
+      <CardContent className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-2">
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>HTML 源代码</FieldLabel>
+          <div className="flex items-center justify-between"><FieldLabel>HTML 源代码</FieldLabel><Button size="sm" variant="ghost" onClick={() => setHtml('')}>清空</Button></div>
           <Textarea
-            className="min-h-0 flex-1 font-mono text-xs leading-relaxed"
+            className="min-h-80 flex-1 font-mono text-xs leading-relaxed"
             value={html}
             onChange={event => setHtml(event.target.value)}
           />
         </div>
         <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>React JSX 输出</FieldLabel>
-          <CodePanel className="min-h-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
+          <FieldLabel hint="实时转换">React JSX 输出</FieldLabel>
+          <CodePanel className="min-h-80 flex-1 overflow-auto whitespace-pre font-mono text-xs leading-relaxed bg-slate-950 text-emerald-400 p-4">
             {jsxResult || '// 转换结果将在这里实时显示'}
           </CodePanel>
         </div>
@@ -728,7 +709,7 @@ export const SvgToReactTool: React.FC = () => {
   const [removeDimensions, setRemoveDimensions] = useState(true);
   const [useCurrentColor, setUseCurrentColor] = useState(true);
   const [customSize, setCustomSize] = useState(true);
-  
+
   const { copied, copy } = useCopyToClipboard();
 
   const reactComponentCode = useMemo(() => {
@@ -869,25 +850,25 @@ export const SvgToReactTool: React.FC = () => {
       code += `    <svg\n`;
       code += `      viewBox="${viewBox}"\n`;
       if (refProp) code += `     ${refProp}\n`;
-      
+
       attributes.forEach(attr => {
         code += `      ${attr}\n`;
       });
-      
+
       code += `      {...props}\n`;
       code += `    >\n`;
-      
+
       const indentedChildren = childrenStr
         .trim()
         .replace(/></g, '>\n<')
         .split('\n')
         .map(line => `      ${line}`)
         .join('\n');
-        
+
       code += indentedChildren + '\n';
       code += `    </svg>\n`;
       code += `  );\n`;
-      
+
       if (useForwardRef) {
         code += `});\n\n`;
         code += `${name}.displayName = '${name}';\n`;
@@ -914,12 +895,12 @@ export const SvgToReactTool: React.FC = () => {
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[20rem_minmax(0,1fr)]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div>
             <FieldLabel>组件命名</FieldLabel>
             <Input value={componentName} onChange={e => setComponentName(e.target.value)} placeholder="e.g. MyIcon" />
           </div>
-          
+
           <div className="grid grid-cols-2 gap-2">
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={isTs} onChange={e => setIsTs(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
@@ -931,7 +912,7 @@ export const SvgToReactTool: React.FC = () => {
             </label>
           </div>
 
-          <div className="space-y-2">
+          <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">尺寸与颜色选项</summary><div className="space-y-2">
             <label className="tool-panel flex cursor-pointer items-center gap-2 p-2.5 text-xs font-semibold">
               <input type="checkbox" checked={removeDimensions} onChange={e => setRemoveDimensions(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
               <span>清理硬编码宽高 (width/height)</span>
@@ -944,10 +925,10 @@ export const SvgToReactTool: React.FC = () => {
               <input type="checkbox" checked={customSize} onChange={e => setCustomSize(e.target.checked)} className="rounded text-primary-600 focus:ring-primary-400" />
               <span>注入弹性 size 属性 (默认为 24)</span>
             </label>
-          </div>
-          
+          </div></details>
+
           <div className="flex flex-col gap-2">
-            <FieldLabel>原始 SVG 源码</FieldLabel>
+            <FieldLabel hint="实时生成组件">原始 SVG 源码</FieldLabel>
             <Textarea
               className="h-44 font-mono text-[10px] leading-normal"
               value={svg}
@@ -956,9 +937,9 @@ export const SvgToReactTool: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-col gap-2">
-          <FieldLabel>React 组件代码</FieldLabel>
-          <CodePanel className="min-h-[26rem] flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
+        <div className="flex min-h-0 min-w-0 flex-col gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2"><FieldLabel>React 组件代码</FieldLabel><Button size="sm" variant="secondary" disabled={!reactComponentCode} onClick={() => { const name = componentName.trim().replace(/[^a-zA-Z0-9]/g,'') || 'SvgIcon'; const url = URL.createObjectURL(new Blob([reactComponentCode],{ type: 'text/plain' })); const a=document.createElement('a'); a.href=url; a.download=`${name}.${isTs ? 'tsx' : 'jsx'}`; a.click(); setTimeout(() => URL.revokeObjectURL(url),1000); }} icon={<Download className="h-4 w-4" />}>下载组件</Button></div>
+          <CodePanel className="min-h-[26rem] min-w-0 flex-1 overflow-auto whitespace-pre font-mono text-[11px] leading-relaxed bg-slate-950 text-emerald-400 p-4">
             {reactComponentCode || '// 组件输出将在这里实时渲染'}
           </CodePanel>
         </div>

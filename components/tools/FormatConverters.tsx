@@ -1,220 +1,76 @@
 import React, { useState } from 'react';
-import { Copy, Check, ArrowRightLeft, FileJson, Link, Binary } from 'lucide-react';
-import { Card, CardContent, CardHeader } from '../ui/Card';
+import { ArrowRightLeft } from 'lucide-react';
+import { Card, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { ScratchpadActionBar, ScratchpadPicker, isScratchpadTextLike } from './shared/ScratchpadControls';
 import { useScratchpadStore } from './shared/scratchpadStore';
 import { notifyToast } from './shared/notifyToast';
+import { ContentEditor, ContentToolbar } from './shared/ContentWorkflow';
 
-// --- Shared Helper: Copy to Clipboard ---
-const useCopyToClipboard = () => {
-  const [copied, setCopied] = useState(false);
-  const copy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return { copied, copy };
-};
-
-// --- JSON Tool ---
 export const JsonTool: React.FC = () => {
   const [input, setInput] = useState('');
+  const [output, setOutput] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { copied, copy } = useCopyToClipboard();
-
-  const handleFormat = () => {
+  const [indent, setIndent] = useState(2);
+  const [operation, setOperation] = useState('格式化');
+  const process = (minify: boolean) => {
     try {
-      const parsed = JSON.parse(input);
-      setInput(JSON.stringify(parsed, null, 2));
+      setOutput(JSON.stringify(JSON.parse(input), null, minify ? undefined : indent));
+      setOperation(minify ? '压缩' : '格式化');
       setError(null);
     } catch (e) {
+      setOutput('');
       setError((e as Error).message);
     }
   };
-
-  const handleMinify = () => {
-    try {
-      const parsed = JSON.parse(input);
-      setInput(JSON.stringify(parsed));
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
+  const updateInput = (value: string) => { setInput(value); setError(null); setOutput(''); };
   const stashJson = async () => {
-    await useScratchpadStore.getState().addItemAsync({
-      name: `json_${Date.now()}.json`,
-      content: input,
-      type: 'json',
-      mimeType: 'application/json',
-      sourceTool: 'JSON 格式化',
-    });
+    await useScratchpadStore.getState().addItemAsync({ name: `json_${Date.now()}.json`, content: output, type: 'json', mimeType: 'application/json', sourceTool: 'JSON 格式化' });
     notifyToast({ title: 'JSON 已送入暂存箱', tone: 'success' });
   };
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader 
-        title="JSON Formatter" 
-        description="Validate, format, and minify JSON data."
-        actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={handleMinify} icon={<ArrowRightLeft className="w-4 h-4" />}>Minify</Button>
-            <Button size="sm" onClick={handleFormat} icon={<FileJson className="w-4 h-4" />}>Prettify</Button>
-          </>
-        }
-      />
-      <CardContent className="flex-1 flex flex-col min-h-0">
-        <ScratchpadActionBar className="mb-3">
-          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-            <ScratchpadPicker
-              label="载入 JSON / 文本"
-              placeholder="从暂存箱载入 JSON..."
-              filter={isScratchpadTextLike}
-              onLoad={async content => setInput(typeof content === 'string' ? content : await new Blob([content]).text())}
-            />
-            <Button size="sm" variant="secondary" onClick={stashJson} disabled={!input}>
-              送入暂存箱
-            </Button>
-          </div>
-        </ScratchpadActionBar>
-        <div className="relative flex-1">
-          <textarea
-            className={`w-full h-full p-4 font-mono text-sm bg-slate-50 border rounded-lg resize-none focus:outline-none focus:ring-2 ${error ? 'border-red-300 focus:ring-red-200' : 'border-slate-200 focus:ring-primary-200'}`}
-            placeholder='Paste your JSON here...'
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <Button 
-            size="sm" 
-            variant="ghost"
-            className="absolute top-2 right-2 bg-white/80 backdrop-blur"
-            onClick={() => copy(input)}
-          >
-            {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-          </Button>
-        </div>
-        {error && (
-          <div className="status-error mt-4 flex items-start gap-2 p-3 text-sm">
-             <span className="font-bold">Error:</span> {error}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
+  return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 flex flex-col gap-4 overflow-auto">
+    <ContentToolbar onSample={() => updateInput('{"project":"Atelier","tools":["JSON","Markdown"],"active":true}')} onClear={() => updateInput('')}>
+      <Button onClick={() => process(false)} disabled={!input.trim()}>格式化</Button>
+      <Button variant="secondary" onClick={() => process(true)} disabled={!input.trim()}>压缩</Button>
+      <label className="flex items-center gap-2 text-xs text-slate-500">缩进<select aria-label="缩进" className="rounded border px-2 py-1" value={indent} onChange={event => setIndent(Number(event.target.value))}><option value={2}>2</option><option value={4}>4</option></select></label>
+    </ContentToolbar>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <ContentEditor label="原始 JSON" value={input} onChange={updateInput} error={error} placeholder="粘贴 JSON；原始内容会保留在这里。" />
+      <ContentEditor label={`${operation}结果`} value={output} output placeholder="处理后的 JSON 显示在这里。" onUseResult={() => updateInput(output)} actions={<Button size="xs" variant="secondary" onClick={stashJson} disabled={!output}>暂存</Button>} />
+    </div>
+    <details><summary className="cursor-pointer text-xs text-slate-500">从暂存箱载入</summary><ScratchpadActionBar className="mt-2"><ScratchpadPicker label="载入 JSON / 文本" placeholder="从暂存箱载入 JSON..." filter={isScratchpadTextLike} onLoad={async content => updateInput(typeof content === 'string' ? content : await new Blob([content]).text())} /></ScratchpadActionBar></details>
+  </CardContent></Card>;
 };
 
-// --- Base64 Tool ---
-export const Base64Tool: React.FC = () => {
+const CodecWorkbench: React.FC<{ kind: 'base64' | 'url' }> = ({ kind }) => {
   const [input, setInput] = useState('');
   const [output, setOutput] = useState('');
-  const { copied, copy } = useCopyToClipboard();
-
-  const handleEncode = () => {
+  const [mode, setMode] = useState<'encode' | 'decode'>('encode');
+  const [error, setError] = useState<string | null>(null);
+  const updateInput = (value: string) => { setInput(value); setOutput(''); setError(null); };
+  const process = () => {
     try {
-      setOutput(btoa(unescape(encodeURIComponent(input))));
+      if (kind === 'url') setOutput(mode === 'encode' ? encodeURIComponent(input) : decodeURIComponent(input));
+      else setOutput(mode === 'encode' ? btoa(unescape(encodeURIComponent(input))) : decodeURIComponent(escape(atob(input))));
+      setError(null);
     } catch {
-      setOutput("Error: Unable to encode. Ensure valid text.");
+      setOutput('');
+      setError(kind === 'url' ? 'URL 转义不完整，请检查百分号后的十六进制编码。' : '无法转换，请检查 Base64 格式或文本编码。');
     }
   };
-
-  const handleDecode = () => {
-    try {
-      setOutput(decodeURIComponent(escape(atob(input))));
-    } catch {
-      setOutput("Error: Invalid Base64 string.");
-    }
-  };
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader title="Base64 Converter" description="Encode and decode Base64 strings." />
-      <CardContent className="grid flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-[1fr_auto_1fr]">
-        <div className="flex min-h-[14rem] flex-col">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Input</label>
-          <textarea
-            className="min-h-0 flex-1 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
-            placeholder="Text to encode or Base64 to decode..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center justify-center gap-2 lg:flex-col">
-          <Button onClick={handleEncode} icon={<Binary className="w-4 h-4"/>}>Encode</Button>
-          <Button variant="secondary" onClick={handleDecode} icon={<ArrowRightLeft className="w-4 h-4"/>}>Decode</Button>
-        </div>
-        <div className="flex min-h-[14rem] flex-col">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Output</label>
-          <div className="relative">
-            <textarea
-              readOnly
-              className="min-h-[14rem] w-full p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
-              value={output}
-            />
-             <Button 
-                size="sm" 
-                variant="ghost"
-                className="absolute top-2 right-2 bg-white/50 backdrop-blur"
-                onClick={() => copy(output)}
-                disabled={!output}
-              >
-                {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-              </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+  const reverse = () => { updateInput(output); setMode(mode === 'encode' ? 'decode' : 'encode'); };
+  return <Card className="flex h-full min-h-0 flex-col"><CardContent className="min-h-0 flex-1 flex flex-col gap-4 overflow-auto">
+    <ContentToolbar onSample={() => updateInput(mode === 'encode' ? 'Hello, 世界!' : kind === 'base64' ? 'SGVsbG8sIOS4lueVjCE=' : 'Hello%2C%20%E4%B8%96%E7%95%8C!')} onClear={() => updateInput('')}>
+      <div className="flex rounded-lg border border-slate-200 p-1">{(['encode', 'decode'] as const).map(value => <Button key={value} size="sm" variant={mode === value ? 'primary' : 'ghost'} onClick={() => { setMode(value); setOutput(''); setError(null); }}>{value === 'encode' ? '编码' : '解码'}</Button>)}</div>
+      <Button onClick={process} disabled={!input}>{mode === 'encode' ? '开始编码' : '开始解码'}</Button>
+      <Button variant="secondary" size="sm" onClick={reverse} disabled={!output} icon={<ArrowRightLeft className="h-4 w-4" />}>反向转换</Button>
+    </ContentToolbar>
+    <div className="grid gap-4 lg:grid-cols-2">
+      <ContentEditor label={mode === 'encode' ? '原始文本' : kind === 'base64' ? 'Base64 输入' : 'URL 编码输入'} value={input} onChange={updateInput} error={error} placeholder={mode === 'encode' ? '输入要编码的文本，支持中文和 Emoji。' : '粘贴要解码的内容。'} />
+      <ContentEditor label={mode === 'encode' ? '编码结果' : '解码文本'} value={output} output placeholder="完成转换后可以复制，或反向转换校验。" />
+    </div>
+    {kind === 'url' && <p className="text-xs text-slate-500">按 URL 参数编码，适合查询参数中的文本和值。</p>}
+  </CardContent></Card>;
 };
-
-// --- URL Tool ---
-export const UrlTool: React.FC = () => {
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
-  const { copied, copy } = useCopyToClipboard();
-
-  const handleEncode = () => setOutput(encodeURIComponent(input));
-  const handleDecode = () => setOutput(decodeURIComponent(input));
-
-  return (
-    <Card className="h-full flex flex-col">
-      <CardHeader title="URL Encoder/Decoder" description="Encode text to URL-safe format or decode it." />
-      <CardContent className="grid flex-1 grid-cols-1 gap-4 overflow-auto lg:grid-cols-[1fr_auto_1fr]">
-         <div className="flex min-h-[14rem] flex-col">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Input</label>
-          <textarea
-            className="min-h-0 flex-1 p-3 font-mono text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none"
-            placeholder="Enter URL or text..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-        </div>
-        <div className="flex items-center justify-center gap-2 lg:flex-col">
-          <Button onClick={handleEncode} icon={<Link className="w-4 h-4"/>}>Encode</Button>
-          <Button variant="secondary" onClick={handleDecode} icon={<ArrowRightLeft className="w-4 h-4"/>}>Decode</Button>
-        </div>
-        <div className="flex min-h-[14rem] flex-col">
-          <label className="block text-sm font-medium text-slate-700 mb-1">Output</label>
-          <div className="relative">
-            <textarea
-              readOnly
-              className="min-h-[14rem] w-full p-3 font-mono text-sm bg-slate-100 border border-slate-200 rounded-lg focus:outline-none resize-none text-slate-600"
-              value={output}
-            />
-            <Button 
-              size="sm" 
-              variant="ghost"
-              className="absolute top-2 right-2 bg-white/50 backdrop-blur"
-              onClick={() => copy(output)}
-              disabled={!output}
-            >
-              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
+export const Base64Tool: React.FC = () => <CodecWorkbench kind="base64" />;
+export const UrlTool: React.FC = () => <CodecWorkbench kind="url" />;

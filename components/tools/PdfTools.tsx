@@ -1,14 +1,11 @@
 import React, { useRef, useState } from 'react';
 import {
-  FileText,
   Merge,
   Trash2,
-  Image as ImageIcon,
   RotateCw,
   RotateCcw,
   ArrowLeft,
   ArrowRight,
-  Loader2,
   Sparkles,
   ClipboardList,
   Check
@@ -21,6 +18,8 @@ import { loadRuntimeAsset, type RuntimeAssetLoaderState } from './shared/runtime
 import { RuntimeAssetStatusPanel } from './shared/useRuntimeAsset';
 import { notifyToast } from './shared/notifyToast';
 import type { PDFDocument } from 'pdf-lib';
+import { FileDropzone, WorkflowSteps } from './shared/WorkflowUi';
+import { downloadBlob } from './shared/fileUtils';
 
 const PDFJS_VERSION = '5.4.449';
 const PDFJS_MODULE_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
@@ -118,14 +117,14 @@ const PdfMergeTool: React.FC = () => {
     setIsMerging(false);
   };
 
-  const handleFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+  const handleFiles = async (files: File[]) => {
+    if (!files.length) return;
     setIsLoading(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
       const pdfjsLib = await loadPdfJs(setRuntimeState);
-      const addedFiles = Array.from(e.target.files);
+      const addedFiles = files;
       const newPages: PdfPageItem[] = [];
       updateTask('loadPages', 0, addedFiles.length);
 
@@ -174,7 +173,6 @@ const PdfMergeTool: React.FC = () => {
     } finally {
       setIsLoading(false);
       if (abortRef.current === controller) abortRef.current = null;
-      e.target.value = '';
     }
   };
 
@@ -280,34 +278,8 @@ const PdfMergeTool: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       
-      {/* Upload Banner */}
-      <div className="tool-upload p-8 relative border-dashed border-2 border-slate-300 dark:border-slate-800 rounded-xl hover:border-primary-500 transition-colors bg-white dark:bg-slate-900 shadow-sm flex flex-col items-center justify-center text-center">
-        <div className="rounded-full bg-primary-50 dark:bg-primary-950 p-4 shadow-inner mb-3">
-          <Merge className="w-8 h-8 text-primary-500" />
-        </div>
-        <div>
-          <p className="font-semibold text-slate-700 dark:text-slate-200">
-            {isLoading ? '解析 PDF 文档中，请稍候...' : '添加并混编 PDF 文件'}
-          </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            支持拖拽或多选，文档会自动按页拆分为可视化卡片
-          </p>
-        </div>
-        {!isLoading && (
-          <input
-            type="file"
-            accept="application/pdf"
-            multiple
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            onChange={handleFiles}
-          />
-        )}
-        {isLoading && (
-          <div className="absolute inset-0 bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm flex items-center justify-center rounded-xl">
-            <Loader2 className="w-7 h-7 text-primary-600 animate-spin" />
-          </div>
-        )}
-      </div>
+      <WorkflowSteps steps={['添加 PDF', '调整页面顺序', '合并与导出']} active={pages.length ? 1 : 0} />
+      <FileDropzone accept="application/pdf,.pdf" multiple disabled={isLoading || isMerging} compact={pages.length > 0} onFiles={handleFiles} title="添加 PDF 文件或拖到这里" hint="可选择多份文档，按页面排序、旋转或删除" />
 
       <RuntimeAssetStatusPanel state={runtimeState} onRetry={() => loadPdfJs(setRuntimeState).catch(err => {
         notifyToast({ title: 'PDF.js 加载失败', description: (err as Error).message, tone: 'error' });
@@ -335,7 +307,7 @@ const PdfMergeTool: React.FC = () => {
         <div className="space-y-4">
           
           {/* Action Header bar */}
-          <div className="flex justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          <div className="flex flex-wrap gap-3 justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
             <div>
               <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-primary-500" />
@@ -464,9 +436,9 @@ const PdfToImageTool: React.FC = () => {
   const [runtimeState, setRuntimeState] = useState<RuntimeAssetLoaderState>(() => createRuntimeState());
   const abortRef = useRef<AbortController | null>(null);
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      setFile(e.target.files[0]);
+  const handleFile = (files: File[]) => {
+    if (files[0]) {
+      setFile(files[0]);
       setImages([]);
       setStashedIndices({});
     }
@@ -486,6 +458,18 @@ const PdfToImageTool: React.FC = () => {
     notifyToast({ title: 'PDF 页面已暂存', description: `${baseName}_page_${index + 1}.png`, tone: 'success' });
     setStashedIndices(prev => ({ ...prev, [index]: true }));
     setTimeout(() => setStashedIndices(prev => ({ ...prev, [index]: false })), 2000);
+  };
+
+  const [zipBusy, setZipBusy] = useState(false);
+  const downloadAll = async () => {
+    setZipBusy(true);
+    try {
+      const { default: JSZip } = await import('jszip');
+      const zip = new JSZip();
+      images.forEach((image, index) => zip.file(`page_${String(index + 1).padStart(3, '0')}.png`, image.slice(image.indexOf(',') + 1), { base64: true }));
+      downloadBlob(await zip.generateAsync({ type: 'blob' }), `${file?.name.replace(/\.pdf$/i, '') || 'pdf'}-pages.zip`);
+    } catch (err) { notifyToast({ title: '图片打包失败', description: (err as Error).message, tone: 'error' }); }
+    finally { setZipBusy(false); }
   };
 
   const convert = async () => {
@@ -545,37 +529,9 @@ const PdfToImageTool: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {!file ? (
-        <div className="tool-upload p-8 relative border-dashed border-2 border-slate-300 dark:border-slate-800 rounded-xl hover:border-primary-500 transition-colors bg-white dark:bg-slate-900 shadow-sm flex flex-col items-center justify-center text-center">
-          <div className="rounded-full bg-white p-4 shadow-sm mb-3">
-            <ImageIcon className="w-8 h-8 text-primary-500" />
-          </div>
-          <div>
-            <p className="font-semibold text-slate-700 dark:text-slate-200">选择 PDF 文件转图片</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">本地渲染为高品质 PNG 并提供多维分段下载</p>
-          </div>
-          <input
-            type="file"
-            accept="application/pdf"
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            onChange={handleFile}
-          />
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="tool-section flex items-center gap-4 p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-            <FileText className="w-6 h-6 text-red-500" />
-            <span className="flex-1 font-semibold text-slate-700 dark:text-slate-350">{file.name}</span>
-            <Button variant="secondary" size="sm" onClick={() => setFile(null)}>更换文件</Button>
-          </div>
-
-          {images.length === 0 && (
-            <Button onClick={convert} disabled={isConverting} className="w-full">
-              {isConverting ? '正在转换页面...' : '开始转换为高清图片'}
-            </Button>
-          )}
-        </div>
-      )}
+      <WorkflowSteps steps={['选择 PDF', '渲染页面', '下载图片']} active={images.length ? 2 : file ? 1 : 0} />
+      <FileDropzone accept="application/pdf,.pdf" fileName={file?.name} disabled={isConverting || zipBusy} onFiles={handleFile} title="选择 PDF 文件转图片" hint="逐页渲染为 PNG，保留单页下载和批量 ZIP" />
+      {file && <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-slate-500">{images.length ? `${images.length} 页图片` : '准备渲染页面'}</span><div className="flex gap-2"><Button onClick={convert} disabled={isConverting} isLoading={isConverting}>{images.length ? '重新渲染' : '开始转换为高清图片'}</Button>{images.length > 0 && <Button variant="secondary" disabled={isConverting || zipBusy} isLoading={zipBusy} onClick={downloadAll}>下载全部 ZIP</Button>}</div></div>}
 
       <RuntimeAssetStatusPanel state={runtimeState} onRetry={() => loadPdfJs(setRuntimeState).catch(err => {
         notifyToast({ title: 'PDF.js 加载失败', description: (err as Error).message, tone: 'error' });

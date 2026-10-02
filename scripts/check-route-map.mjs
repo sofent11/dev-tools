@@ -95,6 +95,14 @@ for (const match of registrySource.matchAll(/'([^']+)':\s*\{\s*studioId:\s*'([^'
   }
 }
 
+// Search links must resolve to the same active pages as each studio picker.
+const catalogSource = read('components/tools/toolCatalog.ts');
+const catalogEntries = Array.from(catalogSource.matchAll(/studioId:\s*'([^']+)',\s*id:\s*'([^']+)'/g), match => `${match[1]}#${match[2]}`);
+const registeredEntries = Array.from(studioConfigById, ([studioId, config]) => config.subTools.map(tabId => `${studioId}#${tabId}`)).flat();
+for (const entry of registeredEntries) if (!catalogEntries.includes(entry)) errors.push(`Search catalog is missing ${entry}.`);
+for (const entry of catalogEntries) if (!registeredEntries.includes(entry)) errors.push(`Search catalog references an unknown page ${entry}.`);
+if (new Set(catalogEntries).size !== catalogEntries.length) errors.push('Search catalog has duplicate pages.');
+
 if (errors.length > 0) {
   console.error('Route map validation failed:');
   for (const error of errors) {

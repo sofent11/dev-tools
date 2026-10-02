@@ -7,7 +7,7 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string }> =
 }) => (
   <section
     className={twMerge(
-      'min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm',
+      'ui-card min-h-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm',
       className,
     )}
   >
@@ -23,7 +23,7 @@ export const CardHeader: React.FC<{
 }> = ({ title, description, actions, className = '' }) => (
   <div
     className={twMerge(
-      'flex flex-none flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between',
+      'ui-card-header flex flex-none flex-col gap-3 border-b border-slate-100 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between',
       className,
     )}
   >
@@ -38,4 +38,4 @@ export const CardHeader: React.FC<{
 export const CardContent: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
   className = '',
-}) => <div className={twMerge('p-5', className)}>{children}</div>;
+}) => <div className={twMerge('ui-card-content p-5', className)}>{children}</div>;

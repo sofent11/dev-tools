@@ -47,13 +47,14 @@ const getDayOfWeekCN = (date: Date): string => {
 };
 
 export const UnixTimeStudio: React.FC = () => {
+  const [task, setTask] = useState<'convert' | 'compare' | 'world' | 'cron'>('convert');
   const [tickerNow, setTickerNow] = useState(() => new Date());
 
   // Conversion States
   const [timestampInput, setTimestampInput] = useState(() => Math.floor(Date.now() / 1000).toString());
   const [unit, setUnit] = useState<'ms' | 's'>('s');
   const [targetZone, setTargetZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai');
-  
+
   const [dateStrInput, setDateStrInput] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
@@ -213,8 +214,9 @@ export const UnixTimeStudio: React.FC = () => {
   }, [cronExpression]);
 
   return (
-    <div className="space-y-6">
-      
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-2">{([['convert','时间戳换算'],['compare','日期跨度'],['world','世界时钟'],['cron','Cron 预测']] as const).map(([id,label]) => <Button key={id} size="sm" variant={task === id ? 'primary' : 'secondary'} onClick={() => setTask(id)}>{label}</Button>)}</div>
+
       {/* 🚀 Active Real-time Clock Dashboard */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="md:col-span-2 border-primary-100 bg-gradient-to-r from-primary-500/10 via-transparent to-transparent dark:border-primary-950/30">
@@ -230,7 +232,7 @@ export const UnixTimeStudio: React.FC = () => {
                 时区: {Intl.DateTimeFormat().resolvedOptions().timeZone}
               </p>
             </div>
-            
+
             <div className="flex gap-3">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col justify-center min-w-[120px] shadow-sm relative group">
                 <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mb-0.5">秒级 (s)</span>
@@ -239,7 +241,7 @@ export const UnixTimeStudio: React.FC = () => {
                 </span>
                 <button
                   onClick={() => handleCopy(Math.floor(tickerNow.getTime() / 1000).toString(), 'ticker-s')}
-                  className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
                   title="复制秒级时间戳"
                 >
                   {copiedStates['ticker-s'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -253,7 +255,7 @@ export const UnixTimeStudio: React.FC = () => {
                 </span>
                 <button
                   onClick={() => handleCopy(tickerNow.getTime().toString(), 'ticker-ms')}
-                  className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
+                  className="absolute top-1.5 right-1.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 focus:opacity-100 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
                   title="复制毫秒级时间戳"
                 >
                   {copiedStates['ticker-ms'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -287,13 +289,13 @@ export const UnixTimeStudio: React.FC = () => {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-5">
 
         {/* ⏰ Column 1 & 2: Main Conversions */}
-        <div className="lg:col-span-2 space-y-6">
-          
+        <div className={task === 'convert' || task === 'compare' ? 'grid gap-5 lg:grid-cols-2' : 'hidden'}>
+
           {/* Card: Timestamp -> Date Time */}
-          <Card>
+          <Card className={task === 'convert' ? '' : 'hidden'}>
             <CardHeader
               title="时间戳 ➔ 日期时间转换"
               description="双向无缝转换，支持自定义时区与丰富的毫秒级秒级自动兼容转换"
@@ -301,7 +303,7 @@ export const UnixTimeStudio: React.FC = () => {
                 <div className="flex gap-1.5 flex-wrap">
                   <Button size="sm" variant="secondary" onClick={applyPresetNow}>现在</Button>
                   <Button size="sm" variant="secondary" onClick={applyPresetStartOfToday}>今日零点</Button>
-                  <Button size="sm" variant="secondary" onClick={applyPresetEndOfToday}>今日早鸣</Button>
+                  <Button size="sm" variant="secondary" onClick={applyPresetEndOfToday}>今日结束</Button>
                   <Button size="sm" variant="secondary" onClick={applyPresetPlus24Hours}>+24 小时</Button>
                 </div>
               }
@@ -319,7 +321,7 @@ export const UnixTimeStudio: React.FC = () => {
                 </div>
                 <div>
                   <FieldLabel>单位</FieldLabel>
-                  <Select value={unit} onChange={event => setUnit(event.target.value as 'ms' | 's')}>
+                  <Select value={unit} onChange={event => { const next = event.target.value as 'ms' | 's'; const numeric = Number(timestampInput); if (timestampInput.trim() && Number.isFinite(numeric)) setTimestampInput(String(next === 'ms' ? numeric * 1000 : Math.trunc(numeric / 1000))); setUnit(next); }}>
                     <option value="s">秒 (s)</option>
                     <option value="ms">毫秒 (ms)</option>
                   </Select>
@@ -342,7 +344,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold">{timestampConversionOutput.local}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.local, 'conv-local')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['conv-local'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -353,7 +355,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 font-bold">{timestampConversionOutput.zoned}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.zoned, 'conv-zoned')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['conv-zoned'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -364,7 +366,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-sm text-slate-800 dark:text-slate-200 break-all">{timestampConversionOutput.iso}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.iso, 'conv-iso')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['conv-iso'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -375,7 +377,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-xs text-slate-800 dark:text-slate-200">{timestampConversionOutput.utc}</div>
                     <button
                       onClick={() => handleCopy(timestampConversionOutput.utc, 'conv-utc')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['conv-utc'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -388,7 +390,7 @@ export const UnixTimeStudio: React.FC = () => {
           </Card>
 
           {/* Card: Date Time -> Timestamp */}
-          <Card>
+          <Card className={task === 'convert' ? '' : 'hidden'}>
             <CardHeader
               title="日期时间 ➔ 时间戳转换"
               description="支持标准 ISO-8601 或自定义的文本日期格式智能解析"
@@ -416,7 +418,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-sm text-slate-900 dark:text-slate-100 font-extrabold">{dateStrConversionOutput.seconds}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.seconds, 'd-sec')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['d-sec'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -427,7 +429,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-sm text-slate-900 dark:text-slate-100 font-extrabold">{dateStrConversionOutput.milliseconds}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.milliseconds, 'd-ms')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['d-ms'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -438,7 +440,7 @@ export const UnixTimeStudio: React.FC = () => {
                     <div className="font-mono text-xs text-slate-700 dark:text-slate-350 break-all">{dateStrConversionOutput.iso}</div>
                     <button
                       onClick={() => handleCopy(dateStrConversionOutput.iso, 'd-iso')}
-                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded"
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded"
                     >
                       {copiedStates['d-iso'] ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
@@ -451,7 +453,7 @@ export const UnixTimeStudio: React.FC = () => {
           </Card>
 
           {/* Card: Date Diff Calculator */}
-          <Card>
+          <Card className={task === 'compare' ? 'lg:col-span-2' : 'hidden'}>
             <CardHeader
               title="📅 日期时间跨度计算器"
               description="支持高精度跨度统计，快速计算两个精确时刻之间的差距"
@@ -514,19 +516,19 @@ export const UnixTimeStudio: React.FC = () => {
         </div>
 
         {/* 🌏 Column 3: World Clocks & Cron Triggers */}
-        <div className="space-y-6">
-          
+        <div className={task === 'world' || task === 'cron' ? 'space-y-5' : 'hidden'}>
+
           {/* Card: World Clock Comparison */}
-          <Card className="flex flex-col max-h-[460px]">
+          <Card className={task === 'world' ? 'flex flex-col' : 'hidden'}>
             <CardHeader
               title="🌐 世界主要城市时区时钟"
               description="高精度秒级同步跳秒比较表"
             />
-            <CardContent className="app-scrollbar overflow-y-auto space-y-2.5 flex-1 pr-1">
+            <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 flex-1">
               {WORLD_ZONES.map(zone => (
                 <div
                   key={zone.id}
-                  className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/60 dark:border-slate-850 bg-slate-50/50 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-900 transition-all gap-3"
+                  className="flex flex-col items-start justify-between p-4 rounded-lg border border-slate-200/60 dark:border-slate-850 bg-slate-50/50 hover:bg-slate-50 dark:bg-slate-900/50 dark:hover:bg-slate-900 transition-all gap-3"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-lg flex-none select-none">{zone.flag}</span>
@@ -536,7 +538,7 @@ export const UnixTimeStudio: React.FC = () => {
                     </div>
                   </div>
                   <div className="font-mono text-xs font-black text-primary-700 dark:text-primary-400 whitespace-nowrap text-right">
-                    {formatInZone(tickerNow, zone.id).split(' ')[1] || '---'}
+                    {formatInZone(tickerNow, zone.id)}
                   </div>
                 </div>
               ))}
@@ -544,7 +546,7 @@ export const UnixTimeStudio: React.FC = () => {
           </Card>
 
           {/* Card: Cron Trigger Predictor */}
-          <Card>
+          <Card className={task === 'cron' ? '' : 'hidden'}>
             <CardHeader
               title="⏳ Cron 表达式执行预测"
               description="使用 cron-parser 瞬间展现未来 5 次的精确执行时刻"
@@ -570,14 +572,14 @@ export const UnixTimeStudio: React.FC = () => {
                     <ListOrdered className="w-3.5 h-3.5 text-primary-600" />
                     未来 5 次触发预测
                   </span>
-                  
+
                   <div className="space-y-1.5">
                     {cronPreview.dates.map((date, idx) => {
                       const localStr = date.toLocaleString('zh-CN', { hour12: false });
                       const dayOfWeek = getDayOfWeekCN(date);
                       const timestampStr = Math.floor(date.getTime() / 1000).toString();
                       const key = `cron-${idx}`;
-                      
+
                       return (
                         <div
                           key={idx}
@@ -596,7 +598,7 @@ export const UnixTimeStudio: React.FC = () => {
 
                           <button
                             onClick={() => handleCopy(timestampStr, key)}
-                            className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-0 group-hover:opacity-100 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
+                            className="absolute top-2.5 right-2.5 p-1 text-slate-400 hover:text-primary-600 transition-colors opacity-70 hover:opacity-100 rounded bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700"
                             title="复制触发时刻秒级时间戳"
                           >
                             {copiedStates[key] ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}

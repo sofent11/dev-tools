@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, Copy, Download, Image as ImageIcon, Upload } from 'lucide-react';
+import { Check, Copy, Download, Image as ImageIcon } from 'lucide-react';
 import { CardContent } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { notifyToast } from '../shared/notifyToast';
@@ -9,6 +9,8 @@ import { downloadBlob, getBaseName } from './imageToolUtils';
 import { runMarchingEdges } from './vectorizerCore';
 
 // --- Image Vectorizer Panel (Grayscale Marching Edges) ---
+import { FileDropzone } from '../shared/WorkflowUi';
+
 export const ImageVectorizerPanel: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -24,14 +26,9 @@ export const ImageVectorizerPanel: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [showCode, setShowCode] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selected = e.target.files[0];
-      setFile(selected);
-      const url = URL.createObjectURL(selected);
-      setPreviewUrl(url);
-      setSvgPath('');
-    }
+  const handleFileChange = (files: File[]) => {
+    const selected = files[0]; if (!selected) return;
+    setFile(selected); setPreviewUrl(URL.createObjectURL(selected)); setSvgPath('');
   };
 
   const rawSvgContent = useMemo(
@@ -131,18 +128,7 @@ export const ImageVectorizerPanel: React.FC = () => {
     <CardContent className="flex-1 flex flex-col lg:flex-row gap-6 overflow-auto p-6 min-h-0 text-slate-700 dark:text-slate-200">
       <div className="w-full lg:w-80 shrink-0 flex flex-col gap-4">
         {!previewUrl ? (
-          <div 
-            onClick={() => document.getElementById('vector-file')?.click()}
-            className="flex-1 min-h-[220px] border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-xl flex flex-col items-center justify-center p-6 text-center cursor-pointer hover:border-primary-500 hover:bg-slate-50 dark:hover:bg-slate-900/10 transition-all"
-          >
-            <input 
-              type="file" id="vector-file" className="hidden" 
-              accept="image/*" onChange={handleFileChange}
-            />
-            <Upload className="w-10 h-10 text-slate-400 mb-3" />
-            <p className="text-xs font-bold text-slate-600 dark:text-slate-400">选择本地位图进行矢量化</p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">支持 PNG, JPG, WEBP • 纯本地离线计算</p>
-          </div>
+          <FileDropzone accept="image/*" onFiles={handleFileChange} title="选择位图或拖到这里" hint="单色轮廓提取，支持 PNG / JPG / WebP" />
         ) : (
           <div className="flex flex-col gap-4">
             <div className="p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center gap-3 text-xs">
@@ -163,6 +149,7 @@ export const ImageVectorizerPanel: React.FC = () => {
               </button>
             </div>
 
+            <div className="workflow-segmented"><button type="button" onClick={() => { setThreshold(90); setSimplifyTolerance(.5); }}>细线</button><button type="button" onClick={() => { setThreshold(160); setSimplifyTolerance(1); }}>实心轮廓</button></div>
             <div className="p-4 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2 text-xs">
               <div className="flex justify-between font-bold text-slate-700 dark:text-slate-300">
                 <span>二值化阈值 (Threshold)</span>
@@ -245,7 +232,7 @@ export const ImageVectorizerPanel: React.FC = () => {
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-2 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center flex-none">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-              {showCode ? 'SVG 矢量源码' : '无损 SVG 预览'}
+              {showCode ? 'SVG 矢量源码' : '轮廓 SVG 预览'}
             </span>
             {isProcessing && <span className="text-[10px] text-primary-500 font-bold animate-pulse">矢量化计算中...</span>}
           </div>
@@ -272,7 +259,7 @@ export const ImageVectorizerPanel: React.FC = () => {
           {!previewUrl ? (
             <div className="text-slate-400 text-center text-xs">
               <ImageIcon className="w-12 h-12 text-slate-300 dark:text-slate-800 mx-auto mb-3" />
-              <span>上传位图图像，在此实时生成并预览高阶矢量化路径。</span>
+              <span>上传位图图像，在此实时生成并预览单色轮廓路径。</span>
             </div>
           ) : showCode ? (
             <pre className="w-full h-full p-4 rounded-xl border border-slate-200 dark:border-slate-900 bg-slate-50 dark:bg-slate-950 font-mono text-[10px] text-slate-700 dark:text-slate-300 overflow-auto whitespace-pre leading-relaxed">

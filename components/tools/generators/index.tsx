@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, Copy, RefreshCcw } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
+import { useCopyToClipboard } from '../shared/useCopyToClipboard';
 import { FieldLabel, Input } from '../../ui/ToolUi';
 
 const randomInt = (min: number, max: number) => {
@@ -19,37 +20,27 @@ export const RandomNumberTool: React.FC = () => {
   const [max, setMax] = useState(100);
   const [count, setCount] = useState(12);
   const [numbers, setNumbers] = useState<number[]>(() => Array.from({ length: 12 }, () => randomInt(1, 100)));
-
-  const generate = () => {
-    const safeCount = Math.min(500, Math.max(1, count));
-    setNumbers(Array.from({ length: safeCount }, () => randomInt(min, max)));
-  };
-
+  const [view, setView] = useState<'grid' | 'text'>('grid');
+  const [generatedRange, setGeneratedRange] = useState('1–100');
+  const { copied, copy } = useCopyToClipboard();
+  const valid = Number.isSafeInteger(min) && Number.isSafeInteger(max) && min <= max && max - min < 4294967296 && Number.isInteger(count) && count >= 1 && count <= 500;
+  const generate = () => { if (!valid) return; setNumbers(Array.from({ length: count }, () => randomInt(min, max))); setGeneratedRange(`${min}–${max}`); };
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="随机数生成器" description="使用 Web Crypto 生成指定范围内的随机整数。" actions={<Button size="sm" icon={<RefreshCcw className="h-4 w-4" />} onClick={generate}>生成</Button>} />
-      <CardContent className="flex flex-1 flex-col gap-5 overflow-auto">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div>
-            <FieldLabel>最小值</FieldLabel>
-            <Input type="number" value={min} onChange={event => setMin(Number(event.target.value))} />
-          </div>
-          <div>
-            <FieldLabel>最大值</FieldLabel>
-            <Input type="number" value={max} onChange={event => setMax(Number(event.target.value))} />
-          </div>
-          <div>
-            <FieldLabel>数量</FieldLabel>
-            <Input type="number" min={1} max={500} value={count} onChange={event => setCount(Number(event.target.value))} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">
-          {numbers.map((number, index) => (
-            <div key={`${number}-${index}`} className="tool-panel p-3 text-center font-mono text-lg font-semibold text-slate-900">
-              {number}
-            </div>
-          ))}
-        </div>
+      <CardHeader title="随机数生成器" description="设置整数范围与数量，批量生成后可复制到表格或代码。" />
+      <CardContent className="grid gap-5 overflow-auto lg:grid-cols-[18rem_1fr]">
+        <section className="tool-panel p-4 space-y-4 self-start">
+          <div className="flex flex-wrap gap-2">{[[1, 6, '骰子'], [0, 1, '二选一'], [1, 100, '1–100']].map(([lo,hi,label]) => <Button key={label} size="sm" variant="secondary" onClick={() => { setMin(Number(lo)); setMax(Number(hi)); }}>{label}</Button>)}</div>
+          <div><FieldLabel>最小值</FieldLabel><Input type="number" value={min} onChange={event => setMin(Number(event.target.value))} /></div>
+          <div><FieldLabel>最大值</FieldLabel><Input type="number" value={max} onChange={event => setMax(Number(event.target.value))} /></div>
+          <div><FieldLabel hint="1–500">数量</FieldLabel><Input type="number" min={1} max={500} value={count} onChange={event => setCount(Number(event.target.value))} /></div>
+          {!valid && <p role="alert" className="text-xs text-red-600">请输入有效整数范围和 1–500 的数量，范围跨度需小于 2³²。</p>}
+          <Button className="w-full" disabled={!valid} icon={<RefreshCcw className="h-4 w-4" />} onClick={generate}>生成随机数</Button>
+        </section>
+        <section className="space-y-4 min-w-0">
+          <div className="flex flex-wrap justify-between items-center gap-3"><span className="text-xs text-slate-500">{numbers.length} 个结果 · {generatedRange}</span><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={() => setView(view === 'grid' ? 'text' : 'grid')}>{view === 'grid' ? '纯文本' : '数字网格'}</Button><Button size="sm" onClick={() => copy(numbers.join('\n'))} icon={copied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}>复制全部</Button></div></div>
+          {view === 'grid' ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6">{numbers.map((number,index) => <div key={index} className="tool-panel p-4 text-center font-mono text-xl font-semibold">{number}</div>)}</div> : <textarea readOnly value={numbers.join('\n')} className="tool-panel p-4 min-h-80 w-full font-mono text-sm" />}
+        </section>
       </CardContent>
     </Card>
   );
@@ -116,13 +107,21 @@ export const LoremIpsumTool: React.FC = () => {
     { id: 'f-4', name: 'age', type: 'number', min: 18, max: 65 },
     { id: 'f-5', name: 'role', type: 'enum', options: 'admin,editor,user' }
   ]);
-  
+
   const [count, setCount] = useState<number>(20);
   const [sqlTableName, setSqlTableName] = useState<string>('tb_users');
   const [exportFormat, setExportFormat] = useState<'json' | 'csv' | 'sql' | 'msw' | 'express'>('json');
-  
+
   const [output, setOutput] = useState<string>('');
   const [copied, setCopied] = useState(false);
+  const [generatedFormat, setGeneratedFormat] = useState(exportFormat);
+  const [previewRows, setPreviewRows] = useState<MockRecord[]>([]);
+  const [view, setView] = useState<'table' | 'code'>('table');
+  const validationError = !fields.length ? '至少添加一个字段。' : fields.some(field => !field.name.trim()) ? '字段名不能为空。' : new Set(fields.map(field => field.name.trim())).size !== fields.length ? '字段名不能重复。' : fields.some(field => field.type === 'number' && (!Number.isFinite(field.min ?? 0) || !Number.isFinite(field.max ?? 100) || (field.min ?? 0) > (field.max ?? 100))) ? '数值字段的最小值不能大于最大值。' : '';
+  const applyTemplate = (kind: 'users' | 'products') => {
+    setFields(kind === 'users' ? [{ id: 't-1', name: 'id', type: 'id' }, { id: 't-2', name: 'name', type: 'name' }, { id: 't-3', name: 'email', type: 'email' }] : [{ id: 't-1', name: 'id', type: 'uuid' }, { id: 't-2', name: 'price', type: 'number', min: 10, max: 999 }, { id: 't-3', name: 'status', type: 'enum', options: 'available,sold_out,draft' }]);
+    setSqlTableName(kind);
+  };
 
   const addField = () => {
     const newField: SchemaField = {
@@ -142,6 +141,7 @@ export const LoremIpsumTool: React.FC = () => {
   };
 
   const handleGenerate = () => {
+    if (validationError) return;
     const safeCount = Math.min(500, Math.max(1, count));
     const rawData: MockRecord[] = [];
 
@@ -150,7 +150,7 @@ export const LoremIpsumTool: React.FC = () => {
       const row: MockRecord = {};
       fields.forEach(field => {
         if (!field.name) return;
-        
+
         switch (field.type) {
           case 'id':
             row[field.name] = index + 1;
@@ -189,6 +189,8 @@ export const LoremIpsumTool: React.FC = () => {
       rawData.push(row);
     }
 
+    setPreviewRows(rawData);
+    setGeneratedFormat(exportFormat);
     const tName = sqlTableName.trim() || 'users';
 
     // 2. Export Compiler Engine
@@ -200,7 +202,7 @@ export const LoremIpsumTool: React.FC = () => {
         return;
       }
       const headers = Object.keys(rawData[0]).join(',');
-      const rows = rawData.map(row => 
+      const rows = rawData.map(row =>
         Object.values(row).map(val => {
           const s = String(val);
           if (s.includes(',') || s.includes('"') || s.includes('\n')) {
@@ -296,14 +298,14 @@ module.exports = router;`);
 
   const handleDownload = () => {
     if (!output) return;
-    const isJson = exportFormat === 'json';
-    const isCsv = exportFormat === 'csv';
-    const isSql = exportFormat === 'sql';
-    const isMsw = exportFormat === 'msw';
-    
+    const isJson = generatedFormat === 'json';
+    const isCsv = generatedFormat === 'csv';
+    const isSql = generatedFormat === 'sql';
+    const isMsw = generatedFormat === 'msw';
+
     const ext = isJson ? 'json' : isCsv ? 'csv' : isSql ? 'sql' : isMsw ? 'ts' : 'js';
     const mime = isJson ? 'application/json' : 'text/plain';
-    
+
     const blob = new Blob([output], { type: mime });
     const url = URL.createObjectURL(blob);
     aElementClick(url, `mock_data_${Date.now()}.${ext}`);
@@ -323,7 +325,7 @@ module.exports = router;`);
     <Card className="flex h-full flex-col">
       <CardHeader
         title="可视化 Schema 数据 Mock 发生器"
-        description="支持拖拽级配置自定义字段，在本地瞬间批量产出符合前后端与数据库规范的 JSON、CSV、SQL 压测脚本，及 MSW 拦截拦截器、Node Express 路由代码。"
+        description="选模板或配置字段，生成可检查的表格预览，再导出 JSON、CSV、SQL 或 API Mock 代码。"
         actions={
           <div className="flex gap-2">
             <Button size="sm" variant="secondary" disabled={!output} onClick={handleCopy} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>
@@ -332,19 +334,19 @@ module.exports = router;`);
             <Button size="sm" variant="secondary" disabled={!output} onClick={handleDownload} icon={<Download className="h-4 w-4" />}>
               导出文件
             </Button>
-            <Button size="sm" onClick={handleGenerate} icon={<RefreshCcw className="h-4 w-4" />}>
+            <Button size="sm" disabled={!!validationError} onClick={handleGenerate} icon={<RefreshCcw className="h-4 w-4" />}>
               生成数据
             </Button>
           </div>
         }
       />
       <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-12">
-        
+
         {/* Left Side: Schema Builder (5 cols equivalent) */}
         <div className="lg:col-span-5 flex flex-col gap-4 min-h-0 border-r border-slate-100 dark:border-slate-800 pr-3">
           <div className="flex items-center justify-between border-b pb-2 dark:border-slate-800">
             <span className="text-xs font-bold text-slate-500 uppercase">Schema 字段配置</span>
-            <button 
+            <button
               onClick={addField}
               className="flex items-center gap-1 py-1 px-2.5 rounded bg-primary-50 text-primary-600 hover:bg-primary-100 text-[10px] font-bold transition-all dark:bg-primary-950/20"
             >
@@ -353,23 +355,25 @@ module.exports = router;`);
             </button>
           </div>
 
+          <div className="flex flex-wrap gap-2"><Button size="sm" variant="secondary" onClick={() => applyTemplate('users')}>用户列表模板</Button><Button size="sm" variant="secondary" onClick={() => applyTemplate('products')}>商品列表模板</Button></div>
+          {validationError && <p role="alert" className="text-xs text-red-600">{validationError}</p>}
           {/* Fields list */}
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 min-h-[220px]">
             {fields.map(field => (
-              <div 
+              <div
                 key={field.id}
                 className="p-3 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20 text-xs space-y-2.5 relative group shadow-inner"
               >
                 <div className="flex gap-2 items-center">
-                  <input 
+                  <input
                     className="flex-1 border-b border-dashed border-slate-200 dark:border-slate-800 bg-transparent font-mono font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-primary-500"
                     value={field.name}
                     onChange={e => updateField(field.id, { name: e.target.value })}
                     placeholder="字段名 (key)"
                   />
-                  <button 
+                  <button
                     onClick={() => deleteField(field.id)}
-                    className="text-slate-400 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    className="text-slate-400 hover:text-rose-500 transition-colors opacity-70 hover:opacity-100 focus:opacity-100"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -396,13 +400,13 @@ module.exports = router;`);
 
                   {field.type === 'number' && (
                     <div className="flex gap-1 items-end">
-                      <input 
+                      <input
                         type="number" placeholder="min" className="w-full p-1 border rounded text-center"
                         value={field.min ?? 0}
                         onChange={e => updateField(field.id, { min: Number(e.target.value) })}
                       />
                       <span className="text-slate-300 select-none">-</span>
-                      <input 
+                      <input
                         type="number" placeholder="max" className="w-full p-1 border rounded text-center"
                         value={field.max ?? 100}
                         onChange={e => updateField(field.id, { max: Number(e.target.value) })}
@@ -413,7 +417,7 @@ module.exports = router;`);
                   {field.type === 'enum' && (
                     <div className="col-span-2">
                       <span className="text-slate-400 block mb-0.5">枚举选项 (逗号隔开)</span>
-                      <input 
+                      <input
                         className="w-full p-1 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded font-mono text-[9px]"
                         value={field.options || ''}
                         onChange={e => updateField(field.id, { options: e.target.value })}
@@ -443,23 +447,23 @@ module.exports = router;`);
               </div>
             </div>
 
-            <div>
+            {exportFormat !== 'json' && exportFormat !== 'csv' && <div>
               <FieldLabel>API / 数据库表名</FieldLabel>
-              <Input 
+              <Input
                 className="font-mono text-xs font-bold mt-1"
                 value={sqlTableName}
                 onChange={e => setSqlTableName(e.target.value)}
                 placeholder="e.g. users"
               />
-            </div>
+            </div>}
 
             <div>
               <FieldLabel>生成记录条数</FieldLabel>
-              <Input 
+              <Input
                 type="number" min={1} max={500}
                 className="mt-1"
-                value={count} 
-                onChange={e => setCount(Math.min(500, Math.max(1, Number(e.target.value))))} 
+                value={count}
+                onChange={e => setCount(Math.min(500, Math.max(1, Number(e.target.value))))}
               />
             </div>
           </div>
@@ -469,15 +473,16 @@ module.exports = router;`);
         <div className="lg:col-span-7 flex flex-col min-h-0 bg-slate-950 rounded-xl overflow-hidden min-h-[300px]">
           <div className="bg-slate-900 px-4 py-2 border-b border-slate-800 flex items-center justify-between flex-none">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              Output Data Dashboard
+              {previewRows.length ? `${previewRows.length} 条记录 · ${generatedFormat.toUpperCase()}` : '生成结果'}
             </span>
           </div>
-          <textarea
+          {output && <div className="flex gap-2 px-4 py-2 bg-slate-900"><Button size="sm" variant={view === 'table' ? 'primary' : 'secondary'} onClick={() => setView('table')}>表格预览</Button><Button size="sm" variant={view === 'code' ? 'primary' : 'secondary'} onClick={() => setView('code')}>导出代码</Button></div>}
+          {output && view === 'table' ? <div className="flex-1 overflow-auto bg-white"><table data-i18n-skip className="min-w-full text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr>{Object.keys(previewRows[0] || {}).map(key => <th key={key} className="p-3 border-b border-slate-200 font-mono">{key}</th>)}</tr></thead><tbody>{previewRows.slice(0,100).map((row,index) => <tr key={index} className="border-b border-slate-100">{Object.entries(row).map(([key,value]) => <td key={key} className="p-3 max-w-60 truncate" title={String(value)}>{value}</td>)}</tr>)}</tbody></table>{previewRows.length > 100 && <p className="p-3 text-xs text-slate-500">预览显示前 100 条，导出包含全部记录。</p>}</div> : <textarea
             readOnly
             className="flex-1 w-full h-full p-4 font-mono text-xs text-emerald-400 dark:text-emerald-300 bg-transparent border-0 outline-none resize-none leading-relaxed overflow-auto"
             value={output || '在左侧配置 Schema 字段，点击上方“生成数据”按钮查看结果...'}
             placeholder="生成的假数据在此处呈现"
-          />
+          />}
         </div>
 
       </CardContent>

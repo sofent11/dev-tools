@@ -17,6 +17,7 @@ import { TabButton, Tabs } from '../ui/ToolUi';
 import { ImageCompressorPanel } from './images/ImageCompressorPanel';
 import { ImageVectorizerPanel } from './images/ImageVectorizerPanel';
 import { downloadBlob, formatBytes, getBaseName } from './images/imageToolUtils';
+import { FileDropzone, WorkflowSteps, WorkflowEmpty } from './shared/WorkflowUi';
 
 type SplitOutputFormat = 'image/png' | 'image/jpeg' | 'image/webp';
 
@@ -838,13 +839,13 @@ const StickerSplitterPanel: React.FC = () => {
     setError(null);
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (!event.target.files?.[0]) {
+  const handleFileChange = (files: File[]) => {
+    if (!files[0]) {
       return;
     }
 
     resetSplitResults();
-    setFile(event.target.files[0]);
+    setFile(files[0]);
   };
 
   const commitBoundsUpdate = async (resultId: string, nextBounds: BoundingBox) => {
@@ -1021,21 +1022,9 @@ const StickerSplitterPanel: React.FC = () => {
 
   return (
     <CardContent className="flex-1 flex flex-col gap-6 overflow-auto">
-      <div className="tool-upload flex-none p-6">
-        <div className="rounded-full bg-white p-4 shadow-sm">
-          <Scissors className="w-8 h-8 text-primary-500" />
-        </div>
-        <div>
-          <p className="font-medium text-slate-700">上传整张表情包图片</p>
-          <p className="text-sm text-slate-500">适合纯色背景、单个表情之间有明显留白的贴纸图</p>
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-          onChange={handleFileChange}
-        />
-      </div>
+      <WorkflowSteps steps={['选择贴纸图', '识别与调整边框', '导出切片']} active={!file ? 0 : splitResults.length ? 2 : 1} />
+      <FileDropzone accept="image/*" fileName={file?.name} disabled={isSplitting} onFiles={handleFileChange} title="选择整张贴纸图" hint="适合纯色背景，贴纸之间有明显留白的图片" />
+      {!file && <WorkflowEmpty title="把整张贴纸图拆成独立素材" description="自动识别边框后仍可手动拖动或调整坐标，单张下载或打包 ZIP。" />}
 
       {file && (
         <div className="flex flex-col xl:flex-row gap-6 min-h-0">
@@ -1149,7 +1138,9 @@ const StickerSplitterPanel: React.FC = () => {
               {isSplitting ? '正在拆分...' : '自动拆分表情包'}
             </Button>
 
-            <div className="tool-panel space-y-2 p-3 text-sm text-slate-600">
+            <details className="workflow-settings">
+              <summary>拆分与边框调整说明</summary>
+              <div className="space-y-2 text-xs text-slate-600">
               <div className="flex items-center gap-2 text-slate-700 font-medium">
                 <Sparkles className="w-4 h-4 text-amber-500" />
                 使用建议
@@ -1159,6 +1150,7 @@ const StickerSplitterPanel: React.FC = () => {
               <p>拆分后可直接拖动边框或拖四边控制点，手工修正每张的裁切范围。</p>
             </div>
 
+            </details>
             {selectedResult && sourceInfo && (
               <div className="rounded-lg border border-primary-200 bg-primary-50/50 p-4 space-y-4">
                 <div>

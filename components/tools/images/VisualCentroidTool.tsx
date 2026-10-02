@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Crosshair, Download, Pipette, RotateCcw, ScanLine } from 'lucide-react';
+import { Crosshair, Download, Pipette, RotateCcw } from 'lucide-react';
 import { useI18n } from '../../../src/i18n';
+import { Button } from '../../ui/Button';
 import { downloadBlob } from '../shared/fileUtils';
+import { FileDropzone, WorkflowEmpty, WorkflowNotice, WorkflowSteps } from '../shared/WorkflowUi';
 import {
   calculateVisualCentroid,
   parseHexColor,
@@ -27,6 +29,10 @@ const copyText = {
     visible: '有效像素',
     noImage: '选择带透明区域或纯色背景的图片后开始计算。',
     picking: '取样模式已开启，请点击图片。',
+    prepare: '背景预处理',
+    legend: '红色 C 为视觉质心，橙色 BBOX 为包围盒中心。坐标以左上角为原点。',
+    noPixels: '当前阈值下没有有效像素，请降低 Alpha 阈值或恢复原图。',
+    readError: '图片读取失败，请更换文件。',
   },
   'en-US': {
     title: 'Visual Centroid Calculator',
@@ -43,6 +49,10 @@ const copyText = {
     visible: 'visible pixels',
     noImage: 'Choose an image with transparency or a solid background to begin.',
     picking: 'Pick mode is active. Click the image.',
+    prepare: 'Prepare background',
+    legend: 'Red C marks the visual centroid; orange BBOX marks the bounding box center. Coordinates start at the top-left.',
+    noPixels: 'No visible pixels at this threshold. Lower the alpha threshold or reset the image.',
+    readError: 'Could not read this image. Choose another file.',
   },
 } as const;
 
@@ -76,6 +86,8 @@ export const VisualCentroidTool: React.FC = () => {
   const [tolerance, setTolerance] = useState(50);
   const [bgColor, setBgColor] = useState('#ffffff');
   const [picking, setPicking] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [error, setError] = useState('');
   const result: CentroidResult | null = useMemo(
     () => working ? calculateVisualCentroid(working, alphaThreshold) : null,
     [alphaThreshold, working],
@@ -108,20 +120,23 @@ export const VisualCentroidTool: React.FC = () => {
     redraw(working, result);
   }, [redraw, result, working]);
 
-  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleFile = async (files: File[]) => {
+    const file = files[0];
     if (!file) return;
-    setFileName(file.name);
-    const bitmap = await createImageBitmap(file);
-    const offscreen = document.createElement('canvas');
-    offscreen.width = bitmap.width;
-    offscreen.height = bitmap.height;
-    const ctx = offscreen.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(bitmap, 0, 0);
-    const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
-    setOriginal(imageData);
-    setWorking(imageData);
+    setReading(true); setError(''); setPicking(false);
+    try {
+      const bitmap = await createImageBitmap(file);
+      try {
+        const offscreen = document.createElement('canvas');
+        offscreen.width = bitmap.width; offscreen.height = bitmap.height;
+        const ctx = offscreen.getContext('2d');
+        if (!ctx) throw new Error(c.readError);
+        ctx.drawImage(bitmap, 0, 0);
+        const imageData = ctx.getImageData(0, 0, offscreen.width, offscreen.height);
+        setOriginal(imageData); setWorking(imageData); setFileName(file.name);
+      } finally { bitmap.close(); }
+    } catch { setError(c.readError); }
+    finally { setReading(false); }
   };
 
   const handleRemoveBackground = () => {
@@ -147,96 +162,42 @@ export const VisualCentroidTool: React.FC = () => {
   };
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-      <section className="tool-panel min-h-[30rem] space-y-4">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="xl:col-span-2 space-y-3">
+        <WorkflowSteps steps={['导入图片', '检查中心与背景', '导出标记图']} active={working ? 1 : 0} />
+        <FileDropzone accept="image/*" onFiles={handleFile} disabled={reading} fileName={fileName} title={c.upload} />
+        {error && <WorkflowNotice tone="error">{error}</WorkflowNotice>}
+      </div>
+      <section className="tool-panel min-h-80 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{c.title}</h3>
-          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white">
-            <ScanLine className="h-4 w-4" />
-            {c.upload}
-            <input type="file" accept="image/*" className="sr-only" onChange={handleFile} />
-          </label>
+          <h3 className="text-base font-semibold">{c.title}</h3>
+          <button type="button" onClick={handleExport} disabled={!working || reading} className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary-600 px-3 text-sm font-semibold text-white disabled:opacity-50"><Download className="h-4 w-4" />{c.export}</button>
         </div>
-        {picking && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{c.picking}</div>}
-        {working ? (
-          <div className="overflow-auto rounded-lg border border-slate-200 bg-[conic-gradient(#e2e8f0_25%,transparent_0_50%,#e2e8f0_0_75%,transparent_0)_0_0/24px_24px] p-3 dark:border-slate-800 dark:bg-[conic-gradient(#1e293b_25%,transparent_0_50%,#1e293b_0_75%,transparent_0)_0_0/24px_24px]">
-            <canvas
-              ref={canvasRef}
-              onClick={handleCanvasClick}
-              className="max-h-[70vh] max-w-full rounded-md shadow-sm"
-            />
+        {picking && <WorkflowNotice onDismiss={() => setPicking(false)}>{c.picking}</WorkflowNotice>}
+        {working ? <>
+          <div className="workflow-preview overflow-auto p-3">
+            <canvas ref={canvasRef} onClick={handleCanvasClick} className={`max-h-[65vh] max-w-full rounded-md ${picking ? 'cursor-crosshair' : ''}`} />
           </div>
-        ) : (
-          <div className="flex min-h-80 items-center justify-center rounded-lg border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">
-            {c.noImage}
-          </div>
-        )}
+          <p className="text-xs leading-5 text-slate-500">{c.legend}</p>
+        </> : <WorkflowEmpty title={c.upload} description={c.noImage} icon={<Crosshair className="h-6 w-6" />} />}
       </section>
-
-      <aside className="tool-panel space-y-4">
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-          {c.alpha}: <span className="font-mono">{alphaThreshold}</span>
-          <input
-            type="range"
-            min={1}
-            max={255}
-            value={alphaThreshold}
-            onChange={event => setAlphaThreshold(Number(event.target.value))}
-            className="mt-2 w-full"
-          />
-        </label>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-          {c.bgColor}
-          <input
-            type="color"
-            value={bgColor}
-            onChange={event => setBgColor(event.target.value)}
-            className="mt-2 h-10 w-full rounded-lg border border-slate-200 dark:border-slate-800"
-          />
-        </label>
-        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-          {c.tolerance}: <span className="font-mono">{tolerance}</span>
-          <input
-            type="range"
-            min={0}
-            max={255}
-            value={tolerance}
-            onChange={event => setTolerance(Number(event.target.value))}
-            className="mt-2 w-full"
-          />
-        </label>
-        <div className="grid gap-2">
-          <button type="button" onClick={() => setPicking(true)} disabled={!working} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 text-sm font-medium disabled:opacity-50 dark:border-slate-800">
-            <Pipette className="h-4 w-4" />
-            {c.pick}
-          </button>
-          <button type="button" onClick={handleRemoveBackground} disabled={!working} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 text-sm font-semibold text-white disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900">
-            <Crosshair className="h-4 w-4" />
-            {c.remove}
-          </button>
-          <button type="button" onClick={() => original && setWorking(original)} disabled={!original} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 text-sm font-medium disabled:opacity-50 dark:border-slate-800">
-            <RotateCcw className="h-4 w-4" />
-            {c.reset}
-          </button>
-          <button type="button" onClick={handleExport} disabled={!working} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-primary-600 text-sm font-semibold text-white disabled:opacity-50">
-            <Download className="h-4 w-4" />
-            {c.export}
-          </button>
+      <aside className="tool-panel space-y-5">
+        <div className="space-y-2 rounded-lg bg-slate-50 p-4 text-sm">
+          <div className="flex justify-between gap-3"><span>{c.centroid}</span><strong data-i18n-skip className="font-mono text-red-600">{result?.centroid ? `${result.centroid.x.toFixed(1)}, ${result.centroid.y.toFixed(1)}` : '—'}</strong></div>
+          <div className="flex justify-between gap-3"><span>{c.bbox}</span><strong data-i18n-skip className="font-mono text-amber-600">{result?.boundingBox ? `${result.boundingBox.center.x.toFixed(1)}, ${result.boundingBox.center.y.toFixed(1)}` : '—'}</strong></div>
+          <div className="flex justify-between gap-3"><span>{c.visible}</span><strong data-i18n-skip className="font-mono">{(result?.visiblePixels || 0).toLocaleString()}</strong></div>
         </div>
-        <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-900">
-          <div className="flex justify-between gap-3 py-1">
-            <span>{c.centroid}</span>
-            <span className="font-mono">{result?.centroid ? `${result.centroid.x.toFixed(1)}, ${result.centroid.y.toFixed(1)}` : '-'}</span>
-          </div>
-          <div className="flex justify-between gap-3 py-1">
-            <span>{c.bbox}</span>
-            <span className="font-mono">{result?.boundingBox ? `${result.boundingBox.center.x.toFixed(1)}, ${result.boundingBox.center.y.toFixed(1)}` : '-'}</span>
-          </div>
-          <div className="flex justify-between gap-3 py-1">
-            <span>{c.visible}</span>
-            <span className="font-mono">{(result?.visiblePixels || 0).toLocaleString()}</span>
-          </div>
-        </div>
+        {working && !result?.visiblePixels && <WorkflowNotice>{c.noPixels}</WorkflowNotice>}
+        <fieldset disabled={!working || reading} className="space-y-5 disabled:opacity-50">
+          <label className="block text-sm font-medium">{c.alpha}: <span className="font-mono">{alphaThreshold}</span><input type="range" min={1} max={255} value={alphaThreshold} onChange={event => setAlphaThreshold(Number(event.target.value))} className="mt-2 w-full" /></label>
+          <details className="workflow-settings"><summary>{c.prepare}</summary><div className="space-y-4 pt-4">
+            <label className="block text-sm font-medium">{c.bgColor}<input type="color" value={bgColor} onChange={event => setBgColor(event.target.value)} className="mt-2 h-10 w-full rounded-lg border border-slate-200" /></label>
+            <label className="block text-sm font-medium">{c.tolerance}: <span className="font-mono">{tolerance}</span><input type="range" min={0} max={255} value={tolerance} onChange={event => setTolerance(Number(event.target.value))} className="mt-2 w-full" /></label>
+            <Button variant="secondary" onClick={() => setPicking(!picking)} aria-pressed={picking} className="w-full"><Pipette className="h-4 w-4" />{c.pick}</Button>
+            <Button onClick={handleRemoveBackground} className="w-full"><Crosshair className="h-4 w-4" />{c.remove}</Button>
+          </div></details>
+          <Button variant="secondary" onClick={() => { if (original) setWorking(original); setPicking(false); }} className="w-full"><RotateCcw className="h-4 w-4" />{c.reset}</Button>
+        </fieldset>
       </aside>
     </div>
   );

@@ -238,7 +238,7 @@ export const ArithmancyTool: React.FC = () => {
                     placeholder="Harry Potter"
                   />
                 </div>
-                <div>
+                <details><summary className="cursor-pointer text-xs font-semibold text-slate-600">问题、年份与关系分析</summary><div className="space-y-4 mt-4"><div>
                   <FieldLabel>问题关键词</FieldLabel>
                   <Input
                     value={keyword}
@@ -263,7 +263,7 @@ export const ArithmancyTool: React.FC = () => {
                     onChange={event => setPartnerName(event.target.value)}
                     placeholder="Hermione Granger"
                   />
-                </div>
+                </div></div></details>
               </div>
             </div>
 
@@ -312,8 +312,7 @@ export const ArithmancyTool: React.FC = () => {
             ) : null}
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-3 text-sm font-semibold text-slate-950 dark:text-slate-100">{t('计算轨迹')}</div>
+          <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold">{t('计算轨迹')}</summary><div className="mt-4">
             <div className="grid gap-3">
               {lifePath ? (
                 <>
@@ -338,10 +337,10 @@ export const ArithmancyTool: React.FC = () => {
             </div>
           </div>
 
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="mb-2 text-sm font-semibold text-slate-950 dark:text-slate-100">{t('报告预览')}</div>
+          </details>
+          <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold">{t('报告预览')}</summary><div className="mt-4">
             <Textarea readOnly value={report} className="min-h-40 resize-none bg-white font-mono text-xs dark:bg-slate-900" />
-          </div>
+          </div></details>
         </div>
       </CardContent>
     </Card>

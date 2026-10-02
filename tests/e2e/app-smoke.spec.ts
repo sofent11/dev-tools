@@ -10,7 +10,10 @@ test('data format route activates the JSON diff sub-tool', async ({ page }) => {
   await page.goto('/tools/json-studio#json-diff');
 
   await expect(page).toHaveURL(/\/tools\/json-studio#json-diff$/);
-  await expect(page.getByText(/RFC 6902 JSON Patch|RFC 6902 JSON PATCH/)).toBeVisible();
+  await expect(page.getByText('结构化差异', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '载入示例', exact: true }).click();
+  await page.getByText('导出 JSON Patch · 左侧 → 右侧', { exact: true }).click();
+  await expect(page.getByRole('button', { name: '复制 Patch', exact: true })).toBeEnabled();
 });
 
 test('language and dark mode controls stay usable', async ({ page }) => {
@@ -62,6 +65,7 @@ test('STL repair exposes wall thickness fast and precise controls', async ({ pag
 
 test('video downloader states private Worker limits without overpromising', async ({ page }) => {
   await page.goto('/tools/network-studio#video-download');
+  await page.getByText('解析端点与健康检查', { exact: true }).click();
   await expect(page.locator('input[value="https://api-dev.sopace.top"]')).toBeVisible();
   await page.getByRole('button', { name: /配置解析 Worker/ }).click();
 

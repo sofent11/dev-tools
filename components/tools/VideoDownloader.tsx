@@ -695,7 +695,7 @@ export const VideoDownloader: React.FC = () => {
                 />
               </div>
 
-              <div>
+              <details className="tool-panel p-3"><summary className="cursor-pointer text-xs font-semibold text-slate-600 mb-3">解析端点与健康检查</summary><div>
                 <FieldLabel hint={workerEndpoint ? '优先使用' : '可选'}>Cloudflare Worker API</FieldLabel>
                 <div className="flex gap-2">
                   <Input
@@ -725,6 +725,7 @@ export const VideoDownloader: React.FC = () => {
                 </div>
               </div>
 
+              </details>
               {mode === 'source' && (
                 <div>
                   <FieldLabel hint="跨域失败时使用">页面源码 / JSON 配置</FieldLabel>
@@ -739,6 +740,7 @@ export const VideoDownloader: React.FC = () => {
 
               <Button
                 onClick={parse}
+                disabled={!targetUrl || (mode === 'source' && !source.trim())}
                 isLoading={status === 'parsing'}
                 icon={status === 'parsing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
                 className="w-full"
@@ -746,7 +748,7 @@ export const VideoDownloader: React.FC = () => {
                 开始解析
               </Button>
 
-              <div className="tool-section overflow-hidden border-sky-200 bg-gradient-to-br from-white to-sky-50/70 p-4">
+              <details className="tool-panel p-4"><summary className="cursor-pointer text-sm font-semibold text-slate-600">iPhone 快捷指令</summary><div className="mt-3 tool-section overflow-hidden border-sky-200 bg-gradient-to-br from-white to-sky-50/70 p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sky-200 bg-white text-sky-700 shadow-sm">
                     <Smartphone className="h-5 w-5" />
@@ -778,6 +780,7 @@ export const VideoDownloader: React.FC = () => {
                 </p>
               </div>
 
+              </details>
               <div className="tool-section overflow-hidden rounded-xl border border-slate-200/80 bg-white/50 p-4 shadow-sm backdrop-blur-sm transition-all duration-300">
                 <button
                   type="button"
@@ -794,7 +797,7 @@ export const VideoDownloader: React.FC = () => {
                     <ChevronDown className="h-4 w-4 text-slate-500 transition-transform duration-300" />
                   )}
                 </button>
-                
+
                 {showWorkerInfo ? (
                   <div className="mt-3 space-y-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600 transition-all duration-300">
                     <p className="text-slate-500">
@@ -858,8 +861,7 @@ export const VideoDownloader: React.FC = () => {
                 <p className="text-sm leading-6 text-slate-700">{platformHints[platform]}</p>
               </div>
 
-              <div className="tool-panel p-4">
-                <div className="mb-2 text-xs font-semibold uppercase text-slate-500">能力矩阵</div>
+              <details className="tool-panel p-4"><summary className="cursor-pointer text-xs font-semibold text-slate-500 mb-3">能力矩阵</summary><div>
                 <div className="grid gap-2 text-xs text-slate-600">
                   <div className="flex justify-between gap-3"><span>媒体直链 / m3u8 / mpd</span><strong className="text-emerald-700">本地可用</strong></div>
                   <div className="flex justify-between gap-3"><span>页面源码扫描</span><strong className="text-emerald-700">本地可用</strong></div>
@@ -867,7 +869,7 @@ export const VideoDownloader: React.FC = () => {
                   <div className="flex justify-between gap-3"><span>抖音 / 小红书 / Pinterest</span><strong className="text-amber-700">建议私有 Worker</strong></div>
                   <div className="flex justify-between gap-3"><span>Twitter / X</span><strong className="text-red-700">纯浏览器不承诺支持</strong></div>
                 </div>
-              </div>
+              </div></details>
             </div>
           </div>
 
@@ -968,9 +970,7 @@ export const VideoDownloader: React.FC = () => {
                             </a>
                           </div>
                         </div>
-                        <CodePanel muted className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs">
-                          {buildCommand(format)}
-                        </CodePanel>
+                        <details className="mt-3"><summary className="cursor-pointer text-xs text-slate-500">查看下载命令</summary><CodePanel muted className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs">{buildCommand(format)}</CodePanel></details>
                       </div>
                     ))}
                   </div>

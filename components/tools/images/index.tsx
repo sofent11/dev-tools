@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Copy, Download, ImagePlus, Palette, Upload, ClipboardList } from 'lucide-react';
+import { Check, Copy, Download, Palette, ClipboardList } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '../../ui/Card';
 import { Button } from '../../ui/Button';
-import { FieldLabel, Input, Textarea, UploadPanel } from '../../ui/ToolUi';
+import { FieldLabel, Input, Textarea } from '../../ui/ToolUi';
 import { downloadBlob, readFileAsDataUrl } from '../shared/fileUtils';
 import { useCopyToClipboard } from '../shared/useCopyToClipboard';
 import { useScratchpadStore } from '../shared/scratchpadStore';
 import { notifyToast } from '../shared/notifyToast';
+import { FileDropzone, WorkflowEmpty, WorkflowNotice } from '../shared/WorkflowUi';
 
 interface Swatch {
   hex: string;
@@ -321,45 +322,27 @@ const drawBeadChart = (canvas: HTMLCanvasElement, result: BeadPatternResult) => 
 
 export const ImageColorExtractTool: React.FC = () => {
   const [imageUrl, setImageUrl] = useState('');
+  const [fileName, setFileName] = useState('');
   const [colors, setColors] = useState<Swatch[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [format, setFormat] = useState<'hex' | 'css'>('hex');
   const { copied, copy } = useCopyToClipboard();
-
   const handleFile = async (file?: File) => {
     if (!file) return;
-    const url = await readFileAsDataUrl(file);
-    setImageUrl(url);
-    setColors(await getPalette(url));
+    setBusy(true); setError(''); setColors([]); setFileName(file.name);
+    try { const url = await readFileAsDataUrl(file); setImageUrl(url); setColors(await getPalette(url)); }
+    catch (err) { setError(err instanceof Error ? err.message : '无法读取图片'); }
+    finally { setBusy(false); }
   };
-
-  const colorText = useMemo(() => colors.map(color => color.hex).join('\n'), [colors]);
-
+  const colorText = useMemo(() => colors.map((color, index) => format === 'css' ? `--color-${index + 1}: ${color.hex};` : color.hex).join('\n'), [colors, format]);
+  const total = colors.reduce((sum, color) => sum + color.count, 0);
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader title="图片颜色提取" description="Canvas 本地采样主色与调色板。" />
-      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
-        <div className="flex min-h-0 flex-col gap-4">
-          <UploadPanel>
-            <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
-              <Upload className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择图片</span>
-              <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
-            </label>
-          </UploadPanel>
-          {imageUrl && <img src={imageUrl} alt="待提取图片" className="max-h-80 rounded-lg border border-slate-200 object-contain" />}
-        </div>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {colors.map(color => (
-              <button key={color.hex} type="button" className="tool-panel overflow-hidden text-left" onClick={() => copy(color.hex)}>
-                <div className="h-20" style={{ backgroundColor: color.hex }} />
-                <div className="p-3 font-mono text-sm text-slate-800">{color.hex}</div>
-              </button>
-            ))}
-          </div>
-          <Button variant="secondary" icon={copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />} onClick={() => copy(colorText)} disabled={!colors.length}>
-            复制色板
-          </Button>
-        </div>
+      <CardHeader title="图片颜色提取" description="从图片中采样色板。点击色块复制颜色，或导出 CSS 变量。" />
+      <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[minmax(0,.85fr)_minmax(0,1.15fr)]">
+        <section className="flex min-h-0 flex-col gap-4"><FileDropzone accept="image/*" fileName={fileName} disabled={busy} onFiles={files => handleFile(files[0])} title="选择图片或拖到这里" />{error && <WorkflowNotice tone="error">{error}</WorkflowNotice>}{imageUrl ? <div className="workflow-preview flex items-center justify-center p-4"><img src={imageUrl} alt="待提取图片" className="max-h-96 max-w-full object-contain" /></div> : <WorkflowEmpty title="从图片开始配色" description="选择参考图，右侧会显示采样色板。" icon={<Palette className="h-6 w-6" />} />}</section>
+        <section className="flex min-h-0 flex-col gap-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="workflow-segmented"><button aria-pressed={format === 'hex'} onClick={() => setFormat('hex')}>HEX</button><button aria-pressed={format === 'css'} onClick={() => setFormat('css')}>CSS 变量</button></div><Button size="sm" onClick={() => copy(colorText)} disabled={!colors.length} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制色板</Button></div>{busy && <WorkflowNotice>正在采样...</WorkflowNotice>}{colors.length ? <><div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{colors.map(color => <button key={color.hex} type="button" title="点击复制颜色" className="overflow-hidden rounded-lg border border-slate-200 bg-white text-left" onClick={() => copy(color.hex)}><div className="h-24" style={{ backgroundColor: color.hex }} /><div className="flex items-center justify-between gap-2 p-3"><code className="text-xs">{color.hex}</code><span className="text-[10px] text-slate-500">{Math.round(color.count / total * 100)}%</span></div></button>)}</div><pre className="code-surface overflow-auto p-4 text-xs" data-i18n-skip>{colorText}</pre><p className="text-xs text-slate-500">比例为当前采样色板中的相对占比。</p></> : !busy && <WorkflowEmpty title="色板结果" description="点击任意色块即可复制 HEX 值。" />}</section>
       </CardContent>
     </Card>
   );
@@ -368,61 +351,29 @@ export const ImageColorExtractTool: React.FC = () => {
 export const ImageToBase64Tool: React.FC = () => {
   const [dataUrl, setDataUrl] = useState('');
   const [fileName, setFileName] = useState('');
+  const [mode, setMode] = useState<'url' | 'base64' | 'html' | 'css'>('url');
   const [stashed, setStashed] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
   const { copied, copy } = useCopyToClipboard();
-
+  const output = !dataUrl ? '' : mode === 'base64' ? dataUrl.slice(dataUrl.indexOf(',') + 1) : mode === 'html' ? `<img src="${dataUrl}" alt="" />` : mode === 'css' ? `background-image: url("${dataUrl}");` : dataUrl;
   const handleFile = async (file?: File) => {
     if (!file) return;
-    setFileName(file.name);
-    setDataUrl(await readFileAsDataUrl(file));
+    setBusy(true); setError(''); setDataUrl(''); setFileName(file.name);
+    try { setDataUrl(await readFileAsDataUrl(file)); }
+    catch (err) { setError(err instanceof Error ? err.message : '无法读取图片'); }
+    finally { setBusy(false); }
   };
-
   const stash = () => {
-    if (!dataUrl) return;
-    const name = fileName ? `${fileName.split('.').shift()}_base64.txt` : 'image_base64.txt';
-    useScratchpadStore.getState().addItem({
-      name,
-      content: dataUrl,
-      type: 'text',
-      mimeType: 'text/plain',
-      sourceTool: '图片转 Base64',
-      originAction: 'image-to-base64',
-    });
+    if (!output) return;
+    useScratchpadStore.getState().addItem({ name: `${fileName || 'image'}_base64.txt`, content: output, type: 'text', mimeType: 'text/plain', sourceTool: '图片转 Base64', originAction: 'image-to-base64' });
     notifyToast({ title: 'Base64 图片文本已送入暂存箱', tone: 'success' });
-    setStashed(true);
-    setTimeout(() => setStashed(false), 2000);
+    setStashed(true); setTimeout(() => setStashed(false), 2000);
   };
-
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader title="图片转 Base64" description="把图片转换为可嵌入 HTML/CSS 的 Data URL。" />
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-        <UploadPanel>
-          <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
-            <ImagePlus className="h-8 w-8 text-primary-600" />
-            <span className="text-sm font-medium text-slate-700">选择图片</span>
-            <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
-          </label>
-        </UploadPanel>
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[18rem_1fr]">
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            {dataUrl ? <img src={dataUrl} alt="预览" className="h-full max-h-80 w-full object-contain" /> : <div className="flex h-48 items-center justify-center text-sm text-slate-400">预览</div>}
-          </div>
-          <div className="flex min-h-0 flex-col gap-2">
-            <div className="flex items-center justify-between">
-              <FieldLabel>Data URL</FieldLabel>
-              <div className="flex gap-2">
-                <Button size="sm" variant="secondary" onClick={stash} disabled={!dataUrl}>
-                  {stashed ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardList className="h-4 w-4" />}
-                </Button>
-                <Button size="sm" variant="secondary" onClick={() => copy(dataUrl)} disabled={!dataUrl}>
-                  {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-            <Textarea readOnly className="min-h-0 flex-1 resize-none bg-slate-50 font-mono text-xs" value={dataUrl} />
-          </div>
-        </div>
+    <Card className="h-full flex flex-col"><CardHeader title="图片转 Base64" description="选择图片，再选择 Data URL、纯 Base64 或直接可用的嵌入代码。" />
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto"><FileDropzone accept="image/*" fileName={fileName} disabled={busy} onFiles={files => handleFile(files[0])} title="选择图片或拖到这里" />{error && <WorkflowNotice tone="error">{error}</WorkflowNotice>}
+        <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]"><div className="workflow-preview flex items-center justify-center p-4">{dataUrl ? <img src={dataUrl} alt="预览" className="max-h-80 max-w-full object-contain" /> : <WorkflowEmpty title="图片预览" description="选择图片后生成嵌入代码。" />}</div><section className="flex min-h-0 flex-col gap-3"><div className="workflow-segmented">{(['url', 'base64', 'html', 'css'] as const).map(value => <button key={value} aria-pressed={mode === value} onClick={() => setMode(value)}>{value === 'url' ? 'Data URL' : value === 'base64' ? 'Base64' : value.toUpperCase()}</button>)}</div><div className="flex items-center justify-between gap-3"><span className="text-xs text-slate-500">{output.length.toLocaleString()} 字符</span><div className="flex gap-2"><Button size="sm" variant="secondary" onClick={stash} disabled={!output} icon={stashed ? <Check className="h-4 w-4" /> : <ClipboardList className="h-4 w-4" />}>暂存</Button><Button size="sm" onClick={() => copy(output)} disabled={!output} icon={copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}>复制代码</Button></div></div><Textarea readOnly aria-label="图片编码结果" className="min-h-64 flex-1 resize-y bg-slate-50 font-mono text-xs" value={output} placeholder="选择图片后生成编码结果" /></section></div>
       </CardContent>
     </Card>
   );
@@ -432,95 +383,55 @@ export const ImageWatermarkTool: React.FC = () => {
   const [imageUrl, setImageUrl] = useState('');
   const [sourceName, setSourceName] = useState('');
   const [text, setText] = useState('程序员百宝箱');
+  const [position, setPosition] = useState<'bottom-right' | 'bottom-left' | 'center'>('bottom-right');
+  const [opacity, setOpacity] = useState(.72);
+  const [relativeSize, setRelativeSize] = useState(4);
   const [stashed, setStashed] = useState(false);
+  const [error, setError] = useState('');
+  const [renderedKey, setRenderedKey] = useState('');
+  const [reading, setReading] = useState(false);
+  const renderKey = JSON.stringify([imageUrl, text, position, opacity, relativeSize]);
+  const ready = !!imageUrl && !reading && renderedKey === renderKey;
   const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const draw = async (src = imageUrl, mark = text) => {
-    if (!src || !canvasRef.current) return;
-    const image = await loadImage(src);
-    const canvas = canvasRef.current;
-    canvas.width = image.naturalWidth;
-    canvas.height = image.naturalHeight;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    context.drawImage(image, 0, 0);
-    const fontSize = Math.max(20, Math.round(canvas.width / 24));
-    context.font = `600 ${fontSize}px sans-serif`;
-    context.fillStyle = 'rgba(255,255,255,0.72)';
-    context.strokeStyle = 'rgba(15,23,42,0.45)';
-    context.lineWidth = Math.max(2, Math.round(fontSize / 12));
-    context.textAlign = 'right';
-    context.textBaseline = 'bottom';
-    context.strokeText(mark, canvas.width - fontSize, canvas.height - fontSize);
-    context.fillText(mark, canvas.width - fontSize, canvas.height - fontSize);
-  };
-
+  useEffect(() => {
+    if (!imageUrl) return;
+    let cancelled = false;
+    loadImage(imageUrl).then(image => {
+      if (cancelled || !canvasRef.current) return;
+      const canvas = canvasRef.current; canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d'); if (!context) return;
+      context.drawImage(image, 0, 0);
+      const fontSize = Math.max(8, Math.round(canvas.width * relativeSize / 100));
+      context.font = `600 ${fontSize}px sans-serif`;
+      context.fillStyle = `rgba(255,255,255,${opacity})`;
+      context.strokeStyle = `rgba(15,23,42,${opacity * .62})`;
+      context.lineWidth = Math.max(1, Math.round(fontSize / 12));
+      context.textAlign = position === 'center' ? 'center' : position === 'bottom-left' ? 'left' : 'right';
+      context.textBaseline = position === 'center' ? 'middle' : 'bottom';
+      const x = position === 'center' ? canvas.width / 2 : position === 'bottom-left' ? fontSize : canvas.width - fontSize;
+      const y = position === 'center' ? canvas.height / 2 : canvas.height - fontSize;
+      context.strokeText(text, x, y); context.fillText(text, x, y); setRenderedKey(renderKey);
+    }).catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : '无法读取图片'); });
+    return () => { cancelled = true; };
+  }, [imageUrl, text, position, opacity, relativeSize, renderKey]);
   const handleFile = async (file?: File) => {
     if (!file) return;
-    setSourceName(file.name);
-    const url = await readFileAsDataUrl(file);
-    setImageUrl(url);
-    window.setTimeout(() => draw(url, text), 0);
+    setError(''); setSourceName(file.name); setReading(true); setImageUrl('');
+    try { setImageUrl(await readFileAsDataUrl(file)); }
+    catch (err) { setError(err instanceof Error ? err.message : '无法读取图片'); }
+    finally { setReading(false); }
   };
-
   const stash = () => {
     canvasRef.current?.toBlob(blob => {
-      if (blob) {
-        const name = sourceName ? `${sourceName.split('.').shift()}_watermarked.png` : 'watermarked.png';
-        useScratchpadStore.getState().addItem({
-          name,
-          content: blob,
-          type: 'image',
-          mimeType: 'image/png',
-          sourceTool: '图片水印',
-          originAction: 'watermark-image',
-        });
-        notifyToast({ title: '水印图片已送入暂存箱', tone: 'success' });
-        setStashed(true);
-        setTimeout(() => setStashed(false), 2000);
-      }
+      if (!blob) return;
+      useScratchpadStore.getState().addItem({ name: `${sourceName || 'image'}_watermarked.png`, content: blob, type: 'image', mimeType: 'image/png', sourceTool: '图片水印', originAction: 'watermark-image' });
+      notifyToast({ title: '水印图片已送入暂存箱', tone: 'success' }); setStashed(true); setTimeout(() => setStashed(false), 2000);
     }, 'image/png');
   };
-
-  const download = () => {
-    canvasRef.current?.toBlob(blob => {
-      if (blob) downloadBlob(blob, 'watermarked.png');
-    }, 'image/png');
-  };
-
+  const download = () => canvasRef.current?.toBlob(blob => { if (blob) downloadBlob(blob, `${sourceName || 'image'}_watermarked.png`); }, 'image/png');
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader 
-        title="图片水印" 
-        description="使用 Canvas 在本地添加文字水印。" 
-        actions={
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" icon={stashed ? <Check className="h-4 w-4 text-green-600" /> : <ClipboardList className="h-4 w-4" />} onClick={stash} disabled={!imageUrl}>
-              {stashed ? 'Stashed!' : 'Stash'}
-            </Button>
-            <Button size="sm" icon={<Download className="h-4 w-4" />} onClick={download} disabled={!imageUrl}>下载</Button>
-          </div>
-        } 
-      />
-      <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto lg:grid-cols-[18rem_1fr]">
-        <div className="space-y-4">
-          <UploadPanel>
-            <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
-              <Upload className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择图片</span>
-              <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
-            </label>
-          </UploadPanel>
-          <div>
-            <FieldLabel>水印文字</FieldLabel>
-            <Input value={text} onChange={event => { setText(event.target.value); draw(imageUrl, event.target.value); }} />
-          </div>
-        </div>
-        <div className="overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3">
-          <canvas ref={canvasRef} className="max-h-[70vh] max-w-full" />
-          {!imageUrl && <div className="flex h-64 items-center justify-center gap-2 text-slate-400"><Palette className="h-5 w-5" />等待图片</div>}
-        </div>
-      </CardContent>
+    <Card className="h-full flex flex-col"><CardHeader title="图片水印" description="先选择图片，文字、位置和透明度会实时反映在预览中。" actions={<><Button size="sm" variant="secondary" onClick={stash} disabled={!ready} icon={stashed ? <Check className="h-4 w-4" /> : <ClipboardList className="h-4 w-4" />}>暂存</Button><Button size="sm" onClick={download} disabled={!ready} icon={<Download className="h-4 w-4" />}>下载 PNG</Button></>} />
+      <CardContent className="grid min-h-0 flex-1 gap-5 overflow-auto lg:grid-cols-[17rem_minmax(0,1fr)]"><section className="space-y-5"><FileDropzone accept="image/*" fileName={sourceName} disabled={reading} onFiles={files => handleFile(files[0])} compact title="选择图片或拖到这里" /><div><FieldLabel>水印文字</FieldLabel><Input aria-label="水印文字" value={text} onChange={event => setText(event.target.value)} /></div><div><FieldLabel>水印位置</FieldLabel><div className="workflow-segmented">{(['bottom-left', 'center', 'bottom-right'] as const).map(value => <button key={value} aria-pressed={position === value} onClick={() => setPosition(value)}>{value === 'center' ? '居中' : value === 'bottom-left' ? '左下' : '右下'}</button>)}</div></div><label className="block text-xs text-slate-600">透明度 · {Math.round(opacity * 100)}%<input aria-label="水印透明度" className="mt-3 w-full" type="range" min="0" max="1" step=".01" value={opacity} onChange={event => setOpacity(Number(event.target.value))} /></label><label className="block text-xs text-slate-600">文字大小 · {relativeSize}%<input aria-label="水印文字大小" className="mt-3 w-full" type="range" min="1" max="12" step=".5" value={relativeSize} onChange={event => setRelativeSize(Number(event.target.value))} /></label>{error && <WorkflowNotice tone="error">{error}</WorkflowNotice>}</section><div className="workflow-preview flex flex-col items-center justify-center p-4"><canvas ref={canvasRef} className={imageUrl ? 'max-h-[65vh] max-w-full object-contain' : 'hidden'} />{!imageUrl && <WorkflowEmpty title="水印实时预览" description="选择图片后调整左侧选项，再下载处理结果。" icon={<Palette className="h-6 w-6" />} />}</div></CardContent>
     </Card>
   );
 };
@@ -662,14 +573,11 @@ export const PerlerBeadTool: React.FC = () => {
       />
       <CardContent className="grid min-h-0 flex-1 gap-4 overflow-auto xl:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col gap-4">
-          <UploadPanel className="min-h-[9rem]">
-            <label className="flex cursor-pointer flex-col items-center gap-2 p-6 text-center">
-              <ImagePlus className="h-8 w-8 text-primary-600" />
-              <span className="text-sm font-medium text-slate-700">选择拼豆参考图</span>
-              <span className="text-xs text-slate-400">JPG / PNG / WebP，本地处理不上传</span>
-              <input className="hidden" type="file" accept="image/*" onChange={event => handleFile(event.target.files?.[0])} />
-            </label>
-          </UploadPanel>
+          <FileDropzone accept="image/*" fileName={sourceName} disabled={isProcessing} onFiles={files => handleFile(files[0])} title="选择拼豆参考图" hint="JPG / PNG / WebP，本地处理不上传" />
+          <div className="workflow-segmented">
+            <button type="button" onClick={() => { updatePixelSize(32); updateMaxColors(8); }}>入门 · 32 格</button>
+            <button type="button" onClick={() => { updatePixelSize(64); updateMaxColors(16); }}>精细 · 64 格</button>
+          </div>
 
           <div className="tool-section space-y-4 p-4">
             <div>
@@ -764,7 +672,7 @@ export const PerlerBeadTool: React.FC = () => {
                 <div className="text-xs font-semibold text-slate-700">颜色清单</div>
                 <div className="text-xs text-slate-500">{result.palette.length} 色</div>
               </div>
-              <div className="app-scrollbar grid max-h-24 gap-2 overflow-auto p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="app-scrollbar grid max-h-64 gap-2 overflow-auto p-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {result.palette.map((entry, index) => (
                   <div key={`${entry.hex}-${index}`} className="flex min-w-0 items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
                     <div className="h-6 w-6 flex-none rounded-md border border-slate-200" style={{ backgroundColor: entry.hex }} />
