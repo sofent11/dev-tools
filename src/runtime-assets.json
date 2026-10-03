@@ -17,12 +17,6 @@
     "version": "6.3.1",
     "sha256": "9736f49e81790af972029cd8416a8f9e5be7c4bddfb041676ab93fcad8332f5e"
   },
-  "forge": {
-    "path": "vendor/node-forge/1.4.0/forge.min.js",
-    "package": "node-forge",
-    "version": "1.4.0",
-    "sha256": "d9b9074e6861200d676e25dcfe97889db5e8f4150bb766d29c491ad709a51b58"
-  },
   "zxcvbn": {
     "path": "vendor/zxcvbn/4.4.2/zxcvbn.js",
     "package": "zxcvbn",

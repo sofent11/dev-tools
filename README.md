@@ -47,7 +47,8 @@ CHECK_I18N_APP_URL=http://127.0.0.1:4173 npm run check:i18n:visible
 - 普通文本工具的主要输入在当前标签页内保留草稿；刷新后清除。草稿有 8 MB 总预算，单项约 1 MB 输入限制，超过预算的旧草稿会被淘汰。文件、Canvas、模型和 Worker 不会作为草稿常驻内存。
 - 暂存箱中的普通条目保存在本地 IndexedDB，小文本另有元数据副本。敏感条目只保留于当前会话，不写入 IndexedDB 或 localStorage，刷新后清除。旧版标记为敏感的记录在迁移时清理。
 - 文件读取、转换和密钥计算不会主动上传到业务后端。HTTP/WebSocket/IP 查询和视频解析是联网工具，会向所选目标或 Worker 发送请求。
-- PDF、SQLite、OpenPGP、国密、证书解析、图片压缩 Worker、密码强度、GIF、Lottie 和 MediaPipe WASM 随站点部署。经典脚本和 WASM 通过资源清单校验 SHA-256；PDF ES 模块及其 worker 在构建阶段检查，不宣称浏览器动态 import 自带完整性校验。
+- PDF、SQLite、OpenPGP、国密、图片压缩 Worker、密码强度、GIF、Lottie 和 MediaPipe WASM 随站点部署。经典脚本和 WASM 通过资源清单校验 SHA-256；PDF ES 模块及其 worker 在构建阶段检查，不宣称浏览器动态 import 自带完整性校验。
+- NuGet CMS/X.509 解析使用随构建按需加载的 PKIjs/ASN1js，指纹由浏览器 WebCrypto 计算；不依赖 node-forge 或外部 CDN。证书信息和签名者标记不代表签名、信任链、时间戳或吊销状态验证。
 - 人脸模型和首饰字体仍需要外部资源；人脸模型失败可手动裁剪。浏览器缓存不可用时，本站运行时仍可直接加载。
 - 视频解析默认提供 sopace 公共 Worker，也支持自有 Worker。它改善部分 CORS 抓取限制，不绕过登录、DRM、地区或平台权限限制。自有 Worker 配置见 [workers/README.md](workers/README.md)。
 

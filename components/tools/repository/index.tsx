@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import JSZip from 'jszip';
-import type * as Forge from 'node-forge';
 import {
   AlertCircle,
   Archive,
@@ -24,8 +23,6 @@ import {
 import { useI18n } from '../../../src/i18n';
 import { Button } from '../../ui/Button';
 import { downloadBlob, formatBytes } from '../shared/fileUtils';
-import { loadRuntimeAsset } from '../shared/runtimeAssetLoader';
-import { runtimeAsset } from '../shared/runtimeAssets';
 import {
   applyCorsProxy,
   buildFileTree,
@@ -43,24 +40,9 @@ import {
   parsePyPiRequirement,
   shouldIncludePyPiRequirement,
 } from './dependencyCore';
-import { getCertificateDateStatus, normalizeFingerprint, parseNuspecMetadata, type NuspecMetadata } from './nugetSignatureCore';
+import { getCertificateDateStatus, parseNuspecMetadata, type NuspecMetadata } from './nugetSignatureCore';
+import type { CertificateDetail } from './nugetSignatureParser';
 import type { DependencyNode, DiscoveredRemoteFile, FileTreeNode, RepositorySource } from './types';
-
-declare global {
-  interface Window {
-    forge?: typeof Forge;
-  }
-}
-
-const FORGE_SCRIPT_URL = runtimeAsset('forge').url;
-
-const loadForge = async () => {
-  if (!window.forge) {
-    await loadRuntimeAsset({ url: FORGE_SCRIPT_URL, kind: 'script', label: 'node-forge', version: runtimeAsset('forge').version, expectedSha256: runtimeAsset('forge').sha256, timeoutMs: 20000, retries: 1, cache: true, sourceLabel: 'Self-hosted / build-verified' });
-  }
-  if (!window.forge) throw new Error('node-forge runtime is unavailable');
-  return window.forge;
-};
 
 const copyText = {
   'zh-CN': {
@@ -1206,18 +1188,6 @@ export const RustDependencyVisualizerTool: React.FC = () => {
   );
 };
 
-type CertificateDetail = {
-  subject: string;
-  issuer: string;
-  serialNumber: string;
-  notBefore: Date;
-  notAfter: Date;
-  sha1: string;
-  sha256: string;
-  pem: string;
-  signer: boolean;
-};
-
 type SignatureResult = {
   id: string;
   version: string;
@@ -1229,8 +1199,6 @@ type SignatureResult = {
 };
 
 const bytesToHex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes)).map(byte => byte.toString(16).padStart(2, '0')).join('');
-
-const formatDn = (dn: Forge.pki.CertificateField[]) => dn.map(item => `${item.shortName || item.name || item.type}=${item.value}`).join(', ');
 
 export const NuGetSignatureInspectorTool: React.FC = () => {
   const c = useCopy();
@@ -1286,28 +1254,8 @@ export const NuGetSignatureInspectorTool: React.FC = () => {
         return;
       }
       const signatureBytes = await sig.async('uint8array');
-      const forge = await loadForge();
-      let binary = '';
-      signatureBytes.forEach(byte => { binary += String.fromCharCode(byte); });
-      const p7 = forge.pkcs7.messageFromAsn1(forge.asn1.fromDer(binary)) as Forge.pkcs7.PkcsSignedData;
-      const rawCapture = (p7 as unknown as { rawCapture?: { signerInfos?: Array<Array<{ value?: Array<{ value?: string }> }>> } }).rawCapture;
-      const signerSerial = rawCapture?.signerInfos?.[0]?.[1]?.value?.[0]?.value;
-      const certificates = (p7.certificates || []).map(cert => {
-        const der = forge.asn1.toDer(forge.pki.certificateToAsn1(cert)).getBytes();
-        const sha1 = forge.md.sha1.create().update(der).digest().toHex();
-        const sha256 = forge.md.sha256.create().update(der).digest().toHex();
-        return {
-          subject: formatDn(cert.subject.attributes),
-          issuer: formatDn(cert.issuer.attributes),
-          serialNumber: cert.serialNumber,
-          notBefore: cert.validity.notBefore,
-          notAfter: cert.validity.notAfter,
-          sha1: normalizeFingerprint(sha1),
-          sha256: normalizeFingerprint(sha256),
-          pem: forge.pki.certificateToPem(cert),
-          signer: signerSerial ? cert.serialNumber.toLowerCase() === signerSerial.toLowerCase() : false,
-        };
-      });
+      const { parseNugetSignature } = await import('./nugetSignatureParser');
+      const certificates = await parseNugetSignature(signatureBytes);
       setResult({ id: name, version: targetVersion, size: buffer.byteLength, hash, nuspec, signed: true, certificates });
       setStatus(t('签名文件与证书已解析；尚未验证签名有效性。'));
     } catch (error) {

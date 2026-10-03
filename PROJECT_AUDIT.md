@@ -21,7 +21,7 @@ The latest page-by-page feature review covers all 84 tools and their submodes. D
 
 Run `npm run verify` for the release gate. It includes typecheck, lint, translation coverage, routes, generated catalog, documentation, runtime manifest, unit tests, dependency audit, production build budget and browser regression tests. Browser coverage includes the English catalog scan.
 
-Current dependency audit: one high-severity node-forge advisory, with no patched upstream version available. The application does not call the affected RSA PKCS#1 v1.5 signature verification API, but `audit:prod` still fails. The gate remains enabled. See the current feature review for the latest validation results; the September counts below are historical results.
+The node-forge dependency and generated runtime have been removed. NuGet CMS/X.509 metadata now uses lazily bundled PKIjs/ASN1js and native WebCrypto fingerprints. Signer identification matches issuer and serial number or SubjectKeyIdentifier; it does not establish signature validity or certificate trust. Compatible brace-expansion patches also resolve the development dependency advisory. Both production and full dependency audits report zero vulnerabilities, with the release gate retained. See the current feature review for the latest validation results; the September counts below are historical results.
 
 Verified on 2026-09-12: all release gates passed, including 59 unit tests across 15 files and 21 Chromium browser tests. The browser suite includes all 73 English tool routes. The production dependency audit reported 0 vulnerabilities. Production app-shell JavaScript measured 121.4 KB gzip, below the 240 KB budget (approximately 363 KB at the initial audit).
 

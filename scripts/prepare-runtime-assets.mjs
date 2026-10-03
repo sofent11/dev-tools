@@ -4,9 +4,11 @@ import crypto from 'node:crypto';
 import { build } from 'esbuild';
 const root = 'public/vendor';
 fs.mkdirSync(root, { recursive: true });
+// Retire the old generated runtime even when reusing a previously built checkout.
+fs.rmSync(path.join(root, 'node-forge'), { recursive: true, force: true });
 const specs = [
  ['pdfjs', 'pdfjs-dist', 'build/pdf.min.mjs'], ['pdfWorker', 'pdfjs-dist', 'build/pdf.worker.min.mjs'],
- ['openpgp', 'openpgp', 'dist/openpgp.min.js'], ['forge', 'node-forge', 'dist/forge.min.js'],
+ ['openpgp', 'openpgp', 'dist/openpgp.min.js'],
  ['zxcvbn', 'zxcvbn', 'dist/zxcvbn.js'], ['lottie', 'lottie-web', 'build/player/lottie.min.js'],
  ['imageCompression', 'browser-image-compression', 'dist/browser-image-compression.js'],
 ];

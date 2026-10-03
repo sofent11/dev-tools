@@ -4,7 +4,7 @@ Updated: 2026-10-03
 
 The September reliability work is implemented across the ten findings recorded in PROJECT_AUDIT.md. Release requires `npm run verify` to pass and a clean generated catalog/runtime manifest.
 
-The October review also implements the feature corrections and removals in [docs/feature-audit.md](docs/feature-audit.md). The remaining production dependency audit failure must be resolved before treating the release gate as passed; do not suppress the node-forge advisory.
+The October review also implements the feature corrections and removals in [docs/feature-audit.md](docs/feature-audit.md). The node-forge audit failure is resolved by removing that dependency and using bundled PKIjs/ASN1js for NuGet metadata parsing. The production dependency audit remains part of the release gate.
 
 ## Maintenance sequence
 

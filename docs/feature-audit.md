@@ -17,7 +17,7 @@
 
 下面的矩阵区分源码审查、核心算法测试和实际浏览器验证。英文目录测试遍历所有 84 个页面；它证明初始界面与加载状态，不代替每种输入组合的功能验证。网络测试采用拦截或本地 Mock，没有使用真实生产凭据或私人文件。
 
-生产依赖审计仍有一个高危公告：[node-forge RSA PKCS#1 v1.5 签名验证问题](https://github.com/advisories/GHSA-86w9-cpqp-85rv)，当前受影响版本包含 1.4.0，上游暂无修复版本。本项目的 forge 消费是 ASN.1/P7B/证书解析、指纹和 PEM 输出，未调用公告涉及的 RSA 签名验证；这不等于依赖审计通过。保留 `audit:prod` 门禁，不屏蔽该告警。已升级有修复版本的 fast-uri。
+已移除受 [node-forge RSA PKCS#1 v1.5 签名验证公告](https://github.com/advisories/GHSA-86w9-cpqp-85rv)影响的依赖、类型包和旧生成资源。NuGet CMS/X.509 元数据改用构建内按需加载的 PKIjs/ASN1js；SHA-1/SHA-256 指纹与 PEM 均基于原始证书 DER，签名者按 issuer/serial 或 SubjectKeyIdentifier 匹配。解析有大小、层级、节点数和证书数限制，但不承诺密码学签名或证书信任验证。开发依赖 brace-expansion 定向升级到兼容补丁版本。生产与全依赖审计均为零漏洞，保留 `audit:prod` 门禁。此前已升级有修复版本的 fast-uri。
 
 真实第三方 API/CORS/受限视频可用性、Safari/Firefox、实际设备、生产密钥与证书信任链、CAD 可制造性仍需对应环境和样本验证。人脸模型与首饰字体还可能依赖外部资源。
 
@@ -515,7 +515,7 @@
 | `#nuget-signature` 包名→加载版本→选版本→解析 | 保留/已修 | 在明确版本下读取 nupkg，避免边输入边解析；包名改变清掉旧版本和旧证书结果。 | R |
 | `#nuget-signature` unsigned 状态、签名容器、证书 subject/issuer/serial/日期/指纹/PEM | 保留/澄清 | 仅查看签名元信息与日期；不能把有签名文件或证书当前日期有效写成密码学签名有效。没有链验证、时间戳验证、吊销检查。 | R unsigned；本地签名容器/证书/校验运行库回归通过；真实包未在线验证 |
 | `#nuget-signature` SHA 摘要、nuspec 元数据 | 保留 | 用于文件识别和内容研究；摘要不能独立证明来源可信。 | 代码核对 |
-| `#nuget-signature` Forge parser runtime | 已完善 | 将外部 cdnjs 1.3.1 改为 locked node-forge 1.4.0 本地构建/SHA 校验资产；不调用不可信包的 verify 签名证明，不扩大安全承诺。依赖无 patched 版本公告风险见本文依赖审计说明。 | 本地资源清单检查 |
+| `#nuget-signature` CMS/X.509 解析 | 已完善 | 移除 node-forge，PKIjs/ASN1js 随构建按需加载；保留原始 DER 指纹/PEM、issuer/serial 与 SKI 签名者匹配及输入预算。不把证书解析视为签名验证。 | 真 OpenSSL CMS 样本、解析器单测、浏览器回归 |
 
 ### CAD 与几何
 
@@ -671,7 +671,7 @@
 | 深浅色、中英切换、键盘打开搜索、移动目录遮罩 | 保留 | 复用安全preference存储；渲染时翻译UI，停止DOM遍历改写，编辑器和用户结果不遍历 |
 | 工作室/工具加载失败恢复 | 补全 | 主线error boundary同时包工作室和子工具；预加载失败交给可恢复界面，不产生未处理Promise |
 | 两个bundle预算脚本 | 删除重复 | package.json/CI只引用新版check-bundle.mjs；旧check-bundle-budget.mjs没有剩余消费者 |
-| NuGet证书解析的CDN forge1.3.1 | 替换 | 改用锁定forge1.4.0本地SHA验证资源；只解析证书和指纹，没有密码学签名验证调用。生产依赖审计仍有上游无修复版本的node-forge公告，不屏蔽审计门禁 |
+| NuGet证书解析的forge依赖 | 替换 | 依赖、类型包和旧运行时文件均移除；采用锁定 PKIjs/ASN1js 解析 CMS/X.509 与原生 WebCrypto 指纹。保留元数据解析边界，生产依赖审计零漏洞，不屏蔽门禁 |
 
 PDF 模块动态加载改用绝对 URL，防止开发服务给 public ES 模块追加 `?import` 导致整页无法工作；开发模式和生产模式均验证旋转导出。
 
@@ -684,13 +684,13 @@ PDF 模块动态加载改用绝对 URL，防止开发服务给 public ES 模块�
 | --- | --- |
 | 严格 TypeScript / 全仓 ESLint | 通过；零 warnings |
 | 路由 / 生成目录 / 导航翻译 | 通过；13工作室、84页面、219入口字符串 |
-| 模块边界 / 文档 / 本地资源清单 | 通过；13个运行资源及许可证 |
-| 单元测试 | 25文件、135项通过 |
-| 生产构建浏览器回归 | 83项通过，包括84页面英文全目录扫描 |
+| 模块边界 / 文档 / 本地资源清单 | 通过；12个运行资源及许可证，旧forge运行时已移除 |
+| 单元测试 | 26文件、154项通过，包括19项CMS/X.509解析回归 |
+| 生产构建浏览器回归 | 84项通过，包括84页面英文全目录扫描、真实CMS解析与异常输入恢复 |
 | 开发模式媒体与暂存回归 | 5项通过，包括本地PDF模块、透明度、真实压缩尺寸与取消 |
-| 构建 / 首屏包预算 | 通过；app shell JavaScript为160.8KB gzip，预算240KB |
-| 生产依赖审计 | 未通过；1项node-forge高危告警，无上游修复版本；不屏蔽门禁 |
+| 构建 / 首屏包预算 | 通过；app shell JavaScript为161.0KB gzip，预算240KB；证书解析按需加载 |
+| 生产 / 全依赖审计 | 通过；均为零漏洞，审计门禁保留 |
 
 新增永久回归位于 `tests/e2e/content-feature-audit.spec.ts`、`utility-feature-audit.spec.ts`、`repository-cad-media-audit.spec.ts` 和 `media-feature-audit.spec.ts`。既有schema、敏感暂存、Worker取消、旧链接与移动交互回归仍保留。
 
-`npm run verify` 的依赖审计步骤会返回失败，因此本轮不能标记为完整发布门禁通过。其余步骤已分别运行并通过。
+移除 node-forge 后，从锁文件重新安装依赖并完整执行 `npm run verify`，发布门禁全部通过。生产产物不再包含旧forge运行时；新的证书解析chunk保留上游许可证声明。另已通过真实CMS的两项开发模式浏览器回归。

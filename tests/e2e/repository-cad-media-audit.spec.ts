@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
-import forge from 'node-forge';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('locale', 'zh-CN'));
@@ -120,22 +120,23 @@ test('repository data remains usable when IndexedDB is unavailable', async ({ pa
   await expect(page.getByRole('button', { name: '检查 Release', exact: true })).toBeEnabled();
 });
 
-test('NuGet certificate metadata loads from the integrity-checked local forge runtime', async ({ page }) => {
-  const keys = forge.pki.rsa.generateKeyPair(2048);
-  const certificate = forge.pki.createCertificate();
-  certificate.publicKey = keys.publicKey; certificate.serialNumber = '01';
-  certificate.validity.notBefore = new Date('2025-01-01'); certificate.validity.notAfter = new Date('2030-01-01');
-  certificate.setSubject([{ name: 'commonName', value: 'Fixture certificate' }]);
-  certificate.setIssuer([{ name: 'commonName', value: 'Fixture issuer' }]);
-  certificate.sign(keys.privateKey, forge.md.sha256.create());
-  const container = forge.pkcs7.createSignedData();
-  container.content = forge.util.createBuffer('fixture'); container.addCertificate(certificate);
-  container.addSigner({ key: keys.privateKey, certificate, digestAlgorithm: forge.pki.oids.sha256 });
-  container.sign({ detached: true });
+async function nugetArchive(signature: Buffer) {
   const archive = new JSZip();
-  archive.file('.signature.p7s', Buffer.from(forge.asn1.toDer(container.toAsn1()).getBytes(), 'binary'));
+  archive.file('.signature.p7s', signature);
   archive.file('fixture.nuspec', '<package><metadata><authors>Fixture</authors><description>Local test package</description></metadata></package>');
-  const bytes = await archive.generateAsync({ type: 'nodebuffer' });
+  return archive.generateAsync({ type: 'nodebuffer' });
+}
+
+test('NuGet certificate metadata and signer identity load without a forge or CDN runtime', async ({ page }) => {
+  const signature = await readFile(fixture('nuget-signed-data.p7s'));
+  const der = await readFile(fixture('nuget-test-certificate.der'));
+  const bytes = await nugetArchive(signature);
+  const forbiddenRuntimeRequests: string[] = [];
+  page.on('request', request => {
+    const url = request.url();
+    if (/forge|cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com/i.test(url)) forbiddenRuntimeRequests.push(url);
+  });
+  await page.clock.setFixedTime(new Date('2026-01-01T00:00:00Z'));
   await page.route('https://**/*', route => route.abort());
   await page.route('https://api.nuget.org/v3-flatcontainer/**', route => route.request().url().endsWith('/index.json')
     ? route.fulfill({ json: { versions: ['1.0.0'] } })
@@ -147,6 +148,49 @@ test('NuGet certificate metadata loads from the integrity-checked local forge ru
   await expect(page.getByRole('status')).toContainText('签名文件与证书已解析；尚未验证签名有效性。');
   await expect(page.getByText('CN=Fixture certificate', { exact: true })).toBeVisible();
   await expect(page.getByText('CN=Fixture issuer', { exact: true })).toBeVisible();
+  await expect(page.locator('summary').filter({ hasText: '证书 1' })).toContainText('签名者标记');
+  await expect(page.getByText('序列号', { exact: true }).locator('xpath=following-sibling::dd[1]')).toHaveText('01');
+  await expect(page.getByText('日期范围', { exact: true }).locator('xpath=following-sibling::dd[1]')).toContainText('2025');
+  await expect(page.getByText('日期范围', { exact: true }).locator('xpath=following-sibling::dd[1]')).toContainText('2030');
+  for (const algorithm of ['sha1', 'sha256']) {
+    const fingerprint = createHash(algorithm).update(der).digest('hex').toUpperCase().match(/../g)!.join(':');
+    await expect(page.getByText(fingerprint, { exact: true })).toBeVisible();
+  }
+  await expect(page.getByText(createHash('sha256').update(bytes).digest('hex'), { exact: true })).toBeVisible();
   await page.getByText('查看 PEM 证书', { exact: true }).click();
-  await expect(page.getByLabel('证书 1 PEM', { exact: true })).toHaveValue(/BEGIN CERTIFICATE/);
+  const pem = await page.getByLabel('证书 1 PEM', { exact: true }).inputValue();
+  expect(pem).toContain('-----BEGIN CERTIFICATE-----');
+  expect(pem).toContain('-----END CERTIFICATE-----');
+  expect(pem.replace(/-----[^\n]+-----/g, '').replace(/\s/g, '')).toBe(der.toString('base64'));
+  expect(forbiddenRuntimeRequests).toEqual([]);
+});
+
+test('invalid and truncated NuGet CMS fail visibly and a subsequent package can still be parsed', async ({ page }) => {
+  const signature = await readFile(fixture('nuget-signed-data.p7s'));
+  const valid = await nugetArchive(signature);
+  const truncated = await nugetArchive(signature.subarray(0, 32));
+  const invalid = await nugetArchive(Buffer.from('invalid CMS data'));
+  await page.route('https://**/*', route => route.abort());
+  await page.route('https://api.nuget.org/v3-flatcontainer/**', route => {
+    const url = route.request().url();
+    return url.endsWith('/index.json')
+      ? route.fulfill({ json: { versions: ['1.0.0', '2.0.0', '3.0.0'] } })
+      : route.fulfill({ body: url.includes('/3.0.0/') ? invalid : url.includes('/2.0.0/') ? truncated : valid, contentType: 'application/octet-stream' });
+  });
+  await page.goto('/tools/repo-dependency-studio#nuget-signature');
+  await page.getByLabel('包名', { exact: true }).fill('fixture');
+  await page.getByRole('button', { name: '加载版本', exact: true }).click();
+  const analyze = page.getByRole('button', { name: '解析签名', exact: true });
+  for (const version of ['3.0.0', '2.0.0']) {
+    await page.getByLabel('版本', { exact: true }).selectOption(version);
+    await analyze.click();
+    await expect(page.getByRole('alert')).toContainText('错误');
+    await expect(analyze).toBeEnabled();
+    await expect(page.getByText('CN=Fixture certificate', { exact: true })).toHaveCount(0);
+  }
+  await page.getByLabel('版本', { exact: true }).selectOption('1.0.0');
+  await analyze.click();
+  await expect(page.getByRole('status')).toContainText('签名文件与证书已解析；尚未验证签名有效性。');
+  await expect(page.getByText('CN=Fixture certificate', { exact: true })).toBeVisible();
+  await expect(analyze).toBeEnabled();
 });
